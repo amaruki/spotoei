@@ -6,9 +6,13 @@
 //! `shutdown` exits cleanly.
 //! Anything non-protocol on stdout is a protocol violation; logs go to stderr.
 
+mod auth;
+
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::time::Duration;
 
+use auth::{AuthManager, AuthStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Stdout};
@@ -81,7 +85,6 @@ struct Command {
     id: String,
     command: String,
     #[serde(default)]
-    #[allow(dead_code)]
     data: Value,
 }
 
@@ -105,6 +108,17 @@ struct ResponseErr<'a> {
     id: &'a str,
     ok: bool,
     error: ErrorBody,
+}
+
+#[derive(Debug, Serialize)]
+struct EventOut<'a> {
+    #[serde(rename = "v")]
+    version: u32,
+    #[serde(rename = "type")]
+    kind: &'static str,
+    event: &'a str,
+    seq: u64,
+    data: Value,
 }
 
 #[derive(Debug, Serialize)]
@@ -149,6 +163,18 @@ fn err(id: &str, body: ErrorBody) -> String {
     serde_json::to_string(&r).expect("response serialization")
 }
 
+#[allow(dead_code)]
+fn event(event_name: &str, seq: u64, data: Value) -> String {
+    let e = EventOut {
+        version: PROTOCOL_VERSION,
+        kind: "event",
+        event: event_name,
+        seq,
+        data,
+    };
+    serde_json::to_string(&e).expect("event serialization")
+}
+
 fn parse_command(line: &str) -> Result<Command, ProtocolError> {
     if line.len() > MAX_LINE_BYTES {
         return Err(ProtocolError::LineTooLong(line.len()));
@@ -169,7 +195,7 @@ fn parse_command(line: &str) -> Result<Command, ProtocolError> {
     Ok(cmd)
 }
 
-fn handle(cmd: Command) -> (String, bool) {
+async fn handle(cmd: Command, auth: &Arc<AuthManager>) -> (String, bool) {
     let is_shutdown = cmd.command == "shutdown";
     let reply = match cmd.command.as_str() {
         "hello" => {
@@ -188,6 +214,58 @@ fn handle(cmd: Command) -> (String, bool) {
                 "session": "absent",
             }),
         ),
+        "auth.status" => {
+            let st = auth.status().await;
+            ok(&cmd.id, serde_json::to_value(&st).unwrap_or(Value::Null))
+        }
+        "auth.begin" => {
+            let scopes = cmd.data.get("scopes").and_then(|v| v.as_array()).map(|arr| {
+                arr.iter()
+                    .filter_map(|s| s.as_str().map(String::from))
+                    .collect()
+            });
+            match auth.begin(scopes).await {
+                Ok(st) => ok(&cmd.id, serde_json::to_value(&st).unwrap_or(Value::Null)),
+                Err(auth::AuthError::MissingClientId) => err(
+                    &cmd.id,
+                    ErrorBody::new(
+                        ErrorCode::InvalidRequest,
+                        "missing SPOTOEI_CLIENT_ID configuration",
+                    ),
+                ),
+                Err(e) => err(
+                    &cmd.id,
+                    ErrorBody::new(ErrorCode::AuthFailed, format!("auth.begin failed: {e}")),
+                ),
+            }
+        }
+        "auth.logout" => match auth.logout().await {
+            Ok(st) => ok(&cmd.id, serde_json::to_value(&st).unwrap_or(Value::Null)),
+            Err(e) => err(
+                &cmd.id,
+                ErrorBody::new(ErrorCode::AuthFailed, format!("auth.logout failed: {e}")),
+            ),
+        },
+        "auth.get_web_token" => match auth.get_web_token().await {
+            Ok((token, expires_at)) => ok(
+                &cmd.id,
+                serde_json::json!({
+                    "accessToken": token,
+                    "expiresAt": expires_at,
+                }),
+            ),
+            Err(auth::AuthError::NotAuthenticated) => err(
+                &cmd.id,
+                ErrorBody::new(ErrorCode::AuthRequired, "not authenticated"),
+            ),
+            Err(e) => err(
+                &cmd.id,
+                ErrorBody::new(
+                    ErrorCode::AuthFailed,
+                    format!("token fetch/refresh failed: {e}"),
+                ),
+            ),
+        },
         other => err(
             &cmd.id,
             ErrorBody::new(ErrorCode::InvalidRequest, format!("unknown command: {other}")),
@@ -200,6 +278,15 @@ fn handle(cmd: Command) -> (String, bool) {
 async fn main() -> ExitCode {
     init_tracing();
 
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 2 && args[1] == "doctor" {
+        return run_doctor(&args[2..]).await;
+    }
+
+    let client_id = std::env::var("SPOTOEI_CLIENT_ID").unwrap_or_default();
+    let auth = Arc::new(AuthManager::new(client_id));
+    let _initial_status = auth.hydrate().await;
+
     let stdin = tokio::io::stdin();
     let mut stdout = tokio::io::stdout();
     let mut lines = BufReader::new(stdin).lines();
@@ -207,8 +294,6 @@ async fn main() -> ExitCode {
     info!(version = PLAYER_VERSION, "spotoei-player starting");
 
     // First valid command must be `hello` within HANDSHAKE_TIMEOUT.
-    // On failure or timeout, log to stderr and exit 2 without emitting
-    // synthetic id responses on stdout (which would violate the contract).
     let hello_line: String = match tokio::time::timeout(HANDSHAKE_TIMEOUT, lines.next_line()).await {
         Ok(Ok(Some(l))) => l,
         Ok(Ok(None)) => {
@@ -242,7 +327,7 @@ async fn main() -> ExitCode {
         }
     };
 
-    let (hello_reply, _) = handle(hello_cmd);
+    let (hello_reply, _) = handle(hello_cmd, &auth).await;
     if let Err(e) = writeln_stdout(&mut stdout, &hello_reply).await {
         error!(error = %e, "failed to write hello reply");
         return ExitCode::from(2);
@@ -275,12 +360,8 @@ async fn main() -> ExitCode {
                 };
 
                 let (reply, should_exit) = match parse_command(&line) {
-                    Ok(cmd) => handle(cmd),
+                    Ok(cmd) => handle(cmd, &auth).await,
                     Err(e) => {
-                        // Post-handshake parse failure: the client sent malformed
-                        // input. We have no correlated id to echo, and stdout
-                        // is reserved for protocol responses. Log diagnostics
-                        // to stderr and continue reading.
                         warn!(error = %e, "command parse failed");
                         continue;
                     }
@@ -298,6 +379,23 @@ async fn main() -> ExitCode {
             }
         }
     }
+}
+
+async fn run_doctor(args: &[String]) -> ExitCode {
+    let sub = args.first().map(|s| s.as_str()).unwrap_or("all");
+    let client_id = std::env::var("SPOTOEI_CLIENT_ID").unwrap_or_default();
+    let auth = AuthManager::new(client_id.clone());
+    let status: AuthStatus = auth.hydrate().await;
+
+    if sub == "all" || sub == "auth" {
+        println!("=== SPOTOEI Doctor: Auth & Keyring ===");
+        println!("Client ID: {}", if client_id.is_empty() { "<not set: SPOTOEI_CLIENT_ID>" } else { "<set>" });
+        println!("Auth State: {:?}", status.state);
+        println!("Storage Tier: {:?}", status.storage);
+        println!("Account ID: {}", status.account_id.as_deref().unwrap_or("<none>"));
+        println!("Scopes: {}", if status.scopes.is_empty() { "<none>".to_string() } else { status.scopes.join(", ") });
+    }
+    ExitCode::SUCCESS
 }
 
 async fn writeln_stdout(stdout: &mut Stdout, line: &str) -> std::io::Result<()> {

@@ -87,7 +87,10 @@ export function locatePlayer(): string {
  * Enforces a strict 5-second handshake deadline. Child is force-killed on
  * timeout, parse failure, spawn error, or if the hello response fails schema validation.
  */
-export async function startPlayer(playerBin: string): Promise<HandshakeResult> {
+export async function startPlayer(
+  playerBin: string,
+  extraEnv: Record<string, string> = {},
+): Promise<HandshakeResult> {
   // Pass an explicit allowlist of environment variables to prevent secret leaks.
   const cleanEnv: Record<string, string | undefined> = {
     PATH: process.env.PATH ?? '/usr/bin:/bin',
@@ -96,6 +99,9 @@ export async function startPlayer(playerBin: string): Promise<HandshakeResult> {
     TERM: process.env.TERM ?? 'xterm-256color',
     RUST_LOG: process.env.RUST_LOG ?? 'info',
   };
+  for (const [k, v] of Object.entries(extraEnv)) {
+    cleanEnv[k] = v;
+  }
 
   const child = spawn(playerBin, [], {
     stdio: ['pipe', 'pipe', 'pipe'],

@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
-// Stable protocol major version. Increment on breaking envelope/semantic changes.
-export const PROTOCOL_VERSION = 1 as const;
+import { PROTOCOL_VERSION } from './version';
 
+export { PROTOCOL_VERSION } from './version';
 // Hard cap on a single NDJSON line. Larger lines are rejected as INVALID_REQUEST
 // on both sides (TUI reads, player reads). Prevents memory-exhaustion DoS via
 // a single oversized line.
@@ -63,9 +63,11 @@ export const COMMAND_NAMES = [
 ] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
-// Events the player may push unprompted. M0 has no publisher, so this set is
-// declared for type completeness only.
+// Events the player may push unprompted.
 export const EVENT_NAMES = [
+  'auth.changed',
+  'auth.completed',
+  'auth.failed',
   'playback.changed',
   'playback.position',
   'queue.changed',
@@ -74,7 +76,6 @@ export const EVENT_NAMES = [
   'visualizer.spectrum',
   'visualizer.waveform',
 ] as const;
-export type EventName = (typeof EVENT_NAMES)[number];
 
 // Capabilities the player may advertise during hello. Empty array = none.
 // The TUI must gate every capability-gated feature on `caps.includes(...)`
@@ -233,4 +234,22 @@ export function makeShutdown(id: string): CommandT {
 
 export function newRequestId(): string {
   return crypto.randomUUID();
+}
+
+export * from './auth';
+
+export function makeAuthStatus(id: string): CommandT {
+  return makeCommand(id, 'auth.status', {});
+}
+
+export function makeAuthBegin(id: string, scopes?: string[]): CommandT {
+  return makeCommand(id, 'auth.begin', scopes ? { scopes } : {});
+}
+
+export function makeAuthLogout(id: string): CommandT {
+  return makeCommand(id, 'auth.logout', {});
+}
+
+export function makeAuthGetWebToken(id: string): CommandT {
+  return makeCommand(id, 'auth.get_web_token', {});
 }
