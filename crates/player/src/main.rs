@@ -7,9 +7,9 @@
 //! Anything non-protocol on stdout is a protocol violation; logs go to stderr.
 
 pub mod auth;
+pub mod lyrics;
 pub mod playback;
 pub mod visualizer;
-
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
@@ -202,6 +202,7 @@ async fn handle(
     auth: &Arc<AuthManager>,
     playback: &Playback<FakeEngine>,
     visualizer_cfg: &Arc<tokio::sync::RwLock<visualizer::VisualizerConfig>>,
+    lyrics: &lyrics::LyricsService,
 ) -> (String, bool) {
     let is_shutdown = cmd.command == "shutdown";
     let reply = match cmd.command.as_str() {
@@ -209,7 +210,12 @@ async fn handle(
             let data = serde_json::json!({
                 "protocol": PROTOCOL_VERSION,
                 "playerVersion": PLAYER_VERSION,
-                "capabilities": vec!["visualizer.spectrum", "visualizer.waveform"],
+                "capabilities": vec![
+                    "lyrics.synced",
+                    "lyrics.plain",
+                    "visualizer.spectrum",
+                    "visualizer.waveform",
+                ],
             });
             ok(&cmd.id, data)
         }
@@ -430,6 +436,23 @@ async fn handle(
                 "waveformSamples": cfg.waveform_samples,
             }))
         }
+        "lyrics.get" => {
+            let track_uri = cmd.data.get("trackUri").and_then(|v| v.as_str()).unwrap_or("");
+            match lyrics.get(track_uri) {
+                Ok(doc) => ok(&cmd.id, serde_json::to_value(&doc).unwrap_or(Value::Null)),
+                Err(lyrics::LyricsError::Unavailable) => err(
+                    &cmd.id,
+                    ErrorBody::new(
+                        ErrorCode::LyricsUnavailable,
+                        "lyrics unavailable for this track",
+                    ),
+                ),
+                Err(lyrics::LyricsError::InvalidUri) => err(
+                    &cmd.id,
+                    ErrorBody::new(ErrorCode::InvalidRequest, "invalid track URI"),
+                ),
+            }
+        }
         other => err(
             &cmd.id,
             ErrorBody::new(ErrorCode::InvalidRequest, format!("unknown command: {other}")),
@@ -446,7 +469,6 @@ async fn main() -> ExitCode {
     if args.len() >= 2 && args[1] == "doctor" {
         return run_doctor(&args[2..]).await;
     }
-
     let client_id = std::env::var("SPOTOEI_CLIENT_ID").unwrap_or_default();
     let auth = Arc::new(AuthManager::new(client_id));
     let _initial_status = auth.hydrate().await;
@@ -464,6 +486,7 @@ async fn main() -> ExitCode {
         }
     });
 
+    let lyrics = lyrics::LyricsService::new(Arc::new(lyrics::MockLyricsProvider::new()));
     let playback = Playback::new(FakeEngine, stdout_tx.clone());
     let visualizer_cfg = Arc::new(tokio::sync::RwLock::new(visualizer::VisualizerConfig::default()));
 
@@ -580,7 +603,7 @@ async fn main() -> ExitCode {
         }
     };
 
-    let (hello_reply, _) = handle(hello_cmd, &auth, &playback, &visualizer_cfg).await;
+    let (hello_reply, _) = handle(hello_cmd, &auth, &playback, &visualizer_cfg, &lyrics).await;
     if let Err(e) = stdout_tx.send(hello_reply).await {
         error!(error = %e, "failed to queue hello reply");
         return ExitCode::from(2);
@@ -615,7 +638,7 @@ async fn main() -> ExitCode {
                 };
 
                 let (reply, should_exit) = match parse_command(&line) {
-                    Ok(cmd) => handle(cmd, &auth, &playback, &visualizer_cfg).await,
+                    Ok(cmd) => handle(cmd, &auth, &playback, &visualizer_cfg, &lyrics).await,
                     Err(e) => {
                         warn!(error = %e, "command parse failed");
                         continue;

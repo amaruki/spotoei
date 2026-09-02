@@ -319,6 +319,11 @@ export function makePlaybackStatus(id: string): CommandT {
 
 export * from './catalog';
 export * from './visualizer';
+export * from './lyrics';
+
+export function makeLyricsGet(id: string, trackUri: string): CommandT {
+  return makeCommand(id, 'lyrics.get', { trackUri });
+}
 
 export function makeVisualizerConfigure(
   id: string,

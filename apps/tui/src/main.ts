@@ -8,10 +8,12 @@ import { createSearchClient } from './search';
 import { LibraryManager } from './library';
 import { QueueManager } from './queue';
 import { createVisualizerController } from './visualizer';
+import { createLyricsClient } from './lyrics';
 import type {
   AuthStatusDataT,
   PlaybackChangedDataT,
   SearchResponseT,
+  LyricsDocumentT,
 } from 'spotoei-protocol';
 
 function padBox(content: string, innerWidth = 40): string {
@@ -49,6 +51,10 @@ function renderShell(info?: {
   visualizer?: {
     mode: string;
     fps: number;
+  };
+  lyrics?: {
+    kind: string;
+    lineCount: number;
   };
 }) {
   const playerLine = info
@@ -107,10 +113,14 @@ function renderShell(info?: {
     ? line('viz', `${info.visualizer.mode} [${info.visualizer.fps}fps]`)
     : line('viz', '(idle)');
 
+  const lyricsLine = info?.lyrics
+    ? line('lyrics', `${info.lyrics.kind} (${info.lyrics.lineCount} lines)`)
+    : line('lyrics', '(idle)');
+
   process.stdout.write(
     [
       '┌────────────────────────────────────────┐',
-      '│  SPOTOEI  (Milestone 5)                │',
+      '│  SPOTOEI  (Milestone 6)                │',
       '├────────────────────────────────────────┤',
       playerLine,
       protoLine,
@@ -128,6 +138,7 @@ function renderShell(info?: {
       libraryLine,
       queueLine,
       vizLine,
+      lyricsLine,
       '└────────────────────────────────────────┘',
       '',
     ].join('\n'),
@@ -187,6 +198,8 @@ async function main(): Promise<number> {
       bands: 64,
       waveformSamples: 120,
     });
+    const lyrics = createLyricsClient({ child });
+    const activeLyrics = new Map<string, LyricsDocumentT>();
 
     const currentInfo: {
       protocol: number;
@@ -209,6 +222,10 @@ async function main(): Promise<number> {
       visualizer?: {
         mode: string;
         fps: number;
+      };
+      lyrics?: {
+        kind: string;
+        lineCount: number;
       };
     } = {
       protocol: handshake.protocol,
@@ -233,7 +250,6 @@ async function main(): Promise<number> {
         fps: visualizer.getCurrentFps(),
       },
     };
-
     renderShell(currentInfo);
 
     visualizer.subscribe((mode) => {
@@ -266,6 +282,13 @@ async function main(): Promise<number> {
       };
     });
 
+    lyrics.subscribe((doc) => {
+      currentInfo.lyrics = {
+        kind: doc.kind,
+        lineCount: doc.lines.length,
+      };
+      renderShell(currentInfo);
+    });
     // Optional query argument for testing/smoke verification
     if (args[0] === 'search' && args[1]) {
       const q = args.slice(1).join(' ');
@@ -300,6 +323,21 @@ async function main(): Promise<number> {
           };
           renderShell(currentInfo);
         }
+        if (chunk === 'l' || chunk === 'L') {
+          const uri = currentInfo.playback?.track?.uri ?? 'spotify:track:sample';
+          lyrics
+            .getLyrics(uri)
+            .then((doc) => {
+              currentInfo.lyrics = {
+                kind: doc.kind,
+                lineCount: doc.lines.length,
+              };
+              renderShell(currentInfo);
+            })
+            .catch(() => {
+              // Ignore lyrics retrieval failure in interactive mode
+            });
+        }
         if (chunk === 'q' || chunk === 'Q' || chunk === '\u0003') {
           process.stdin.removeListener('data', onKey);
         }
@@ -312,6 +350,7 @@ async function main(): Promise<number> {
     cache.close();
     playback.close();
     visualizer.stop();
+    lyrics.close();
     auth.close();
   } catch (e) {
     process.stderr.write(`spotoei: failed to start player: ${e instanceof Error ? e.message : String(e)}\n`);
