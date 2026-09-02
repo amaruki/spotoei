@@ -7,6 +7,7 @@ import { WebApiClient } from './webApi';
 import { createSearchClient } from './search';
 import { LibraryManager } from './library';
 import { QueueManager } from './queue';
+import { createVisualizerController } from './visualizer';
 import type {
   AuthStatusDataT,
   PlaybackChangedDataT,
@@ -44,6 +45,10 @@ function renderShell(info?: {
   };
   queue?: {
     upcomingCount: number;
+  };
+  visualizer?: {
+    mode: string;
+    fps: number;
   };
 }) {
   const playerLine = info
@@ -98,10 +103,14 @@ function renderShell(info?: {
     ? line('queue', `${info.queue.upcomingCount} upcoming`)
     : line('queue', '(idle)');
 
+  const vizLine = info?.visualizer
+    ? line('viz', `${info.visualizer.mode} [${info.visualizer.fps}fps]`)
+    : line('viz', '(idle)');
+
   process.stdout.write(
     [
       '┌────────────────────────────────────────┐',
-      '│  SPOTOEI  (Milestone 4)                │',
+      '│  SPOTOEI  (Milestone 5)                │',
       '├────────────────────────────────────────┤',
       playerLine,
       protoLine,
@@ -118,6 +127,7 @@ function renderShell(info?: {
       '├────────────────────────────────────────┤',
       libraryLine,
       queueLine,
+      vizLine,
       '└────────────────────────────────────────┘',
       '',
     ].join('\n'),
@@ -170,6 +180,14 @@ async function main(): Promise<number> {
     });
     const queueManager = new QueueManager({ webApi });
 
+    const visualizer = createVisualizerController({
+      child,
+      initialMode: 'spectrum',
+      targetFps: 60,
+      bands: 64,
+      waveformSamples: 120,
+    });
+
     const currentInfo: {
       protocol: number;
       playerVersion: string;
@@ -187,6 +205,10 @@ async function main(): Promise<number> {
       };
       queue?: {
         upcomingCount: number;
+      };
+      visualizer?: {
+        mode: string;
+        fps: number;
       };
     } = {
       protocol: handshake.protocol,
@@ -206,8 +228,21 @@ async function main(): Promise<number> {
       queue: {
         upcomingCount: 0,
       },
+      visualizer: {
+        mode: visualizer.getMode(),
+        fps: visualizer.getCurrentFps(),
+      },
     };
 
+    renderShell(currentInfo);
+
+    visualizer.subscribe((mode) => {
+      currentInfo.visualizer = {
+        mode,
+        fps: visualizer.getCurrentFps(),
+      };
+      // In full TUI, this draws frames; for smoke test, we update the shell
+    });
     renderShell(currentInfo);
 
     auth.onStatusChange((next) => {
@@ -251,10 +286,32 @@ async function main(): Promise<number> {
       renderShell(currentInfo);
     }
 
+    // Best-effort single-key listener: `v` cycles visualizer mode.
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode?.(true);
+      process.stdin.resume();
+      process.stdin.setEncoding('utf8');
+      const onKey = (chunk: string): void => {
+        if (chunk === 'v' || chunk === 'V') {
+          const next = visualizer.cycleMode();
+          currentInfo.visualizer = {
+            mode: next,
+            fps: visualizer.getCurrentFps(),
+          };
+          renderShell(currentInfo);
+        }
+        if (chunk === 'q' || chunk === 'Q' || chunk === '\u0003') {
+          process.stdin.removeListener('data', onKey);
+        }
+      };
+      process.stdin.on('data', onKey);
+    }
+
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
     searchClient.close();
     cache.close();
     playback.close();
+    visualizer.stop();
     auth.close();
   } catch (e) {
     process.stderr.write(`spotoei: failed to start player: ${e instanceof Error ? e.message : String(e)}\n`);

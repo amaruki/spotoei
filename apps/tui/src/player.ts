@@ -238,3 +238,23 @@ export async function stopPlayer(child: ChildProcess): Promise<void> {
     }
   });
 }
+
+/**
+ * Get (or lazily attach) the shared readline interface used to read
+ * the player's NDJSON stdout stream. Multiple clients can attach `line`
+ * listeners to the same instance via `getSharedReadline(child)`.
+ */
+export function getSharedReadline(
+  child: ChildProcess,
+): ReturnType<typeof createInterface> {
+  const holder = child as unknown as {
+    __spotoei_rl?: ReturnType<typeof createInterface>;
+  };
+  if (!holder.__spotoei_rl) {
+    if (!child.stdout) {
+      throw new Error('child.stdout is required for readline');
+    }
+    holder.__spotoei_rl = createInterface({ input: child.stdout });
+  }
+  return holder.__spotoei_rl;
+}

@@ -21,7 +21,7 @@ import {
   parseInbound,
 } from 'spotoei-protocol';
 import type { ChildProcess } from 'node:child_process';
-import { createInterface } from 'node:readline';
+import { getSharedReadline } from './player';
 
 export interface PlaybackClient {
   status(): Promise<PlaybackChangedDataT>;
@@ -71,7 +71,7 @@ export function createPlaybackClient(
     throw new Error('child stdin/stdout must be piped to createPlaybackClient');
   }
 
-  const rl = createInterface({ input: child.stdout });
+  const rl = getSharedReadline(child);
 
   const lineListener = (line: string): void => {
     const parsed = parseInbound(line);

@@ -318,3 +318,17 @@ export function makePlaybackStatus(id: string): CommandT {
 }
 
 export * from './catalog';
+export * from './visualizer';
+
+export function makeVisualizerConfigure(
+  id: string,
+  config: {
+    enabled?: boolean;
+    mode?: 'spectrum' | 'winamp' | 'oscilloscope';
+    fps?: number;
+    bands?: number;
+    waveformSamples?: number;
+  } = {},
+): CommandT {
+  return makeCommand(id, 'visualizer.configure', config);
+}
