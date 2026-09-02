@@ -47,10 +47,9 @@ export class QueueManager {
   async add(trackUri: string): Promise<boolean> {
     const ok = await this.webApi.addToQueue(trackUri);
     if (ok) {
-      // Bump revision only; refresh() will replace the optimistic snapshot
-      // with the canonical Spotify queue on the next call. The list length
-      // is derived from the current snapshot; the placeholder track is
-      // discarded on refresh.
+      // Bump revision; refresh() will replace the snapshot with the
+      // canonical Spotify queue on the next call so the local count
+      // converges to the server's view.
       this.snapshot = {
         ...this.snapshot,
         revision: this.snapshot.revision + 1,
