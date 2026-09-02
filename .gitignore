@@ -1,0 +1,15 @@
+# build artefacts
+target/
+dist/
+build/
+node_modules/
+*.log
+.DS_Store
+*.swp
+
+# Bun
+.bun/
+
+# Rust
+**/*.rs.bk
+Cargo.lock.bak

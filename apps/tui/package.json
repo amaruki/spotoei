@@ -1,0 +1,17 @@
+{
+  "name": "spotoei-tui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "spotoei": "./src/main.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/main.ts",
+    "build": "bun build ./src/main.ts --compile --target=bun --outfile=dist/spotoei",
+    "start": "bun run src/main.ts"
+  },
+  "dependencies": {
+    "spotoei-protocol": "workspace:*"
+  }
+}
