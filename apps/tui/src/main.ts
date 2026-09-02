@@ -2,7 +2,14 @@ import { spawnSync } from 'node:child_process';
 import { locatePlayer, startPlayer, stopPlayer } from './player';
 import { createAuthClient } from './auth';
 import { createPlaybackClient } from './playback';
-import type { AuthStatusDataT, PlaybackChangedDataT } from 'spotoei-protocol';
+import { Cache } from './cache';
+import { WebApiClient } from './webApi';
+import { createSearchClient } from './search';
+import type {
+  AuthStatusDataT,
+  PlaybackChangedDataT,
+  SearchResponseT,
+} from 'spotoei-protocol';
 
 function renderShell(info?: {
   protocol: number;
@@ -10,9 +17,18 @@ function renderShell(info?: {
   capabilities: string[];
   auth?: AuthStatusDataT;
   playback?: PlaybackChangedDataT | null;
+  search?: {
+    query: string;
+    hitCount: number;
+    firstHit?: string;
+  };
 }) {
-  const playerLine = info ? `│  player  ${info.playerVersion.padEnd(28)}│` : '│  player  (spawning...)               │';
-  const protoLine = info ? `│  proto   v${String(info.protocol).padEnd(28)}│` : '│  proto   (pending...)                │';
+  const playerLine = info
+    ? `│  player  ${info.playerVersion.padEnd(28)}│`
+    : '│  player  (spawning...)               │';
+  const protoLine = info
+    ? `│  proto   v${String(info.protocol).padEnd(28)}│`
+    : '│  proto   (pending...)                │';
   const caps = info
     ? info.capabilities.length
       ? info.capabilities.join(', ')
@@ -41,10 +57,20 @@ function renderShell(info?: {
   const playbackLine = `│  play    ${playbackState.slice(0, 28).padEnd(28)}│`;
   const trackLine = `│  ↳ track ${trackName.slice(0, 28).padEnd(28)}│`;
 
+  const searchLine = info?.search
+    ? `│  search  "${info.search.query.slice(0, 18)}" (${info.search.hitCount})`.padEnd(
+        39,
+        ' ',
+      ) + '│'
+    : '│  search  (idle)                      │';
+  const searchDetail = info?.search?.firstHit
+    ? `│  ↳ hit   ${info.search.firstHit.slice(0, 28).padEnd(28)}│`
+    : '│  ↳                                  │';
+
   process.stdout.write(
     [
       '┌────────────────────────────────────────┐',
-      '│  SPOTOEI  (Milestone 2)                │',
+      '│  SPOTOEI  (Milestone 3)                │',
       '├────────────────────────────────────────┤',
       playerLine,
       protoLine,
@@ -55,6 +81,9 @@ function renderShell(info?: {
       '├────────────────────────────────────────┤',
       playbackLine,
       trackLine,
+      '├────────────────────────────────────────┤',
+      searchLine,
+      searchDetail,
       '└────────────────────────────────────────┘',
       '',
     ].join('\n'),
@@ -88,7 +117,31 @@ async function main(): Promise<number> {
     const initialAuth = await auth.status();
     const initialPlayback = await playback.status();
 
-    const currentInfo = {
+    const cache = new Cache();
+    const tokenProvider = {
+      async getAccessToken(): Promise<string> {
+        return auth.getWebToken();
+      },
+    };
+    const webApi = new WebApiClient({ tokenProvider });
+    const searchClient = createSearchClient({
+      webApi,
+      cache,
+      accountId: initialAuth.accountId ?? 'anonymous',
+    });
+
+    const currentInfo: {
+      protocol: number;
+      playerVersion: string;
+      capabilities: string[];
+      auth: AuthStatusDataT;
+      playback: PlaybackChangedDataT | null;
+      search?: {
+        query: string;
+        hitCount: number;
+        firstHit?: string;
+      };
+    } = {
       protocol: handshake.protocol,
       playerVersion: handshake.playerVersion,
       capabilities: handshake.capabilities,
@@ -118,7 +171,29 @@ async function main(): Promise<number> {
       renderShell(currentInfo);
     });
 
+    // Optional query argument for testing/smoke verification
+    if (args[0] === 'search' && args[1]) {
+      const q = args.slice(1).join(' ');
+      const res: SearchResponseT = await searchClient.search(q);
+      const first = res.hits[0];
+      let firstLabel = '(none)';
+      if (first) {
+        if (first.type === 'track') firstLabel = first.track.name;
+        else if (first.type === 'album') firstLabel = first.album.name;
+        else if (first.type === 'artist') firstLabel = first.artist.name;
+        else if (first.type === 'playlist') firstLabel = first.playlist.name;
+      }
+      currentInfo.search = {
+        query: q,
+        hitCount: res.hits.length,
+        firstHit: firstLabel,
+      };
+      renderShell(currentInfo);
+    }
+
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    searchClient.close();
+    cache.close();
     playback.close();
     auth.close();
   } catch (e) {

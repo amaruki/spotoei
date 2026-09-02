@@ -316,3 +316,5 @@ export function makePlaybackLoad(
 export function makePlaybackStatus(id: string): CommandT {
   return makeCommand(id, 'player.status', {});
 }
+
+export * from './catalog';
