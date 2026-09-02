@@ -29,17 +29,55 @@ export interface CachedQuery<T = unknown> {
 export class Cache {
   private db: Database;
 
+  private filename: string;
+
   constructor(opts: CacheOptions = {}) {
-    const filename = opts.filename ?? ':memory:';
-    this.db = new Database(filename);
-    if (opts.wal ?? true) {
-      if (filename !== ':memory:') {
-        this.db.exec('PRAGMA journal_mode = WAL;');
-      }
-    }
+    this.filename = opts.filename ?? ':memory:';
+    this.db = this.openWithRecovery(this.filename, opts.wal ?? true);
     this.initSchema();
   }
 
+  private openWithRecovery(filename: string, wal: boolean): Database {
+    let db = new Database(filename);
+    if (filename !== ':memory:') {
+      try {
+        const res = db.query('PRAGMA integrity_check;').get() as { integrity_check?: string } | null;
+        if (!res || res.integrity_check !== 'ok') {
+          // Corrupted database: close, remove file, and re-create.
+          db.close();
+          try {
+            const fs = require('node:fs');
+            fs.renameSync(filename, `${filename}.corrupt.${Date.now()}`);
+          } catch {
+            // Ignore file rename error and proceed to fresh database
+          }
+          db = new Database(filename);
+        }
+      } catch {
+        // If integrity check itself fails, re-create database.
+        try {
+          db.close();
+        } catch {
+          // ignore
+        }
+        db = new Database(filename);
+      }
+
+      if (wal) {
+        db.exec('PRAGMA journal_mode = WAL;');
+      }
+    }
+    return db;
+  }
+
+  checkIntegrity(): boolean {
+    try {
+      const res = this.db.query('PRAGMA integrity_check;').get() as { integrity_check?: string } | null;
+      return res?.integrity_check === 'ok';
+    } catch {
+      return false;
+    }
+  }
   private initSchema(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS schema_migrations (

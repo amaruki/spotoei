@@ -99,4 +99,33 @@ describe('Cache', () => {
     expect(reopened.getSchemaVersion()).toBe(1);
     reopened.close();
   });
+
+  test('checkIntegrity returns true on healthy database', () => {
+    expect(cache.checkIntegrity()).toBe(true);
+  });
+
+  test('recovers automatically from a corrupted database file', () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const os = require('node:os');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spotoei-corrupt-test-'));
+    const dbPath = path.join(tmpDir, 'cache.db');
+
+    // Create valid DB
+    const c1 = new Cache({ filename: dbPath });
+    c1.putEntity('user1', 'track', 't1', { name: 'Valid' });
+    c1.close();
+
+    // Corrupt the DB file by writing random bytes
+    fs.writeFileSync(dbPath, 'corrupted data garbage payload');
+
+    // Open should detect corruption, back up the corrupt file, and create a fresh DB
+    const c2 = new Cache({ filename: dbPath });
+    expect(c2.checkIntegrity()).toBe(true);
+    expect(c2.getSchemaVersion()).toBe(1);
+    c2.close();
+
+    // Clean up
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

@@ -14,7 +14,8 @@
     "test": "bun test",
     "lint": "oxlint .",
     "format": "oxfmt .",
-    "format:check": "oxfmt --check ."
+    "format:check": "oxfmt --check .",
+    "package": "bun run scripts/package.ts"
   },
   "devDependencies": {
     "oxlint": "*",

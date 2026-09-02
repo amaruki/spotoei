@@ -121,7 +121,7 @@ function renderShell(info?: {
   process.stdout.write(
     [
       '┌────────────────────────────────────────┐',
-      '│  SPOTOEI  (Milestone 7)                │',
+      '│  SPOTOEI  (Milestone 8)                │',
       '├────────────────────────────────────────┤',
       playerLine,
       protoLine,
@@ -153,6 +153,17 @@ function getTerminalWidth(): number {
   const cols = process.stdout.columns;
   if (typeof cols === 'number' && cols >= 20) return cols;
   return 80;
+}
+function cleanupTty(): void {
+  if (process.stdin.isTTY) {
+    try {
+      process.stdin.setRawMode?.(false);
+    } catch {
+      // ignore — raw mode may already be off
+    }
+  }
+  // Show the cursor and leave the alternate screen buffer.
+  process.stdout.write('\u001b[?25h\u001b[?1049l');
 }
 
 function routeLabel(route: Route): string {
@@ -313,6 +324,19 @@ async function main(): Promise<number> {
   try {
     const handshake = await startPlayer(playerBin);
     child = handshake.child;
+    const onSignal = () => {
+      cleanupTty();
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // ignore
+      }
+      process.exit(0);
+    };
+    process.on('SIGINT', onSignal);
+    process.on('SIGTERM', onSignal);
+    process.on('SIGHUP', onSignal);
+    process.on('exit', cleanupTty);
     const auth = createAuthClient({ child });
     const playback = createPlaybackClient({ child });
     const initialAuth = await auth.status();
@@ -624,6 +648,7 @@ async function main(): Promise<number> {
         if (chunk === 'q' || chunk === 'Q' || chunk === '\u0003') {
           process.stdout.removeListener('resize', onResize);
           process.stdin.removeListener('data', onKey);
+          cleanupTty();
           return;
         }
       };
