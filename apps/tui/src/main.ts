@@ -11,6 +11,20 @@ import type {
   SearchResponseT,
 } from 'spotoei-protocol';
 
+function padBox(content: string, innerWidth = 40): string {
+  const truncated =
+    content.length > innerWidth ? content.slice(0, innerWidth) : content;
+  return `│${truncated.padEnd(innerWidth, ' ')}│`;
+}
+
+function line(label: string, value: string): string {
+  return padBox(`  ${label.padEnd(8)}${value}`);
+}
+
+function detail(label: string, value: string): string {
+  return padBox(`  ${label.padEnd(8)}${value}`);
+}
+
 function renderShell(info?: {
   protocol: number;
   playerVersion: string;
@@ -24,11 +38,11 @@ function renderShell(info?: {
   };
 }) {
   const playerLine = info
-    ? `│  player  ${info.playerVersion.padEnd(28)}│`
-    : '│  player  (spawning...)               │';
+    ? line('player', info.playerVersion)
+    : line('player', '(spawning...)');
   const protoLine = info
-    ? `│  proto   v${String(info.protocol).padEnd(28)}│`
-    : '│  proto   (pending...)                │';
+    ? line('proto', `v${String(info.protocol)}`)
+    : line('proto', '(pending...)');
   const caps = info
     ? info.capabilities.length
       ? info.capabilities.join(', ')
@@ -36,17 +50,20 @@ function renderShell(info?: {
     : '(pending...)';
 
   const authLine = info?.auth
-    ? `│  auth    ${info.auth.state.padEnd(28)}│`
-    : '│  auth    (pending...)                │';
-  const authDetail = info?.auth
-    ? info.auth.state === 'authenticating' && info.auth.authUrl
-      ? `│  ↳ open in browser: ${info.auth.authUrl.slice(0, 18).padEnd(18)}│`
-      : info.auth.state === 'authenticated' && info.auth.accountId
-        ? `│  ↳ account: ${info.auth.accountId.slice(0, 20).padEnd(20)}│`
-        : info.auth.state === 'refresh-failed'
-          ? `│  ↳ reauth required                  │`
-          : `│  ↳                                  │`
-    : '│  ↳ (awaiting handshake)             │';
+    ? line('auth', info.auth.state)
+    : line('auth', '(pending...)');
+  let authDetail: string;
+  if (!info?.auth) {
+    authDetail = detail('↳', '(awaiting handshake)');
+  } else if (info.auth.state === 'authenticating' && info.auth.authUrl) {
+    authDetail = detail('↳', `open in browser: ${info.auth.authUrl.slice(0, 22)}`);
+  } else if (info.auth.state === 'authenticated' && info.auth.accountId) {
+    authDetail = detail('↳', `account: ${info.auth.accountId.slice(0, 24)}`);
+  } else if (info.auth.state === 'refresh-failed') {
+    authDetail = detail('↳', 'reauth required');
+  } else {
+    authDetail = detail('↳', '');
+  }
 
   const trackName = info?.playback?.track
     ? `${info.playback.track.name} - ${info.playback.track.artists.join(', ')}`
@@ -54,18 +71,15 @@ function renderShell(info?: {
   const playbackState = info?.playback
     ? `${info.playback.state} [vol:${Math.round(info.playback.volume * 100)}%]`
     : '(idle)';
-  const playbackLine = `│  play    ${playbackState.slice(0, 28).padEnd(28)}│`;
-  const trackLine = `│  ↳ track ${trackName.slice(0, 28).padEnd(28)}│`;
+  const playbackLine = line('play', playbackState);
+  const trackLine = detail('↳ track', trackName);
 
   const searchLine = info?.search
-    ? `│  search  "${info.search.query.slice(0, 18)}" (${info.search.hitCount})`.padEnd(
-        39,
-        ' ',
-      ) + '│'
-    : '│  search  (idle)                      │';
+    ? line('search', `"${info.search.query.slice(0, 18)}" (${info.search.hitCount})`)
+    : line('search', '(idle)');
   const searchDetail = info?.search?.firstHit
-    ? `│  ↳ hit   ${info.search.firstHit.slice(0, 28).padEnd(28)}│`
-    : '│  ↳                                  │';
+    ? detail('↳ hit', info.search.firstHit)
+    : detail('↳', '');
 
   process.stdout.write(
     [
@@ -74,7 +88,7 @@ function renderShell(info?: {
       '├────────────────────────────────────────┤',
       playerLine,
       protoLine,
-      `│  caps    ${caps.slice(0, 28).padEnd(28)}│`,
+      line('caps', caps),
       '├────────────────────────────────────────┤',
       authLine,
       authDetail,

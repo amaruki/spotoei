@@ -1,6 +1,7 @@
 // Search client with debounce + cancellation, plus a stale-while-revalidate
 // read strategy through the SQLite cache. Cancellation is race-safe: a stale
-// response is silently dropped and never overwrites a newer one.
+// query's promise resolves with an empty response or is replaced cleanly
+// without cross-query resolver pollution.
 
 import { Cache } from './cache';
 import { WebApiClient } from './webApi';
@@ -27,63 +28,73 @@ function makeKey(query: string, types: readonly string[]): string {
   return `search:v1:${normalized}:${types.join(',')}`;
 }
 
+interface PendingQuery {
+  id: number;
+  query: string;
+  types: Array<'track' | 'album' | 'artist' | 'playlist'>;
+  resolve: (r: SearchResponseT) => void;
+}
+
 export function createSearchClient(opts: SearchClientOptions): SearchClient {
   const debounceMs = opts.debounceMs ?? 300;
   const cacheTtlMs = opts.cacheTtlMs ?? 10 * 60 * 1000;
 
-  let pendingQueryId = 0;
+  let querySequence = 0;
+  let activeQueryId = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let currentQuery: string | null = null;
-  let currentTypes: Array<'track' | 'album' | 'artist' | 'playlist'> = ['track'];
-  let resolvers: Array<(r: SearchResponseT) => void> = [];
+  let pending: PendingQuery | null = null;
 
-  const flush = async (): Promise<void> => {
-    if (currentQuery === null) return;
-    const myId = ++pendingQueryId;
-    const query = currentQuery;
-    const types = currentTypes.slice();
-    const cacheKey = makeKey(query, types);
+  const flush = async (pq: PendingQuery): Promise<void> => {
+    // If a newer query has already become active, drop this execution.
+    if (pq.id < activeQueryId) {
+      pq.resolve({ query: pq.query, hits: [] });
+      return;
+    }
 
-    // Cache lookup
+    const cacheKey = makeKey(pq.query, pq.types);
+
+    // 1. Cache lookup
     const cached = opts.cache.getQuery<SearchResponseT>(opts.accountId, cacheKey);
     if (cached) {
       const expired =
         cached.expiresAt !== null && cached.expiresAt < Date.now();
       if (!expired) {
-        if (myId === pendingQueryId) {
-          const waiters = resolvers;
-          resolvers = [];
-          for (const r of waiters) r(cached.payload);
+        if (pq.id === activeQueryId) {
+          pq.resolve(cached.payload);
+        } else {
+          pq.resolve({ query: pq.query, hits: [] });
         }
         return;
       }
     }
 
-    // Fetch fresh
+    // 2. Network fetch
     try {
-      const fresh = await opts.webApi.search(query, types);
-      if (myId === pendingQueryId) {
-        opts.cache.putQuery(opts.accountId, cacheKey, fresh, cacheTtlMs);
-        const waiters = resolvers;
-        resolvers = [];
-        for (const r of waiters) r(fresh);
-      }
-      // If myId < pendingQueryId, a newer query has been issued; drop this result.
-    } catch (err: unknown) {
-      if (myId === pendingQueryId) {
-        const waiters = resolvers;
-        resolvers = [];
-        for (const r of waiters) {
-          r({
-            query,
-            hits: [],
-            error: {
-              code: 'NETWORK_ERROR',
-              message: err instanceof Error ? err.message : String(err),
-              retryable: true,
-            },
-          });
+      const fresh = await opts.webApi.search(pq.query, pq.types);
+      if (pq.id === activeQueryId) {
+        // Do not cache error responses to prevent sensitive details or transient
+        // errors from polluting SQLite.
+        if (!fresh.error) {
+          opts.cache.putQuery(opts.accountId, cacheKey, fresh, cacheTtlMs);
         }
+        pq.resolve(fresh);
+      } else {
+        // Stale query superseded by newer one
+        pq.resolve({ query: pq.query, hits: [] });
+      }
+    } catch (err: unknown) {
+      if (pq.id === activeQueryId) {
+        pq.resolve({
+          query: pq.query,
+          hits: [],
+          error: {
+            code: 'NETWORK_ERROR',
+            message: err instanceof Error ? err.message : String(err),
+            retryable: true,
+          },
+        });
+      } else {
+        pq.resolve({ query: pq.query, hits: [] });
       }
     }
   };
@@ -95,25 +106,36 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
     ): Promise<SearchResponseT> {
       const trimmed = query.trim();
       if (!trimmed) {
-        return { query, hits: [] };
+        return { query: trimmed, hits: [] };
       }
 
-      // Cancel any pending debounce
+      // Cancel previous pending timer and resolve previous superseded pending query
       if (timer !== null) {
         clearTimeout(timer);
+        timer = null;
+      }
+      if (pending !== null) {
+        const superseded = pending;
+        pending = null;
+        superseded.resolve({ query: superseded.query, hits: [] });
       }
 
-      currentQuery = trimmed;
-      currentTypes = types;
-      // Bump pendingQueryId immediately to invalidate any in-flight flush
-      // from a previous query.
-      pendingQueryId++;
+      const id = ++querySequence;
+      activeQueryId = id;
 
       return new Promise<SearchResponseT>((resolve) => {
-        resolvers.push(resolve);
+        const pq: PendingQuery = {
+          id,
+          query: trimmed,
+          types: types.slice(),
+          resolve,
+        };
+        pending = pq;
+
         timer = setTimeout(() => {
           timer = null;
-          void flush();
+          pending = null;
+          void flush(pq);
         }, debounceMs);
       });
     },
@@ -122,8 +144,11 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
         clearTimeout(timer);
         timer = null;
       }
-      currentQuery = null;
-      resolvers = [];
+      if (pending !== null) {
+        const superseded = pending;
+        pending = null;
+        superseded.resolve({ query: superseded.query, hits: [] });
+      }
     },
   };
 }

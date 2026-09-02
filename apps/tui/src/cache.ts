@@ -75,6 +75,21 @@ export class Cache {
         PRIMARY KEY (account_id, collection, item_id)
       );
     `);
+
+    // Record schema version 1 on first init.
+    const stmt = this.db.prepare(
+      'INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (1, ?);',
+    );
+    stmt.run(new Date().toISOString());
+  }
+
+  // --- Migration check helper ---
+
+  getSchemaVersion(): number {
+    const row = this.db
+      .prepare('SELECT MAX(version) as max_v FROM schema_migrations;')
+      .get() as { max_v: number | null } | null;
+    return row?.max_v ?? 0;
   }
 
   // --- Entities ---

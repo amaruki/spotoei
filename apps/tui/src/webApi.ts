@@ -208,17 +208,20 @@ export class WebApiClient {
       return { query, hits };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      const code = msg.startsWith('RATE_LIMITED')
+        ? 'RATE_LIMITED'
+        : msg.startsWith('AUTH_EXPIRED')
+          ? 'AUTH_EXPIRED'
+          : msg.startsWith('FORBIDDEN')
+            ? 'FORBIDDEN'
+            : 'NETWORK_ERROR';
       return {
         query,
         hits: [],
         error: {
-          code: msg.startsWith('RATE_LIMITED')
-            ? 'RATE_LIMITED'
-            : msg.startsWith('AUTH_EXPIRED')
-              ? 'AUTH_EXPIRED'
-              : 'NETWORK_ERROR',
+          code,
           message: msg,
-          retryable: !msg.startsWith('AUTH_EXPIRED'),
+          retryable: code !== 'AUTH_EXPIRED' && code !== 'FORBIDDEN',
         },
       };
     }

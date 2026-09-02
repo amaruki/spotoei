@@ -89,4 +89,14 @@ describe('Cache', () => {
     expect(cache.getQuery('acct1', 'q1')).toBeNull();
     expect(cache.getEntity('acct2', 'track', 't1')).not.toBeNull();
   });
+  test('getSchemaVersion returns 1 after init', () => {
+    expect(cache.getSchemaVersion()).toBe(1);
+  });
+
+  test('getSchemaVersion is idempotent across reopens', () => {
+    cache.close();
+    const reopened = new Cache();
+    expect(reopened.getSchemaVersion()).toBe(1);
+    reopened.close();
+  });
 });

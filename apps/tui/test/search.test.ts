@@ -131,10 +131,12 @@ describe('WebApiClient and SearchClient', () => {
       expect(callCount).toBe(1);
       expect(queries).toEqual(['abc']);
       expect(r3.query).toBe('abc');
-      // Previous promises also resolve with the final response
-      expect(r1.query).toBe('abc');
-      expect(r2.query).toBe('abc');
-
+      // Superseded intermediate queries resolve cleanly with their own query
+      // name and zero hits — they must NOT receive the final query's results.
+      expect(r1.query).toBe('a');
+      expect(r1.hits).toEqual([]);
+      expect(r2.query).toBe('ab');
+      expect(r2.hits).toEqual([]);
       searchClient.close();
       cache.close();
     } finally {
