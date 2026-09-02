@@ -6,13 +6,15 @@
 //! `shutdown` exits cleanly.
 //! Anything non-protocol on stdout is a protocol violation; logs go to stderr.
 
-mod auth;
+pub mod auth;
+pub mod playback;
 
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
 use auth::{AuthManager, AuthStatus};
+use playback::{FakeEngine, Playback, PlaybackError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Stdout};
@@ -163,8 +165,7 @@ fn err(id: &str, body: ErrorBody) -> String {
     serde_json::to_string(&r).expect("response serialization")
 }
 
-#[allow(dead_code)]
-fn event(event_name: &str, seq: u64, data: Value) -> String {
+pub fn event(event_name: &str, seq: u64, data: Value) -> String {
     let e = EventOut {
         version: PROTOCOL_VERSION,
         kind: "event",
@@ -195,7 +196,11 @@ fn parse_command(line: &str) -> Result<Command, ProtocolError> {
     Ok(cmd)
 }
 
-async fn handle(cmd: Command, auth: &Arc<AuthManager>) -> (String, bool) {
+async fn handle(
+    cmd: Command,
+    auth: &Arc<AuthManager>,
+    playback: &Playback<FakeEngine>,
+) -> (String, bool) {
     let is_shutdown = cmd.command == "shutdown";
     let reply = match cmd.command.as_str() {
         "hello" => {
@@ -207,13 +212,10 @@ async fn handle(cmd: Command, auth: &Arc<AuthManager>) -> (String, bool) {
             ok(&cmd.id, data)
         }
         "shutdown" => ok(&cmd.id, serde_json::json!({})),
-        "player.status" => ok(
-            &cmd.id,
-            serde_json::json!({
-                "state": "ready",
-                "session": "absent",
-            }),
-        ),
+        "player.status" => {
+            let snap = playback.snapshot().await;
+            ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null))
+        }
         "auth.status" => {
             let st = auth.status().await;
             ok(&cmd.id, serde_json::to_value(&st).unwrap_or(Value::Null))
@@ -266,6 +268,139 @@ async fn handle(cmd: Command, auth: &Arc<AuthManager>) -> (String, bool) {
                 ),
             ),
         },
+        "playback.load" => {
+            let context_uri = cmd.data.get("contextUri").and_then(|v| v.as_str());
+            let track_uri = cmd.data.get("trackUri").and_then(|v| v.as_str());
+            let autoplay = cmd
+                .data
+                .get("autoplay")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            let _ = playback.set_autoplay(autoplay).await;
+            match playback.load(context_uri, track_uri).await {
+                Ok(snap) => {
+                    let final_snap = if autoplay {
+                        match playback.play().await {
+                            Ok(s) => s,
+                            Err(_) => snap,
+                        }
+                    } else {
+                        snap
+                    };
+                    ok(&cmd.id, serde_json::to_value(&final_snap).unwrap_or(Value::Null))
+                }
+                Err(PlaybackError) => err(
+                    &cmd.id,
+                    ErrorBody::new(ErrorCode::PlaybackFailed, "failed to load track/context"),
+                ),
+            }
+        }
+        "playback.play" => match playback.play().await {
+            Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+            Err(PlaybackError) => err(
+                &cmd.id,
+                ErrorBody::new(ErrorCode::PlaybackFailed, "no track loaded to play"),
+            ),
+        },
+        "playback.pause" => match playback.pause().await {
+            Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+            Err(PlaybackError) => err(
+                &cmd.id,
+                ErrorBody::new(ErrorCode::PlaybackFailed, "pause failed"),
+            ),
+        },
+        "playback.toggle" => match playback.toggle().await {
+            Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+            Err(PlaybackError) => err(
+                &cmd.id,
+                ErrorBody::new(ErrorCode::PlaybackFailed, "no track loaded to toggle"),
+            ),
+        },
+        "playback.next" => match playback.next().await {
+            Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+            Err(PlaybackError) => err(
+                &cmd.id,
+                ErrorBody::new(ErrorCode::PlaybackFailed, "next failed"),
+            ),
+        },
+        "playback.previous" => match playback.previous().await {
+            Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+            Err(PlaybackError) => err(
+                &cmd.id,
+                ErrorBody::new(ErrorCode::PlaybackFailed, "previous failed"),
+            ),
+        },
+        "playback.seek" => {
+            let pos = cmd
+                .data
+                .get("positionMs")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            match playback.seek(pos).await {
+                Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+                Err(PlaybackError) => err(
+                    &cmd.id,
+                    ErrorBody::new(ErrorCode::PlaybackFailed, "seek failed; no track loaded"),
+                ),
+            }
+        }
+        "playback.set_volume" => {
+            let vol = cmd
+                .data
+                .get("volume")
+                .and_then(|v| v.as_f64())
+                .map(|v| v as f32)
+                .unwrap_or(0.8);
+            match playback.set_volume(vol).await {
+                Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+                Err(PlaybackError) => err(
+                    &cmd.id,
+                    ErrorBody::new(ErrorCode::InvalidRequest, "volume must be between 0.0 and 1.0"),
+                ),
+            }
+        }
+        "playback.set_shuffle" => {
+            let shuffle = cmd
+                .data
+                .get("shuffle")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            match playback.set_shuffle(shuffle).await {
+                Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+                Err(PlaybackError) => err(
+                    &cmd.id,
+                    ErrorBody::new(ErrorCode::PlaybackFailed, "set_shuffle failed"),
+                ),
+            }
+        }
+        "playback.set_repeat" => {
+            let repeat = cmd
+                .data
+                .get("repeat")
+                .and_then(|v| v.as_str())
+                .unwrap_or("off");
+            match playback.set_repeat(repeat).await {
+                Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+                Err(PlaybackError) => err(
+                    &cmd.id,
+                    ErrorBody::new(ErrorCode::InvalidRequest, "repeat mode must be off|context|track"),
+                ),
+            }
+        }
+        "playback.set_autoplay" => {
+            let autoplay = cmd
+                .data
+                .get("autoplay")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            match playback.set_autoplay(autoplay).await {
+                Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+                Err(PlaybackError) => err(
+                    &cmd.id,
+                    ErrorBody::new(ErrorCode::PlaybackFailed, "set_autoplay failed"),
+                ),
+            }
+        }
         other => err(
             &cmd.id,
             ErrorBody::new(ErrorCode::InvalidRequest, format!("unknown command: {other}")),
@@ -287,8 +422,33 @@ async fn main() -> ExitCode {
     let auth = Arc::new(AuthManager::new(client_id));
     let _initial_status = auth.hydrate().await;
 
+    // Single multiplexed stdout channel so responses and events never
+    // interleave or collide.
+    let (stdout_tx, mut stdout_rx) = mpsc::channel::<String>(256);
+    let writer_handle = tokio::spawn(async move {
+        let mut stdout = tokio::io::stdout();
+        while let Some(line) = stdout_rx.recv().await {
+            if let Err(e) = writeln_stdout(&mut stdout, &line).await {
+                error!(error = %e, "stdout write error");
+                break;
+            }
+        }
+    });
+
+    let playback = Playback::new(FakeEngine, stdout_tx.clone());
+
+    // Position ticker task: advances position while playing and emits
+    // periodic position events.
+    let ticker_playback = playback.clone();
+    let ticker_handle = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(50));
+        loop {
+            interval.tick().await;
+            ticker_playback.tick().await;
+        }
+    });
+
     let stdin = tokio::io::stdin();
-    let mut stdout = tokio::io::stdout();
     let mut lines = BufReader::new(stdin).lines();
 
     info!(version = PLAYER_VERSION, "spotoei-player starting");
@@ -314,11 +474,9 @@ async fn main() -> ExitCode {
         Ok(c) if c.command == "hello" => c,
         Ok(c) => {
             error!(command = %c.command, "expected hello as first command");
-            let _ = writeln_stdout(
-                &mut stdout,
-                &err(&c.id, ErrorBody::new(ErrorCode::InvalidRequest, "expected hello first")),
-            )
-            .await;
+            let _ = stdout_tx
+                .send(err(&c.id, ErrorBody::new(ErrorCode::InvalidRequest, "expected hello first")))
+                .await;
             return ExitCode::from(2);
         }
         Err(e) => {
@@ -327,9 +485,9 @@ async fn main() -> ExitCode {
         }
     };
 
-    let (hello_reply, _) = handle(hello_cmd, &auth).await;
-    if let Err(e) = writeln_stdout(&mut stdout, &hello_reply).await {
-        error!(error = %e, "failed to write hello reply");
+    let (hello_reply, _) = handle(hello_cmd, &auth, &playback).await;
+    if let Err(e) = stdout_tx.send(hello_reply).await {
+        error!(error = %e, "failed to queue hello reply");
         return ExitCode::from(2);
     }
 
@@ -340,45 +498,53 @@ async fn main() -> ExitCode {
         }
     });
 
+    let mut exit_code = ExitCode::SUCCESS;
     loop {
         tokio::select! {
             _ = shutdown_rx.recv() => {
                 info!("ctrl-c received; exiting");
-                return ExitCode::SUCCESS;
+                break;
             }
             line_res = lines.next_line() => {
                 let line: String = match line_res {
                     Ok(Some(l)) => l,
                     Ok(None) => {
                         info!("stdin closed; exiting");
-                        return ExitCode::SUCCESS;
+                        break;
                     }
                     Err(e) => {
                         error!(error = %e, "stdin read error");
-                        return ExitCode::from(2);
+                        exit_code = ExitCode::from(2);
+                        break;
                     }
                 };
 
                 let (reply, should_exit) = match parse_command(&line) {
-                    Ok(cmd) => handle(cmd, &auth).await,
+                    Ok(cmd) => handle(cmd, &auth, &playback).await,
                     Err(e) => {
                         warn!(error = %e, "command parse failed");
                         continue;
                     }
                 };
 
-                if let Err(e) = writeln_stdout(&mut stdout, &reply).await {
-                    error!(error = %e, "failed to write reply");
-                    return ExitCode::from(2);
+                if let Err(e) = stdout_tx.send(reply).await {
+                    error!(error = %e, "failed to queue reply");
+                    exit_code = ExitCode::from(2);
+                    break;
                 }
 
                 if should_exit {
                     info!("shutdown complete; exiting cleanly");
-                    return ExitCode::SUCCESS;
+                    break;
                 }
             }
         }
     }
+    ticker_handle.abort();
+    drop(playback);
+    drop(stdout_tx);
+    let _ = writer_handle.await;
+    exit_code
 }
 
 async fn run_doctor(args: &[String]) -> ExitCode {

@@ -1,14 +1,15 @@
 import { spawnSync } from 'node:child_process';
-import { createInterface } from 'node:readline';
 import { locatePlayer, startPlayer, stopPlayer } from './player';
 import { createAuthClient } from './auth';
-import type { AuthStatusDataT } from 'spotoei-protocol';
+import { createPlaybackClient } from './playback';
+import type { AuthStatusDataT, PlaybackChangedDataT } from 'spotoei-protocol';
 
 function renderShell(info?: {
   protocol: number;
   playerVersion: string;
   capabilities: string[];
   auth?: AuthStatusDataT;
+  playback?: PlaybackChangedDataT | null;
 }) {
   const playerLine = info ? `│  player  ${info.playerVersion.padEnd(28)}│` : '│  player  (spawning...)               │';
   const protoLine = info ? `│  proto   v${String(info.protocol).padEnd(28)}│` : '│  proto   (pending...)                │';
@@ -31,10 +32,19 @@ function renderShell(info?: {
           : `│  ↳                                  │`
     : '│  ↳ (awaiting handshake)             │';
 
+  const trackName = info?.playback?.track
+    ? `${info.playback.track.name} - ${info.playback.track.artists.join(', ')}`
+    : '(no track)';
+  const playbackState = info?.playback
+    ? `${info.playback.state} [vol:${Math.round(info.playback.volume * 100)}%]`
+    : '(idle)';
+  const playbackLine = `│  play    ${playbackState.slice(0, 28).padEnd(28)}│`;
+  const trackLine = `│  ↳ track ${trackName.slice(0, 28).padEnd(28)}│`;
+
   process.stdout.write(
     [
       '┌────────────────────────────────────────┐',
-      '│  SPOTOEI  (Milestone 1)                │',
+      '│  SPOTOEI  (Milestone 2)                │',
       '├────────────────────────────────────────┤',
       playerLine,
       protoLine,
@@ -42,6 +52,9 @@ function renderShell(info?: {
       '├────────────────────────────────────────┤',
       authLine,
       authDetail,
+      '├────────────────────────────────────────┤',
+      playbackLine,
+      trackLine,
       '└────────────────────────────────────────┘',
       '',
     ].join('\n'),
@@ -71,34 +84,42 @@ async function main(): Promise<number> {
     const handshake = await startPlayer(playerBin);
     child = handshake.child;
     const auth = createAuthClient({ child });
-    const initial = await auth.status();
-    renderShell({
+    const playback = createPlaybackClient({ child });
+    const initialAuth = await auth.status();
+    const initialPlayback = await playback.status();
+
+    const currentInfo = {
       protocol: handshake.protocol,
       playerVersion: handshake.playerVersion,
       capabilities: handshake.capabilities,
       auth: {
-        state: initial.state,
-        accountId: initial.accountId,
-        storage: initial.storage,
-        authUrl: initial.authUrl,
+        state: initialAuth.state,
+        accountId: initialAuth.accountId,
+        storage: initialAuth.storage,
+        authUrl: initialAuth.authUrl,
       },
-    });
+      playback: initialPlayback,
+    };
+
+    renderShell(currentInfo);
+
     auth.onStatusChange((next) => {
-      renderShell({
-        protocol: handshake.protocol,
-        playerVersion: handshake.playerVersion,
-        capabilities: handshake.capabilities,
-        auth: {
-          state: next.state,
-          accountId: next.accountId,
-          storage: next.storage,
-          authUrl: next.authUrl,
-        },
-      });
+      currentInfo.auth = {
+        state: next.state,
+        accountId: next.accountId,
+        storage: next.storage,
+        authUrl: next.authUrl,
+      };
+      renderShell(currentInfo);
     });
-    // Touch the auth client briefly so the readline listener is active.
-    // In M2+ this becomes the queue for play commands.
+
+    playback.onChange((next) => {
+      currentInfo.playback = next;
+      renderShell(currentInfo);
+    });
+
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    playback.close();
     auth.close();
   } catch (e) {
     process.stderr.write(`spotoei: failed to start player: ${e instanceof Error ? e.message : String(e)}\n`);
@@ -121,18 +142,15 @@ async function main(): Promise<number> {
 
 function runDoctor(args: string[]): number {
   const sub = args[0] ?? 'all';
-  const playerBin = (() => {
-    try {
-      return locatePlayer();
-    } catch {
-      return null;
-    }
-  })();
-  if (!playerBin) {
-    process.stderr.write('spotoei doctor: player binary not found\n');
+  let playerBin: string;
+  try {
+    playerBin = locatePlayer();
+  } catch (e) {
+    process.stderr.write(`spotoei doctor: ${e instanceof Error ? e.message : String(e)}\n`);
     return 1;
   }
-  // Delegate to the sidecar. The Rust `doctor` subcommand does the
+
+  // Doctor runs directly against the player child binary to produce
   // detailed keyring and account reporting.
   const result = spawnSync(playerBin, ['doctor', sub], { stdio: 'inherit' });
   return result.status ?? 0;

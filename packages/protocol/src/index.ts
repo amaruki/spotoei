@@ -253,3 +253,66 @@ export function makeAuthLogout(id: string): CommandT {
 export function makeAuthGetWebToken(id: string): CommandT {
   return makeCommand(id, 'auth.get_web_token', {});
 }
+
+export * from './playback';
+
+export function makePlaybackPlay(id: string): CommandT {
+  return makeCommand(id, 'playback.play', {});
+}
+
+export function makePlaybackPause(id: string): CommandT {
+  return makeCommand(id, 'playback.pause', {});
+}
+
+export function makePlaybackToggle(id: string): CommandT {
+  return makeCommand(id, 'playback.toggle', {});
+}
+
+export function makePlaybackNext(id: string): CommandT {
+  return makeCommand(id, 'playback.next', {});
+}
+
+export function makePlaybackPrevious(id: string): CommandT {
+  return makeCommand(id, 'playback.previous', {});
+}
+
+export function makePlaybackSeek(id: string, positionMs: number): CommandT {
+  return makeCommand(id, 'playback.seek', { positionMs });
+}
+
+export function makePlaybackSetVolume(id: string, volume: number): CommandT {
+  return makeCommand(id, 'playback.set_volume', { volume });
+}
+
+export function makePlaybackSetShuffle(
+  id: string,
+  shuffle: boolean,
+): CommandT {
+  return makeCommand(id, 'playback.set_shuffle', { shuffle });
+}
+
+export function makePlaybackSetRepeat(id: string, repeat: string): CommandT {
+  return makeCommand(id, 'playback.set_repeat', { repeat });
+}
+
+export function makePlaybackSetAutoplay(
+  id: string,
+  autoplay: boolean,
+): CommandT {
+  return makeCommand(id, 'playback.set_autoplay', { autoplay });
+}
+
+export function makePlaybackLoad(
+  id: string,
+  opts: { contextUri?: string; trackUri?: string; autoplay?: boolean } = {},
+): CommandT {
+  const data: Record<string, unknown> = {};
+  if (opts.contextUri !== undefined) data.contextUri = opts.contextUri;
+  if (opts.trackUri !== undefined) data.trackUri = opts.trackUri;
+  if (opts.autoplay !== undefined) data.autoplay = opts.autoplay;
+  return makeCommand(id, 'playback.load', data);
+}
+
+export function makePlaybackStatus(id: string): CommandT {
+  return makeCommand(id, 'player.status', {});
+}
