@@ -34,7 +34,10 @@ export function drawBox(
 
   let topBorder: string;
   if (opts.title) {
-    const titleText = ` ${opts.title} `;
+    // Truncate title if it would exceed inner width; reserve at least 2 chars
+    // for the side padding to keep the corners readable.
+    const maxTitle = Math.max(0, innerWidth - 2);
+    const titleText = ` ${opts.title.length > maxTitle ? opts.title.slice(0, maxTitle) : opts.title} `;
     const remaining = Math.max(0, innerWidth - titleText.length);
     const leftPad = Math.floor(remaining / 2);
     const rightPad = remaining - leftPad;

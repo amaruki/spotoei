@@ -576,9 +576,19 @@ async function main(): Promise<number> {
           return;
         }
         if (chunk === '\t') {
-          const order: Focus[] = ['main', 'sidebar', 'context'];
+          // Only cycle between panels visible in the current layout tier.
+          const order: Focus[] =
+            uiState.tier === 'wide'
+              ? ['main', 'sidebar', 'context']
+              : uiState.tier === 'medium'
+                ? ['main', 'sidebar']
+                : ['main'];
           const idx = order.indexOf(uiState.focus);
-          setFocus(order[(idx + 1) % order.length]);
+          if (idx >= 0) {
+            setFocus(order[(idx + 1) % order.length]);
+          } else {
+            setFocus(order[0]!);
+          }
           return;
         }
         if (chunk === 'v' || chunk === 'V') {

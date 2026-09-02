@@ -33,6 +33,12 @@ describe('drawBox', () => {
     expect(lines[lines.length - 1]).toContain('╚');
   });
 
+  it('truncates title that exceeds inner width', () => {
+    const lines = drawBox(['item'], { width: 12, title: 'a very long title that wont fit' });
+    expect(lines[0]?.length).toBe(12);
+    expect(lines[0]).toContain('┌');
+  });
+
   it('truncates lines that exceed inner width', () => {
     const lines = drawBox(['a very long line that should be truncated'], { width: 10 });
     expect(lines[1]?.length).toBe(10);
