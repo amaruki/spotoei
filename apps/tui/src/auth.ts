@@ -11,7 +11,7 @@ import {
   parseInbound,
 } from 'spotoei-protocol';
 import type { ChildProcess } from 'node:child_process';
-import { createInterface } from 'node:readline';
+import { getSharedReadline } from './player';
 
 export interface AuthClient {
   status(): Promise<AuthStatusDataT>;
@@ -47,7 +47,7 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
     throw new Error('child stdin/stdout must be piped to createAuthClient');
   }
 
-  const rl = createInterface({ input: child.stdout });
+  const rl = getSharedReadline(child);
 
   const lineListener = (line: string): void => {
     const parsed = parseInbound(line);
@@ -166,7 +166,6 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
 
     close(): void {
       rl.off('line', lineListener);
-      rl.close();
       for (const p of pending.values()) {
         clearTimeout(p.timer);
         p.reject(new Error('auth client closed'));

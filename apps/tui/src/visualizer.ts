@@ -138,6 +138,12 @@ export class VisualizerController {
       rl.off('line', this.lineListener);
       this.lineListener = null;
     }
+    for (const req of this.pending.values()) {
+      clearTimeout(req.timer);
+      req.reject(new Error('visualizer controller stopped'));
+    }
+    this.pending.clear();
+    this.listeners.clear();
   }
 
   subscribe(listener: VisualizerFrameListener): () => void {
@@ -182,22 +188,34 @@ export class VisualizerController {
       this.frameLatencies.shift();
     }
 
-    if (ms > 22) {
-      this.slowFrameCount++;
-      this.fastFrameCount = 0;
-    } else if (ms < 18) {
-      this.fastFrameCount++;
-      this.slowFrameCount = 0;
-    }
+    if (this.currentFps === 60) {
+      if (ms > 22) {
+        this.slowFrameCount++;
+        this.fastFrameCount = 0;
+      } else {
+        this.slowFrameCount = 0;
+      }
 
-    if (this.currentFps === 60 && this.slowFrameCount >= 10) {
-      this.currentFps = 30;
-      this.slowFrameCount = 0;
-      this.syncConfig().catch(() => {});
-    } else if (this.currentFps === 30 && this.fastFrameCount >= 60) {
-      this.currentFps = 60;
-      this.fastFrameCount = 0;
-      this.syncConfig().catch(() => {});
+      if (this.slowFrameCount >= 10) {
+        this.currentFps = 30;
+        this.slowFrameCount = 0;
+        this.fastFrameCount = 0;
+        this.syncConfig().catch(() => {});
+      }
+    } else if (this.currentFps === 30) {
+      // At 30 FPS target interval is ~33.3ms. Low-jitter frames (<=36ms) indicate recovery.
+      if (ms <= 36) {
+        this.fastFrameCount++;
+      } else {
+        this.fastFrameCount = 0;
+      }
+
+      if (this.fastFrameCount >= 60) {
+        this.currentFps = 60;
+        this.fastFrameCount = 0;
+        this.slowFrameCount = 0;
+        this.syncConfig().catch(() => {});
+      }
     }
   }
 

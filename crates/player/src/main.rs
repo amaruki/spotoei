@@ -473,7 +473,7 @@ async fn main() -> ExitCode {
     // stopped so the TS side keeps a stable render target. Drops
     // frames silently if the stdout channel is full (audio path is
     // never blocked on visualizer traffic).
-    let visualizer_publisher = Playback::new(FakeEngine, stdout_tx.clone());
+    let visualizer_publisher = playback.clone();
     let viz_cfg = visualizer_cfg.clone();
     let viz_stdout = stdout_tx.clone();
     let viz_handle = tokio::spawn(async move {

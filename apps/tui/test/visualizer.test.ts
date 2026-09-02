@@ -184,4 +184,55 @@ describe('VisualizerController unit tests', () => {
 
     ctrl.stop();
   });
+
+  test('downgrades from 60 to 30 FPS after 10 slow frames and upgrades back after 60 fast frames at 30', async () => {
+    const { child, stdout } = makeMockChild();
+    const ctrl = new VisualizerController({ child, initialMode: 'spectrum' });
+    ctrl.start();
+    // Trigger 15 slow frames (>22ms) at 60 FPS to drop to 30.
+    for (let i = 0; i < 15; i++) {
+      stdout.write(
+        JSON.stringify({
+          v: PROTOCOL_VERSION,
+          type: 'event',
+          event: 'visualizer.spectrum',
+          seq: i + 1,
+          data: { bands: [0.1, 0.2] },
+        }) + '\n',
+      );
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    await new Promise((r) => setTimeout(r, 50));
+    expect(ctrl.getCurrentFps()).toBe(30);
+
+    // Now feed 70 fast frames (<=36ms) at 30 FPS to recover back to 60.
+    for (let i = 0; i < 70; i++) {
+      stdout.write(
+        JSON.stringify({
+          v: PROTOCOL_VERSION,
+          type: 'event',
+          event: 'visualizer.spectrum',
+          seq: i + 100,
+          data: { bands: [0.5, 0.5] },
+        }) + '\n',
+      );
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    await new Promise((r) => setTimeout(r, 50));
+    expect(ctrl.getCurrentFps()).toBe(60);
+
+    ctrl.stop();
+  });
+
+  test('stop() rejects pending visualizer.configure responses', async () => {
+    const { child } = makeMockChild();
+    const ctrl = new VisualizerController({ child, initialMode: 'spectrum' });
+    ctrl.start();
+
+    // start() already calls syncConfig(); now force a fresh one and stop before response.
+    const sendPromise = (ctrl as unknown as { syncConfig: () => Promise<void> }).syncConfig();
+    ctrl.stop();
+    // The pending promise must reject instead of dangling.
+    await expect(sendPromise).rejects.toThrow('visualizer controller stopped');
+  });
 });
