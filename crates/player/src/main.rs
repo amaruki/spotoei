@@ -277,11 +277,12 @@ async fn main() -> ExitCode {
                 let (reply, should_exit) = match parse_command(&line) {
                     Ok(cmd) => handle(cmd),
                     Err(e) => {
+                        // Post-handshake parse failure: the client sent malformed
+                        // input. We have no correlated id to echo, and stdout
+                        // is reserved for protocol responses. Log diagnostics
+                        // to stderr and continue reading.
                         warn!(error = %e, "command parse failed");
-                        (
-                            err("unknown", ErrorBody::new(ErrorCode::InvalidRequest, e.to_string())),
-                            false,
-                        )
+                        continue;
                     }
                 };
 

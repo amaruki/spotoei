@@ -24,12 +24,12 @@ export interface HandshakeResult {
 }
 
 const UI_VERSION = 'spotoei-tui/0.0.0';
-
-// Strip terminal control characters and escape sequences to prevent
-// terminal title rewrites, clear-screens, or cursor moves from child stderr.
+// Strip terminal control characters, ANSI escapes, and OSC sequences
+// to prevent terminal title rewrites, clear-screens, or cursor moves.
 const ANSI_REGEX =
   // eslint-disable-next-line no-control-regex
-  /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+  /(?:\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><])/g;
+
 
 function sanitizeStderr(chunk: Buffer): string {
   return chunk
@@ -85,7 +85,7 @@ export function locatePlayer(): string {
  * Spawn the player child, pipe stdin/stdout, and complete the hello handshake.
  *
  * Enforces a strict 5-second handshake deadline. Child is force-killed on
- * timeout, parse failure, or if the hello response fails schema validation.
+ * timeout, parse failure, spawn error, or if the hello response fails schema validation.
  */
 export async function startPlayer(playerBin: string): Promise<HandshakeResult> {
   // Pass an explicit allowlist of environment variables to prevent secret leaks.
@@ -148,6 +148,13 @@ export async function startPlayer(playerBin: string): Promise<HandshakeResult> {
 
       rl.on('line', onLine);
 
+      child.once('error', (err) => {
+        if (!settled) {
+          settled = true;
+          rejectH(err);
+        }
+      });
+
       child.once('exit', (code) => {
         if (!settled) {
           settled = true;
@@ -188,8 +195,8 @@ export async function startPlayer(playerBin: string): Promise<HandshakeResult> {
 /**
  * Send `shutdown` to the player and wait for it to exit cleanly.
  *
- * Arms a 2-second grace period. If the child is still running after the
- * grace period expires, it is escalated to SIGKILL.
+ * Arms a 2-second grace period immediately. If the child is still running
+ * after the grace period expires, it is escalated to SIGKILL.
  */
 export async function stopPlayer(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null) return;
@@ -207,18 +214,19 @@ export async function stopPlayer(child: ChildProcess): Promise<void> {
 
     child.once('exit', onExit);
 
+    // Arm the grace timer immediately so wedged/unresponsive stdin pipes
+    // still trigger SIGKILL escalation within SHUTDOWN_TIMEOUT_MS.
+    timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // Child may already have exited.
+      }
+      resolveStop();
+    }, SHUTDOWN_TIMEOUT_MS);
+
     try {
-      child.stdin?.write(JSON.stringify(cmd) + '\n', () => {
-        // Arm the grace timer ONLY once the command is flushed to the pipe.
-        timer = setTimeout(() => {
-          try {
-            child.kill('SIGKILL');
-          } catch {
-            // Child may already have exited.
-          }
-          resolveStop();
-        }, SHUTDOWN_TIMEOUT_MS);
-      });
+      child.stdin?.write(JSON.stringify(cmd) + '\n');
     } catch {
       // If stdin was already closed, the exit handler will resolve the promise.
     }
