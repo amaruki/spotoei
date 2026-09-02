@@ -163,4 +163,48 @@ export const EntityViewResponse = z.discriminatedUnion('type', [
     reason: z.string().optional(),
   }),
 ]);
+
+// Library collections supported by the local library view.
+export const LibraryCollection = z.enum([
+  'saved_tracks',
+  'saved_albums',
+  'followed_artists',
+  'playlists',
+]);
+export type LibraryCollectionT = z.infer<typeof LibraryCollection>;
+
+export const LibraryPageResponse = z.object({
+  collection: LibraryCollection,
+  items: z.array(z.union([CatalogTrack, CatalogAlbum, CatalogArtist, CatalogPlaylist])),
+  total: z.number().int().nonnegative(),
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  hasMore: z.boolean(),
+  error: z
+    .object({
+      code: z.string(),
+      message: z.string(),
+      retryable: z.boolean(),
+    })
+    .optional(),
+});
+export type LibraryPageResponseT = z.infer<typeof LibraryPageResponse>;
+
+export const QueueSource = z.enum(['user', 'context', 'autoplay']);
+export type QueueSourceT = z.infer<typeof QueueSource>;
+
+export const QueueItem = z.object({
+  id: z.string(),
+  track: CatalogTrack,
+  source: QueueSource,
+  addedAt: z.number().int().nonnegative(),
+});
+export type QueueItemT = z.infer<typeof QueueItem>;
+
+export const QueueSnapshot = z.object({
+  current: CatalogTrack.nullable(),
+  upcoming: z.array(QueueItem),
+  revision: z.number().int().nonnegative(),
+});
+export type QueueSnapshotT = z.infer<typeof QueueSnapshot>;
 export type EntityViewResponseT = z.infer<typeof EntityViewResponse>;

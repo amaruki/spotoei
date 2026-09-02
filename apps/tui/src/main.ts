@@ -5,6 +5,8 @@ import { createPlaybackClient } from './playback';
 import { Cache } from './cache';
 import { WebApiClient } from './webApi';
 import { createSearchClient } from './search';
+import { LibraryManager } from './library';
+import { QueueManager } from './queue';
 import type {
   AuthStatusDataT,
   PlaybackChangedDataT,
@@ -35,6 +37,13 @@ function renderShell(info?: {
     query: string;
     hitCount: number;
     firstHit?: string;
+  };
+  library?: {
+    collection: string;
+    total: number;
+  };
+  queue?: {
+    upcomingCount: number;
   };
 }) {
   const playerLine = info
@@ -81,10 +90,18 @@ function renderShell(info?: {
     ? detail('↳ hit', info.search.firstHit)
     : detail('↳', '');
 
+  const libraryLine = info?.library
+    ? line('library', `${info.library.collection} (${info.library.total})`)
+    : line('library', '(idle)');
+
+  const queueLine = info?.queue
+    ? line('queue', `${info.queue.upcomingCount} upcoming`)
+    : line('queue', '(idle)');
+
   process.stdout.write(
     [
       '┌────────────────────────────────────────┐',
-      '│  SPOTOEI  (Milestone 3)                │',
+      '│  SPOTOEI  (Milestone 4)                │',
       '├────────────────────────────────────────┤',
       playerLine,
       protoLine,
@@ -98,6 +115,9 @@ function renderShell(info?: {
       '├────────────────────────────────────────┤',
       searchLine,
       searchDetail,
+      '├────────────────────────────────────────┤',
+      libraryLine,
+      queueLine,
       '└────────────────────────────────────────┘',
       '',
     ].join('\n'),
@@ -143,6 +163,12 @@ async function main(): Promise<number> {
       cache,
       accountId: initialAuth.accountId ?? 'anonymous',
     });
+    const libraryManager = new LibraryManager({
+      webApi,
+      cache,
+      accountId: initialAuth.accountId ?? 'anonymous',
+    });
+    const queueManager = new QueueManager({ webApi });
 
     const currentInfo: {
       protocol: number;
@@ -155,6 +181,13 @@ async function main(): Promise<number> {
         hitCount: number;
         firstHit?: string;
       };
+      library?: {
+        collection: string;
+        total: number;
+      };
+      queue?: {
+        upcomingCount: number;
+      };
     } = {
       protocol: handshake.protocol,
       playerVersion: handshake.playerVersion,
@@ -166,6 +199,13 @@ async function main(): Promise<number> {
         authUrl: initialAuth.authUrl,
       },
       playback: initialPlayback,
+      library: {
+        collection: 'saved_tracks',
+        total: 0,
+      },
+      queue: {
+        upcomingCount: 0,
+      },
     };
 
     renderShell(currentInfo);
@@ -183,6 +223,12 @@ async function main(): Promise<number> {
     playback.onChange((next) => {
       currentInfo.playback = next;
       renderShell(currentInfo);
+    });
+
+    queueManager.subscribe((snap) => {
+      currentInfo.queue = {
+        upcomingCount: snap.upcoming.length,
+      };
     });
 
     // Optional query argument for testing/smoke verification

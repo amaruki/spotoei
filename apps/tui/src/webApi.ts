@@ -16,6 +16,9 @@ import {
   type CatalogPlaylistT,
   type CatalogTrackT,
   type EntityViewResponseT,
+  type LibraryPageResponseT,
+  type QueueItemT,
+  type QueueSnapshotT,
   type SearchResponseT,
 } from 'spotoei-protocol';
 
@@ -431,6 +434,239 @@ export class WebApiClient {
     };
     return PlaylistSchema.parse(playlist);
   }
+
+  // --- Library Views & Pagination ---
+
+  async getLibraryPage(
+    collection: 'saved_tracks' | 'saved_albums' | 'followed_artists' | 'playlists',
+    offset = 0,
+    limit = 20,
+  ): Promise<LibraryPageResponseT> {
+    const safeLimit = Math.max(1, Math.min(limit, 50));
+    const safeOffset = Math.max(0, offset);
+
+    try {
+      if (collection === 'saved_tracks') {
+        const json = await this.request(
+          `/me/tracks?offset=${safeOffset}&limit=${safeLimit}`,
+        );
+        const rawItems = toArray(pickObjectKey(json, 'items'));
+        const tracks: CatalogTrackT[] = [];
+        for (const item of rawItems) {
+          if (item !== null && typeof item === 'object' && 'track' in item) {
+            const track = (item as { track: unknown }).track;
+            const mapped = this.mapTrack(track);
+            if (mapped) tracks.push(mapped);
+          }
+        }
+        const total = readNumber(json, 'total', tracks.length);
+        return {
+          collection,
+          items: tracks,
+          total,
+          offset: safeOffset,
+          limit: safeLimit,
+          hasMore: safeOffset + tracks.length < total,
+        };
+      }
+
+      if (collection === 'saved_albums') {
+        const json = await this.request(
+          `/me/albums?offset=${safeOffset}&limit=${safeLimit}`,
+        );
+        const rawItems = toArray(pickObjectKey(json, 'items'));
+        const albums: CatalogAlbumT[] = [];
+        for (const item of rawItems) {
+          if (item !== null && typeof item === 'object' && 'album' in item) {
+            const album = (item as { album: unknown }).album;
+            const mapped = this.mapAlbum(album);
+            if (mapped) albums.push(mapped);
+          }
+        }
+        const total = readNumber(json, 'total', albums.length);
+        return {
+          collection,
+          items: albums,
+          total,
+          offset: safeOffset,
+          limit: safeLimit,
+          hasMore: safeOffset + albums.length < total,
+        };
+      }
+
+      if (collection === 'followed_artists') {
+        const json = await this.request(
+          `/me/following?type=artist&limit=${safeLimit}`,
+        );
+        const artistsObj =
+          json !== null && typeof json === 'object' && 'artists' in json
+            ? (json as { artists: unknown }).artists
+            : null;
+        const rawItems = toArray(
+          artistsObj !== null && typeof artistsObj === 'object' && 'items' in artistsObj
+            ? (artistsObj as { items: unknown }).items
+            : undefined,
+        );
+        const artists: CatalogArtistT[] = [];
+        for (const item of rawItems) {
+          const mapped = this.mapArtist(item);
+          if (mapped) artists.push(mapped);
+        }
+        const total =
+          artistsObj !== null && typeof artistsObj === 'object' && 'total' in artistsObj
+            ? typeof (artistsObj as { total: unknown }).total === 'number'
+              ? (artistsObj as { total: number }).total
+              : artists.length
+            : artists.length;
+        return {
+          collection,
+          items: artists,
+          total,
+          offset: safeOffset,
+          limit: safeLimit,
+          hasMore: safeOffset + artists.length < total,
+        };
+      }
+
+      if (collection === 'playlists') {
+        const json = await this.request(
+          `/me/playlists?offset=${safeOffset}&limit=${safeLimit}`,
+        );
+        const rawItems = toArray(pickObjectKey(json, 'items'));
+        const playlists: CatalogPlaylistT[] = [];
+        for (const item of rawItems) {
+          const mapped = this.mapPlaylist(item);
+          if (mapped) playlists.push(mapped);
+        }
+        const total = readNumber(json, 'total', playlists.length);
+        return {
+          collection,
+          items: playlists,
+          total,
+          offset: safeOffset,
+          limit: safeLimit,
+          hasMore: safeOffset + playlists.length < total,
+        };
+      }
+
+      return {
+        collection,
+        items: [],
+        total: 0,
+        offset: safeOffset,
+        limit: safeLimit,
+        hasMore: false,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const code = msg.startsWith('RATE_LIMITED')
+        ? 'RATE_LIMITED'
+        : msg.startsWith('AUTH_EXPIRED')
+          ? 'AUTH_EXPIRED'
+          : msg.startsWith('FORBIDDEN')
+            ? 'FORBIDDEN'
+            : 'NETWORK_ERROR';
+      return {
+        collection,
+        items: [],
+        total: 0,
+        offset: safeOffset,
+        limit: safeLimit,
+        hasMore: false,
+        error: {
+          code,
+          message: msg,
+          retryable: code !== 'AUTH_EXPIRED' && code !== 'FORBIDDEN',
+        },
+      };
+    }
+  }
+
+  // --- Library Save / Remove Mutations ---
+
+  async saveItem(type: 'track' | 'album', id: string): Promise<boolean> {
+    const path = type === 'track' ? `/me/tracks?ids=${id}` : `/me/albums?ids=${id}`;
+    try {
+      await this.request(path, { method: 'PUT' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async removeItem(type: 'track' | 'album', id: string): Promise<boolean> {
+    const path = type === 'track' ? `/me/tracks?ids=${id}` : `/me/albums?ids=${id}`;
+    try {
+      await this.request(path, { method: 'DELETE' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // --- Queue Operations ---
+
+  async addToQueue(uri: string): Promise<boolean> {
+    try {
+      await this.request(`/me/player/queue?uri=${encodeURIComponent(uri)}`, {
+        method: 'POST',
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async getQueueSnapshot(): Promise<QueueSnapshotT | null> {
+    try {
+      const json = await this.request('/me/player/queue');
+      const currentlyPlayingRaw = pickObjectKey(json, 'currently_playing');
+      const current = currentlyPlayingRaw ? this.mapTrack(currentlyPlayingRaw) : null;
+      const rawQueue = toArray(pickObjectKey(json, 'queue'));
+      const upcoming: QueueItemT[] = [];
+      let idx = 0;
+      for (const item of rawQueue) {
+        const track = this.mapTrack(item);
+        if (track) {
+          upcoming.push({
+            id: `${track.id}-${idx++}`,
+            track,
+            source: 'context',
+            addedAt: Date.now(),
+          });
+        }
+      }
+      return {
+        current,
+        upcoming,
+        revision: Date.now(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async setShuffle(state: boolean): Promise<boolean> {
+    try {
+      await this.request(`/me/player/shuffle?state=${state}`, {
+        method: 'PUT',
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async setRepeat(state: 'off' | 'track' | 'context'): Promise<boolean> {
+    try {
+      await this.request(`/me/player/repeat?state=${state}`, {
+        method: 'PUT',
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
 // --- Targeted, used-once shaping helpers ---
@@ -486,4 +722,16 @@ function toFirstImage(value: unknown): CatalogTrackT['image'] {
     };
   }
   return undefined;
+}
+
+function pickObjectKey(obj: unknown, key: string): unknown {
+  if (obj !== null && typeof obj === 'object' && key in obj) {
+    return (obj as Record<string, unknown>)[key];
+  }
+  return undefined;
+}
+
+function readNumber(obj: unknown, key: string, fallback: number): number {
+  const v = pickObjectKey(obj, key);
+  return typeof v === 'number' ? v : fallback;
 }
