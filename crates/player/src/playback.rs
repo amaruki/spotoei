@@ -251,12 +251,12 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             inner.position_ms = 0;
             inner.duration_ms = track.duration_ms;
             inner.last_change_at = Instant::now();
+            inner.last_emitted_position_ms = 0;
             self.snapshot_locked(&inner)
         };
         self.emit_changed(&snap).await;
         Ok(snap)
     }
-
     pub async fn play(&self) -> Result<PlaybackChangedPayload, PlaybackError> {
         let snap = {
             let mut inner = self.inner.lock().await;
@@ -319,6 +319,7 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             }
             inner.position_ms = 0;
             inner.last_change_at = Instant::now();
+            inner.last_emitted_position_ms = 0;
             self.snapshot_locked(&inner)
         };
         self.emit_changed(&snap).await;
@@ -334,6 +335,7 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             }
             inner.position_ms = 0;
             inner.last_change_at = Instant::now();
+            inner.last_emitted_position_ms = 0;
             self.snapshot_locked(&inner)
         };
         self.emit_changed(&snap).await;
@@ -352,6 +354,7 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             inner.revision = inner.revision.wrapping_add(1);
             inner.position_ms = position_ms.min(inner.duration_ms);
             inner.last_change_at = Instant::now();
+            inner.last_emitted_position_ms = inner.position_ms;
             self.snapshot_locked(&inner)
         };
         self.emit_changed(&snap).await;
@@ -367,9 +370,12 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
         }
         let snap = {
             let mut inner = self.inner.lock().await;
+            inner.revision = inner.revision.wrapping_add(1);
             inner.volume = volume;
+            inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
+        self.emit_changed(&snap).await;
         Ok(snap)
     }
 
@@ -379,9 +385,12 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
     ) -> Result<PlaybackChangedPayload, PlaybackError> {
         let snap = {
             let mut inner = self.inner.lock().await;
+            inner.revision = inner.revision.wrapping_add(1);
             inner.shuffle = shuffle;
+            inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
+        self.emit_changed(&snap).await;
         Ok(snap)
     }
 
@@ -395,9 +404,12 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
         };
         let snap = {
             let mut inner = self.inner.lock().await;
+            inner.revision = inner.revision.wrapping_add(1);
             inner.repeat = mode;
+            inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
+        self.emit_changed(&snap).await;
         Ok(snap)
     }
 
@@ -407,12 +419,14 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
     ) -> Result<PlaybackChangedPayload, PlaybackError> {
         let snap = {
             let mut inner = self.inner.lock().await;
+            inner.revision = inner.revision.wrapping_add(1);
             inner.autoplay = autoplay;
+            inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
+        self.emit_changed(&snap).await;
         Ok(snap)
     }
-
     /// Tick the position clock forward while playing. Emits a
     /// `playback.position` event at ~5 Hz when the position changed enough
     /// since the last emitted position.
@@ -523,12 +537,16 @@ mod tests {
         // Volume clamping.
         let vol_snap = pb.set_volume(0.5).await.expect("valid volume");
         assert!((vol_snap.volume - 0.5).abs() < 0.001);
+        assert!(vol_snap.revision == 6, "set_volume should bump revision");
+        let _ = rx.recv().await.expect("set_volume changed event");
         assert!(pb.set_volume(1.2).await.is_err());
         assert!(pb.set_volume(-0.1).await.is_err());
 
         // Repeat mode validation.
         let rep_snap = pb.set_repeat("context").await.expect("valid repeat");
         assert_eq!(rep_snap.repeat, "context");
+        assert!(rep_snap.revision == 7, "set_repeat should bump revision");
+        let _ = rx.recv().await.expect("set_repeat changed event");
         assert!(pb.set_repeat("invalid_mode").await.is_err());
-    }
+}
 }
