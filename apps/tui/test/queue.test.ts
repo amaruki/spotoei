@@ -42,7 +42,7 @@ describe('QueueManager', () => {
     expect(callCount).toBe(1);
   });
 
-  test('add optimistically inserts and bumps revision', async () => {
+  test('add bumps revision and does not insert a placeholder', async () => {
     const fakeWebApi = {
       async addToQueue(uri: string): Promise<boolean> {
         return uri === 'spotify:track:t1';
@@ -52,12 +52,13 @@ describe('QueueManager', () => {
     const manager = new QueueManager({ webApi: fakeWebApi });
     const initial = manager.getSnapshot();
     const initialRev = initial.revision;
+    const initialCount = initial.upcoming.length;
 
     const ok = await manager.add('spotify:track:t1');
     expect(ok).toBe(true);
 
     const after = manager.getSnapshot();
-    expect(after.upcoming.length).toBe(initial.upcoming.length + 1);
+    expect(after.upcoming.length).toBe(initialCount);
     expect(after.revision).toBe(initialRev + 1);
   });
 
@@ -117,8 +118,7 @@ describe('QueueManager', () => {
     expect(received!.upcoming.length).toBe(0);
 
     await manager.refresh();
-    expect(received!.revision).toBe(5);
-
+    expect(received!.revision).toBe(1);
     unsubscribe();
   });
 });

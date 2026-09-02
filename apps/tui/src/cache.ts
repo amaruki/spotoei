@@ -217,6 +217,14 @@ export class Cache {
     stmt.run(accountId, queryKey);
   }
 
+  invalidateQueryPrefix(accountId: string, queryKeyPrefix: string): number {
+    const stmt = this.db.prepare(
+      'DELETE FROM query_cache WHERE account_id = ? AND query_key LIKE ?;',
+    );
+    const r = stmt.run(accountId, `${queryKeyPrefix}%`);
+    return r.changes ?? 0;
+  }
+
   pruneExpired(): number {
     const now = Date.now();
     const stmt1 = this.db.prepare(

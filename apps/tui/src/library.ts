@@ -32,6 +32,10 @@ export class LibraryManager {
     return `library:v1:${collection}:${offset}:${limit}`;
   }
 
+  private makePrefix(collection: LibraryCollectionT): string {
+    return `library:v1:${collection}:`;
+  }
+
   async getPage(
     collection: LibraryCollectionT,
     offset = 0,
@@ -64,11 +68,9 @@ export class LibraryManager {
   async save(type: 'track' | 'album', id: string): Promise<boolean> {
     const ok = await this.webApi.saveItem(type, id);
     if (ok) {
-      // Invalidate cached library pages on mutation
       const collection: LibraryCollectionT =
         type === 'track' ? 'saved_tracks' : 'saved_albums';
-      // Invalidate first page as it's the most common
-      this.cache.invalidateQuery(this.accountId, this.makeKey(collection, 0, 20));
+      this.cache.invalidateQueryPrefix(this.accountId, this.makePrefix(collection));
     }
     return ok;
   }
@@ -78,12 +80,12 @@ export class LibraryManager {
     if (ok) {
       const collection: LibraryCollectionT =
         type === 'track' ? 'saved_tracks' : 'saved_albums';
-      this.cache.invalidateQuery(this.accountId, this.makeKey(collection, 0, 20));
+      this.cache.invalidateQueryPrefix(this.accountId, this.makePrefix(collection));
     }
     return ok;
   }
 
   invalidate(collection: LibraryCollectionT): void {
-    this.cache.invalidateQuery(this.accountId, this.makeKey(collection, 0, 20));
+    this.cache.invalidateQueryPrefix(this.accountId, this.makePrefix(collection));
   }
 }

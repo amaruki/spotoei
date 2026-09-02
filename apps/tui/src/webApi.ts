@@ -115,14 +115,15 @@ export class WebApiClient {
   private async request(
     path: string,
     params: Record<string, string> = {},
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
   ): Promise<unknown> {
     const url = new URL(`${this.baseUrl}${path}`);
     for (const [k, v] of Object.entries(params)) {
       url.searchParams.set(k, v);
     }
-    const cacheKey = url.toString();
+    const cacheKey = `${method} ${url.toString()}`;
 
-    if (this.inFlight.has(cacheKey)) {
+    if (method === 'GET' && this.inFlight.has(cacheKey)) {
       return this.inFlight.get(cacheKey);
     }
 
@@ -130,6 +131,7 @@ export class WebApiClient {
       try {
         const token = await this.tokenProvider.getAccessToken();
         const res = await fetch(url.toString(), {
+          method,
           headers: {
             Authorization: `Bearer ${token}`,
             'User-Agent': 'spotoei/0.0.0',
@@ -154,11 +156,15 @@ export class WebApiClient {
 
         return await res.json();
       } finally {
-        this.inFlight.delete(cacheKey);
+        if (method === 'GET') {
+          this.inFlight.delete(cacheKey);
+        }
       }
     })();
 
-    this.inFlight.set(cacheKey, p);
+    if (method === 'GET') {
+      this.inFlight.set(cacheKey, p);
+    }
     return p;
   }
 
@@ -587,7 +593,7 @@ export class WebApiClient {
   async saveItem(type: 'track' | 'album', id: string): Promise<boolean> {
     const path = type === 'track' ? `/me/tracks?ids=${id}` : `/me/albums?ids=${id}`;
     try {
-      await this.request(path, { method: 'PUT' });
+      await this.request(path, {}, 'PUT');
       return true;
     } catch {
       return false;
@@ -597,7 +603,7 @@ export class WebApiClient {
   async removeItem(type: 'track' | 'album', id: string): Promise<boolean> {
     const path = type === 'track' ? `/me/tracks?ids=${id}` : `/me/albums?ids=${id}`;
     try {
-      await this.request(path, { method: 'DELETE' });
+      await this.request(path, {}, 'DELETE');
       return true;
     } catch {
       return false;
@@ -608,9 +614,11 @@ export class WebApiClient {
 
   async addToQueue(uri: string): Promise<boolean> {
     try {
-      await this.request(`/me/player/queue?uri=${encodeURIComponent(uri)}`, {
-        method: 'POST',
-      });
+      await this.request(
+        `/me/player/queue?uri=${encodeURIComponent(uri)}`,
+        {},
+        'POST',
+      );
       return true;
     } catch {
       return false;
@@ -639,34 +647,13 @@ export class WebApiClient {
       return {
         current,
         upcoming,
-        revision: Date.now(),
+        revision: 0,
       };
     } catch {
       return null;
     }
   }
 
-  async setShuffle(state: boolean): Promise<boolean> {
-    try {
-      await this.request(`/me/player/shuffle?state=${state}`, {
-        method: 'PUT',
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async setRepeat(state: 'off' | 'track' | 'context'): Promise<boolean> {
-    try {
-      await this.request(`/me/player/repeat?state=${state}`, {
-        method: 'PUT',
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  }
 }
 
 // --- Targeted, used-once shaping helpers ---
