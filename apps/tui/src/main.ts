@@ -328,6 +328,8 @@ async function main(): Promise<number> {
           lyrics
             .getLyrics(uri)
             .then((doc) => {
+              // Drop resolution if the active track changed while awaiting
+              if (currentInfo.playback?.track?.uri !== uri) return;
               currentInfo.lyrics = {
                 kind: doc.kind,
                 lineCount: doc.lines.length,
