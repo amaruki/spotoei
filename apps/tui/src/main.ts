@@ -509,6 +509,12 @@ async function main(): Promise<number> {
       },
     );
 
+    const onResize = (): void => {
+      uiState.tier = getLayoutTier(getTerminalWidth());
+      refreshUi();
+    };
+    process.stdout.on('resize', onResize);
+
     if (process.stdin.isTTY) {
       process.stdin.setRawMode?.(true);
       process.stdin.resume();
@@ -616,6 +622,7 @@ async function main(): Promise<number> {
           return;
         }
         if (chunk === 'q' || chunk === 'Q' || chunk === '\u0003') {
+          process.stdout.removeListener('resize', onResize);
           process.stdin.removeListener('data', onKey);
           return;
         }
