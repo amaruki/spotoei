@@ -17,7 +17,7 @@ export const SHUTDOWN_TIMEOUT_MS = 2_000;
 
 // Stable wire-level error codes. The set is closed; both sides (TS and Rust)
 // must agree on every literal. Adding a new code here requires also wiring it
-// into the Rust mirror (crates/player/src/protocol_codes.rs).
+// into the Rust mirror (ErrorCode enum in crates/player/src/main.rs).
 export const ErrorCode = {
   AUTH_REQUIRED: 'AUTH_REQUIRED',
   AUTH_DENIED: 'AUTH_DENIED',
