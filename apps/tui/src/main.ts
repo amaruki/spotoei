@@ -9,13 +9,14 @@ import { LibraryManager } from './library';
 import { QueueManager } from './queue';
 import { createVisualizerController } from './visualizer';
 import { createLyricsClient } from './lyrics';
+import { getLayoutTier, drawBox, renderStatusBar, type LayoutTier } from './layout';
+import { CommandPalette } from './palette';
 import type {
   AuthStatusDataT,
   PlaybackChangedDataT,
   SearchResponseT,
   LyricsDocumentT,
 } from 'spotoei-protocol';
-
 function padBox(content: string, innerWidth = 40): string {
   const truncated =
     content.length > innerWidth ? content.slice(0, innerWidth) : content;
@@ -120,7 +121,7 @@ function renderShell(info?: {
   process.stdout.write(
     [
       '┌────────────────────────────────────────┐',
-      '│  SPOTOEI  (Milestone 6)                │',
+      '│  SPOTOEI  (Milestone 7)                │',
       '├────────────────────────────────────────┤',
       playerLine,
       protoLine,
@@ -143,6 +144,151 @@ function renderShell(info?: {
       '',
     ].join('\n'),
   );
+}
+
+type Route = 'home' | 'search' | 'library' | 'queue' | 'lyrics' | 'settings';
+type Focus = 'sidebar' | 'main' | 'context';
+
+function getTerminalWidth(): number {
+  const cols = process.stdout.columns;
+  if (typeof cols === 'number' && cols >= 20) return cols;
+  return 80;
+}
+
+function routeLabel(route: Route): string {
+  return route.toUpperCase();
+}
+
+function renderResponsive(
+  info: {
+    protocol: number;
+    playerVersion: string;
+    capabilities: string[];
+    auth?: AuthStatusDataT;
+    playback?: PlaybackChangedDataT | null;
+    lyrics?: { kind: string; lineCount: number };
+  },
+  route: Route,
+  focus: Focus,
+  tier: LayoutTier,
+  palette: CommandPalette,
+): void {
+  const width = getTerminalWidth();
+  let sidebarLines: string[];
+  let mainLines: string[];
+  let contextLines: string[];
+
+  if (tier === 'wide') {
+    const sidebarWidth = Math.max(14, Math.floor(width * 0.22));
+    const contextWidth = Math.max(20, Math.floor(width * 0.28));
+    const mainWidth = width - sidebarWidth - contextWidth;
+    sidebarLines = drawBox(
+      [
+        ' Home',
+        ' Search',
+        ' Library',
+        ' Queue',
+        ' Lyrics',
+        ' Settings',
+      ],
+      { width: sidebarWidth, height: 8, title: 'spotoei', focused: focus === 'sidebar' },
+    );
+    mainLines = drawBox(
+      [
+        ` route:    ${routeLabel(route)}`,
+        ` player:   ${info.playerVersion}`,
+        ` proto:    v${String(info.protocol)}`,
+        ` caps:     ${info.capabilities.join(', ')}`,
+        ` auth:     ${info.auth?.state ?? 'pending'}`,
+        ` playback: ${info.playback?.state ?? 'idle'} [vol:${Math.round((info.playback?.volume ?? 0) * 100)}%]`,
+      ],
+      { width: mainWidth, height: 8, title: 'main', focused: focus === 'main' },
+    );
+    contextLines = drawBox(
+      [
+        ` track:   ${info.playback?.track?.name ?? '(no track)'}`,
+        ` artist:  ${info.playback?.track?.artists.join(', ') ?? '-'}`,
+        ` lyrics:  ${info.lyrics ? `${info.lyrics.kind} (${info.lyrics.lineCount} lines)` : '(idle)'}`,
+        '',
+        ` commands: ${palette.size()}`,
+        ' ? : palette',
+        ' Esc : back',
+        ' q : quit',
+      ],
+      { width: contextWidth, height: 10, title: 'context', focused: focus === 'context' },
+    );
+  } else if (tier === 'medium') {
+    const sidebarWidth = Math.max(14, Math.floor(width * 0.28));
+    const mainWidth = width - sidebarWidth;
+    sidebarLines = drawBox(
+      [' Home', ' Search', ' Library', ' Queue', ' Lyrics', ' Settings'],
+      { width: sidebarWidth, height: 8, title: 'spotoei', focused: focus === 'sidebar' },
+    );
+    mainLines = drawBox(
+      [
+        ` route:    ${routeLabel(route)}`,
+        ` player:   ${info.playerVersion}`,
+        ` auth:     ${info.auth?.state ?? 'pending'}`,
+        ` playback: ${info.playback?.state ?? 'idle'} [vol:${Math.round((info.playback?.volume ?? 0) * 100)}%]`,
+        ` lyrics:   ${info.lyrics ? `${info.lyrics.kind} (${info.lyrics.lineCount} lines)` : '(idle)'}`,
+      ],
+      { width: mainWidth, height: 8, title: 'main', focused: focus === 'main' },
+    );
+    contextLines = [];
+  } else {
+    sidebarLines = [];
+    mainLines = drawBox(
+      [
+        ` route:    ${routeLabel(route)}`,
+        ` player:   ${info.playerVersion}`,
+        ` auth:     ${info.auth?.state ?? 'pending'}`,
+        ` playback: ${info.playback?.state ?? 'idle'}`,
+        ` lyrics:   ${info.lyrics ? `${info.lyrics.kind} (${info.lyrics.lineCount} lines)` : '(idle)'}`,
+      ],
+      { width: width, height: 7, title: 'spotoei', focused: true },
+    );
+    contextLines = [];
+  }
+
+  const maxRows = Math.max(sidebarLines.length, mainLines.length, contextLines.length);
+  const rows: string[] = [];
+  for (let i = 0; i < maxRows; i++) {
+    const s = sidebarLines[i] ?? ''.padEnd(tier === 'wide' ? 14 : tier === 'medium' ? 14 : 0);
+    const m = mainLines[i] ?? '';
+    const c = contextLines[i] ?? '';
+    if (tier === 'wide' || tier === 'medium') {
+      rows.push(s + m + c);
+    } else {
+      rows.push(m);
+    }
+  }
+  rows.push(renderStatusBar({
+    width,
+    route,
+    playbackState: info.playback?.state,
+    trackName: info.playback?.track?.name,
+    hint: '?: palette | Space: play | Esc: back | q: quit',
+  }));
+
+  process.stdout.write(rows.join('\n') + '\n');
+}
+
+function buildPalette(
+  routes: { home: () => void; search: () => void; library: () => void; queue: () => void; lyrics: () => void; settings: () => void; },
+  actions: { togglePlay: () => Promise<void>; cycleViz: () => void; getLyrics: () => Promise<void>; quit: () => void; },
+): CommandPalette {
+  const p = new CommandPalette();
+  p.register({ id: 'nav.home', label: 'Go to Home', shortcut: 'g h', action: routes.home, keywords: ['root', 'main'] });
+  p.register({ id: 'nav.search', label: 'Go to Search', shortcut: '/', action: routes.search, keywords: ['find'] });
+  p.register({ id: 'nav.library', label: 'Go to Library', shortcut: 'g l', action: routes.library, keywords: ['saved', 'tracks'] });
+  p.register({ id: 'nav.queue', label: 'Go to Queue', shortcut: 'g q', action: routes.queue, keywords: ['upcoming'] });
+  p.register({ id: 'nav.lyrics', label: 'Open Lyrics', shortcut: 'l', action: routes.lyrics, keywords: ['words'] });
+  p.register({ id: 'nav.settings', label: 'Open Settings', shortcut: 'g s', action: routes.settings, keywords: ['preferences'] });
+  p.register({ id: 'act.play', label: 'Play / Pause', shortcut: 'Space', action: actions.togglePlay, keywords: ['audio'] });
+  p.register({ id: 'act.viz', label: 'Cycle Visualizer', shortcut: 'v', action: actions.cycleViz, keywords: ['visualizer', 'spectrum'] });
+  p.register({ id: 'act.lyrics.get', label: 'Fetch Lyrics', shortcut: 'L', action: actions.getLyrics, keywords: ['words'] });
+  p.register({ id: 'act.quit', label: 'Quit SPOTOEI', shortcut: 'q', action: actions.quit, keywords: ['exit'] });
+  return p;
 }
 
 async function main(): Promise<number> {
@@ -308,40 +454,160 @@ async function main(): Promise<number> {
       };
       renderShell(currentInfo);
     }
+    // TUI state: route, focused panel, and command palette.
+    const uiState: { route: Route; focus: Focus; tier: LayoutTier; paletteOpen: boolean } = {
+      route: 'home',
+      focus: 'main',
+      tier: getLayoutTier(getTerminalWidth()),
+      paletteOpen: false,
+    };
+    const refreshUi = (): void => {
+      renderResponsive(currentInfo, uiState.route, uiState.focus, uiState.tier, palette);
+    };
+    const setRoute = (next: Route): void => {
+      uiState.route = next;
+      refreshUi();
+    };
+    const setFocus = (next: Focus): void => {
+      uiState.focus = next;
+      refreshUi();
+    };
+    const palette = buildPalette(
+      {
+        home: () => setRoute('home'),
+        search: () => setRoute('search'),
+        library: () => setRoute('library'),
+        queue: () => setRoute('queue'),
+        lyrics: () => setRoute('lyrics'),
+        settings: () => setRoute('settings'),
+      },
+      {
+        togglePlay: async () => {
+          const state = currentInfo.playback?.state ?? 'idle';
+          if (state === 'playing') await playback.pause();
+          else await playback.play();
+        },
+        cycleViz: () => {
+          const next = visualizer.cycleMode();
+          currentInfo.visualizer = { mode: next, fps: visualizer.getCurrentFps() };
+          refreshUi();
+        },
+        getLyrics: async () => {
+          const uri = currentInfo.playback?.track?.uri ?? 'spotify:track:sample';
+          try {
+            const doc = await lyrics.getLyrics(uri);
+            if (currentInfo.playback?.track?.uri !== uri) return;
+            currentInfo.lyrics = { kind: doc.kind, lineCount: doc.lines.length };
+            refreshUi();
+          } catch {
+            // Ignore lyrics retrieval failure in interactive mode
+          }
+        },
+        quit: () => {
+          process.stdin.removeListener('data', onKey);
+        },
+      },
+    );
 
-    // Best-effort single-key listener: `v` cycles visualizer mode.
     if (process.stdin.isTTY) {
       process.stdin.setRawMode?.(true);
       process.stdin.resume();
       process.stdin.setEncoding('utf8');
       const onKey = (chunk: string): void => {
+        // Palette filtering mode
+        if (uiState.paletteOpen) {
+          if (chunk === '\u0003' || chunk === '\u001b') {
+            palette.close();
+            uiState.paletteOpen = false;
+            refreshUi();
+            return;
+          }
+          if (chunk === '\r' || chunk === '\n') {
+            const cmd = palette.execute();
+            uiState.paletteOpen = false;
+            if (cmd) void cmd.action();
+            refreshUi();
+            return;
+          }
+          if (chunk === '\u001b[A' || chunk === 'k') {
+            palette.prev();
+            refreshUi();
+            return;
+          }
+          if (chunk === '\u001b[B' || chunk === 'j') {
+            palette.next();
+            refreshUi();
+            return;
+          }
+          if (chunk === '\u007f' || chunk === '\b') {
+            const f = palette.getFilter();
+            palette.setFilter(f.slice(0, -1));
+            refreshUi();
+            return;
+          }
+          if (chunk.length === 1 && chunk >= ' ' && chunk <= '~') {
+            palette.setFilter(palette.getFilter() + chunk);
+            refreshUi();
+            return;
+          }
+          return;
+        }
+        if (chunk === '?' || chunk === ':') {
+          palette.open();
+          uiState.paletteOpen = true;
+          refreshUi();
+          return;
+        }
+        if (chunk === ' ') {
+          const state = currentInfo.playback?.state ?? 'idle';
+          if (state === 'playing') {
+            void playback.pause();
+          } else {
+            void playback.play();
+          }
+          return;
+        }
+        if (chunk === '/') {
+          setRoute('search');
+          return;
+        }
+        if (chunk === '\u001b') {
+          setRoute('home');
+          return;
+        }
+        if (chunk === '\t') {
+          const order: Focus[] = ['main', 'sidebar', 'context'];
+          const idx = order.indexOf(uiState.focus);
+          setFocus(order[(idx + 1) % order.length]);
+          return;
+        }
         if (chunk === 'v' || chunk === 'V') {
           const next = visualizer.cycleMode();
-          currentInfo.visualizer = {
-            mode: next,
-            fps: visualizer.getCurrentFps(),
-          };
-          renderShell(currentInfo);
+          currentInfo.visualizer = { mode: next, fps: visualizer.getCurrentFps() };
+          refreshUi();
+          return;
         }
-        if (chunk === 'l' || chunk === 'L') {
+        if (chunk === 'l') {
+          setRoute('lyrics');
+          return;
+        }
+        if (chunk === 'L') {
           const uri = currentInfo.playback?.track?.uri ?? 'spotify:track:sample';
           lyrics
             .getLyrics(uri)
             .then((doc) => {
-              // Drop resolution if the active track changed while awaiting
               if (currentInfo.playback?.track?.uri !== uri) return;
-              currentInfo.lyrics = {
-                kind: doc.kind,
-                lineCount: doc.lines.length,
-              };
-              renderShell(currentInfo);
+              currentInfo.lyrics = { kind: doc.kind, lineCount: doc.lines.length };
+              refreshUi();
             })
             .catch(() => {
               // Ignore lyrics retrieval failure in interactive mode
             });
+          return;
         }
         if (chunk === 'q' || chunk === 'Q' || chunk === '\u0003') {
           process.stdin.removeListener('data', onKey);
+          return;
         }
       };
       process.stdin.on('data', onKey);
