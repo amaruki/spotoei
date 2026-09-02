@@ -101,6 +101,8 @@ pub struct AuthManager {
 
     /// Current authoritative state.
     state: Mutex<InnerState>,
+    /// In-flight single-flight refresh lock.
+    refresh_lock: Mutex<()>,
 }
 
 struct InnerState {
@@ -124,6 +126,7 @@ impl AuthManager {
                 pkce: None,
                 last_auth_url: None,
             }),
+            refresh_lock: Mutex::new(()),
         }
     }
 
@@ -263,21 +266,24 @@ impl AuthManager {
         s.state = AuthState::Unauthenticated;
         Ok(self.snapshot_locked(&s, None))
     }
-
     /// Return a usable access token, refreshing when expired. The token value
     /// is returned only to the in-process call; it is never written to logs.
     pub async fn get_web_token(&self) -> Result<(String, u64), AuthError> {
         if std::env::var("SPOTOEI_MOCK_AUTH").is_ok() {
             return self.get_web_token_mock().await;
         }
+        // Single-flight: concurrent callers all serialize on this lock.
+        // Inside the lock, re-check the expiry so we don't redundantly
+        // refresh when a peer just refreshed.
+        let _guard = self.refresh_lock.lock().await;
         let at = {
             let s = self.state.lock().await;
-            s.current.clone()
+            let at = s.current.clone().ok_or(AuthError::NotAuthenticated)?;
+            if at.expires_at > now_ms() + 30_000 {
+                return Ok((at.access_token, at.expires_at));
+            }
+            at
         };
-        let mut at = at.ok_or(AuthError::NotAuthenticated)?;
-        if at.expires_at > now_ms() + 30_000 {
-            return Ok((at.access_token, at.expires_at));
-        }
         // Refresh.
         let refreshed = match self.refresh(&at.refresh_token).await {
             Ok(r) => r,
@@ -287,17 +293,20 @@ impl AuthManager {
                 return Err(e);
             }
         };
-        at.access_token = refreshed.access_token.clone();
-        at.expires_at = refreshed.expires_at;
-        at.refresh_token = refreshed.refresh_token.clone();
+        let mut new_at = at.clone();
+        new_at.access_token = refreshed.access_token.clone();
+        new_at.expires_at = refreshed.expires_at;
+        new_at.refresh_token = refreshed.refresh_token.clone();
+        let token_for_return = new_at.access_token.clone();
+        let expires_at = new_at.expires_at;
         let mut s = self.state.lock().await;
-        s.current = Some(at.clone());
+        s.current = Some(new_at.clone());
         if matches!(s.storage, Storage::Keyring) {
-            if let Err(e) = self.save_to_keyring(&at).await {
+            if let Err(e) = self.save_to_keyring(&new_at).await {
                 warn!(error = %e, "keyring save on refresh failed");
             }
         }
-        Ok((at.access_token, at.expires_at))
+        Ok((token_for_return, expires_at))
     }
 
     async fn get_web_token_mock(&self) -> Result<(String, u64), AuthError> {
@@ -328,7 +337,7 @@ impl AuthManager {
     async fn serve_callback(
         self: Arc<Self>,
         listener: tokio::net::TcpListener,
-        _port: u16,
+        port: u16,
     ) -> Result<(), AuthError> {
         use hyper::server::conn::http1;
         use hyper::service::service_fn;
@@ -338,9 +347,10 @@ impl AuthManager {
         use std::convert::Infallible;
 
         let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<String, AuthError>>(1);
-        loop {
+        let result = loop {
             tokio::select! {
-                _ = rx.recv() => break,
+                biased;
+                msg = rx.recv() => break msg,
                 accept = listener.accept() => {
                     let (stream, _addr) = match accept {
                         Ok(x) => x,
@@ -377,27 +387,30 @@ impl AuthManager {
                     });
                 }
             }
-        }
-        // Drain one expected callback.
-        if let Some(res) = rx.recv().await {
-            match res {
-                Ok(payload) => {
-                    let mut parts = payload.splitn(2, '|');
-                    let code = parts.next().unwrap_or_default().to_string();
-                    let state = parts.next().unwrap_or_default().to_string();
-                    self.complete_flow(&code, &state).await.ok();
-                }
-                Err(e) => {
-                    warn!(error = %e, "auth callback received error");
-                    let mut s = self.state.lock().await;
-                    s.state = AuthState::Unauthenticated;
+        };
+        // Process the captured callback. We deliberately do NOT drain the
+        // channel again after the loop: `rx.recv()` inside the select is
+        // the single point of truth for the message.
+        match result {
+            Some(Ok(payload)) => {
+                let mut parts = payload.splitn(2, '|');
+                let code = parts.next().unwrap_or_default().to_string();
+                let state = parts.next().unwrap_or_default().to_string();
+                if let Err(e) = self.complete_flow(&code, &state, port).await {
+                    warn!(error = %e, "auth complete flow failed");
                 }
             }
+            Some(Err(e)) => {
+                warn!(error = %e, "auth callback received error");
+                let mut s = self.state.lock().await;
+                s.state = AuthState::Unauthenticated;
+            }
+            None => {}
         }
         Ok(())
     }
 
-    async fn complete_flow(&self, code: &str, state: &str) -> Result<(), AuthError> {
+    async fn complete_flow(&self, code: &str, state: &str, port: u16) -> Result<(), AuthError> {
         let pkce = {
             let s = self.state.lock().await;
             s.pkce.clone()
@@ -407,7 +420,7 @@ impl AuthManager {
             return Err(AuthError::OAuth("state mismatch".into()));
         }
         let (at, account_id) = self
-            .exchange_code(code, &pkce.verifier, "127.0.0.1", 0)
+            .exchange_code(code, &pkce.verifier, "127.0.0.1", port)
             .await?;
         let mut s = self.state.lock().await;
         s.current = Some(at.clone());
@@ -432,16 +445,17 @@ impl AuthManager {
         code: &str,
         verifier: &str,
         _host: &str,
-        _port: u16,
+        port: u16,
     ) -> Result<(AccessToken, String), AuthError> {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()
             .map_err(|e| AuthError::Http(e.to_string()))?;
+        let redirect_uri = format!("http://127.0.0.1:{port}{REDIRECT_PATH}");
         let body = [
             ("grant_type", "authorization_code"),
             ("code", code),
-            ("redirect_uri", "http://127.0.0.1:0/callback"),
+            ("redirect_uri", &redirect_uri),
             ("client_id", &self.client_id),
             ("code_verifier", verifier),
         ];

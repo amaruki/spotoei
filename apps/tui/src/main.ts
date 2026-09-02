@@ -1,18 +1,14 @@
-import { spawn } from 'node:child_process';
-
+import { spawnSync } from 'node:child_process';
+import { createInterface } from 'node:readline';
 import { locatePlayer, startPlayer, stopPlayer } from './player';
 import { createAuthClient } from './auth';
+import type { AuthStatusDataT } from 'spotoei-protocol';
 
 function renderShell(info?: {
   protocol: number;
   playerVersion: string;
   capabilities: string[];
-  auth?: {
-    state: string;
-    accountId?: string | null;
-    storage?: string;
-    authUrl?: string | null;
-  };
+  auth?: AuthStatusDataT;
 }) {
   const playerLine = info ? `│  player  ${info.playerVersion.padEnd(28)}│` : '│  player  (spawning...)               │';
   const protoLine = info ? `│  proto   v${String(info.protocol).padEnd(28)}│` : '│  proto   (pending...)                │';
@@ -139,19 +135,7 @@ function runDoctor(args: string[]): number {
   // Delegate to the sidecar. The Rust `doctor` subcommand does the
   // detailed keyring and account reporting.
   const result = spawnSync(playerBin, ['doctor', sub], { stdio: 'inherit' });
-  return result ?? 0;
-}
-
-function spawnSync(cmd: string, args: string[], opts: { stdio: 'inherit' }): number | null {
-  try {
-    const child = spawn(cmd, args, { stdio: opts.stdio, env: process.env });
-    child.on('error', () => {
-      // ignore
-    });
-    return null;
-  } catch {
-    return null;
-  }
+  return result.status ?? 0;
 }
 
 const code = await main();
