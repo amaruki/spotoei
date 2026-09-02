@@ -1,32 +1,17 @@
-/**
- * Player supervisor — owns the lifecycle of `spotoei-player` and the NDJSON
- * transport. See TSD 01 §7-§9 and TSD 06 §1.
- *
- * M0 responsibilities:
- *   * locate the player binary
- *   * spawn it as a child process
- *   * pipe stdin/stdout as NDJSON
- *   * perform the `hello` handshake
- *   * send `shutdown` and wait for clean exit
- *   * surface stderr for diagnostics
- *
- * M0 does NOT:
- *   * supervise crashes (M8)
- *   * hot-reload config
- *   * retry the handshake
- *   * reconnect
- */
-
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, realpathSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 
 import {
   PROTOCOL_VERSION,
+  HANDSHAKE_TIMEOUT_MS,
+  SHUTDOWN_TIMEOUT_MS,
+  HelloResponse,
   parseInbound,
   makeHello,
+  makeShutdown,
   newRequestId,
   type InboundT,
 } from 'spotoei-protocol';
@@ -39,24 +24,40 @@ export interface HandshakeResult {
 }
 
 const UI_VERSION = 'spotoei-tui/0.0.0';
-const SHUTDOWN_TIMEOUT_MS = 2000;
+
+// Strip terminal control characters and escape sequences to prevent
+// terminal title rewrites, clear-screens, or cursor moves from child stderr.
+const ANSI_REGEX =
+  // eslint-disable-next-line no-control-regex
+  /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+
+function sanitizeStderr(chunk: Buffer): string {
+  return chunk
+    .toString('utf8')
+    .replace(ANSI_REGEX, '')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+}
 
 /**
- * Locate the `spotoei-player` binary.
+ * Locate the player binary.
  *
  * Search order:
- *   1. SPOTOEI_PLAYER_BIN env var (explicit override; release installs use this)
- *   2. <repo-root>/target/debug/spotoei-player (dev: cargo build)
- *   3. <repo-root>/target/release/spotoei-player (dev: cargo build --release)
- *   4. PATH lookup
+ *   1. `SPOTOEI_PLAYER_BIN` env var (canonicalized via realpath).
+ *   2. Repo-local target/debug or target/release build.
+ *   3. PATH fallback (development only; refused in production builds).
  */
 export function locatePlayer(): string {
   const override = process.env.SPOTOEI_PLAYER_BIN;
-  if (override && existsSync(override)) {
-    return override;
+  if (override) {
+    if (!isAbsolute(override)) {
+      throw new Error(`SPOTOEI_PLAYER_BIN must be an absolute path: ${override}`);
+    }
+    if (!existsSync(override)) {
+      throw new Error(`SPOTOEI_PLAYER_BIN not found: ${override}`);
+    }
+    return realpathSync(override);
   }
 
-  // From apps/tui/src -> repo root is ../../../ (apps/tui/src -> apps/tui -> apps -> repo)
   const here = dirname(fileURLToPath(import.meta.url));
   const repoRoot = resolve(here, '..', '..', '..');
   const candidates = [
@@ -65,22 +66,40 @@ export function locatePlayer(): string {
   ];
   for (const c of candidates) {
     if (existsSync(c)) {
-      return c;
+      return realpathSync(c);
     }
   }
 
-  // Fallback: PATH. Bun spawns the binary by name if it resolves on PATH.
-  return 'spotoei-player';
+  // Refuse bare PATH fallback in production to avoid executing a hijacked binary.
+  const isDev = process.env.NODE_ENV !== 'production' || process.env.SPOTOEI_DEV === '1';
+  if (isDev) {
+    return 'spotoei-player';
+  }
+
+  throw new Error(
+    'spotoei-player binary not found; build it with cargo build or set SPOTOEI_PLAYER_BIN',
+  );
 }
 
 /**
- * Spawn the player, wait for hello response, return the live child + handshake.
- * Throws on spawn failure, handshake timeout, or invalid handshake response.
+ * Spawn the player child, pipe stdin/stdout, and complete the hello handshake.
+ *
+ * Enforces a strict 5-second handshake deadline. Child is force-killed on
+ * timeout, parse failure, or if the hello response fails schema validation.
  */
 export async function startPlayer(playerBin: string): Promise<HandshakeResult> {
+  // Pass an explicit allowlist of environment variables to prevent secret leaks.
+  const cleanEnv: Record<string, string | undefined> = {
+    PATH: process.env.PATH ?? '/usr/bin:/bin',
+    HOME: process.env.HOME,
+    LANG: process.env.LANG ?? 'C.UTF-8',
+    TERM: process.env.TERM ?? 'xterm-256color',
+    RUST_LOG: process.env.RUST_LOG ?? 'info',
+  };
+
   const child = spawn(playerBin, [], {
     stdio: ['pipe', 'pipe', 'pipe'],
-    // Inherit is fine for the M0 gate; M8 will gate stderr behind a log facade.
+    env: cleanEnv,
   });
 
   if (!child.stdout || !child.stdin || !child.stderr) {
@@ -88,111 +107,120 @@ export async function startPlayer(playerBin: string): Promise<HandshakeResult> {
     throw new Error('player stdio not piped');
   }
 
-  // Mirror stderr for dev diagnostics. M7+ routes this through a log facade.
-  child.stderr.on('data', (chunk: Buffer) => {
-    process.stderr.write(`[player] ${chunk}`);
-  });
+  const stderrListener = (chunk: Buffer) => {
+    process.stderr.write(`[player] ${sanitizeStderr(chunk)}`);
+  };
+  child.stderr.on('data', stderrListener);
 
   const rl = createInterface({ input: child.stdout });
-
   const helloId = newRequestId();
   const hello = makeHello(helloId, UI_VERSION);
 
-  const handshake = await new Promise<InboundT>((resolveH, rejectH) => {
-    let settled = false;
-    const onLine = (line: string) => {
-      if (settled) return;
-      const r = parseInbound(line);
-      if (!r.ok) {
-        settled = true;
-        rejectH(new Error(`invalid protocol line: ${r.error}`));
-        rl.removeListener('line', onLine);
-        return;
-      }
-      const msg = r.value;
-      if (msg.type === 'response' && msg.id === helloId) {
-        settled = true;
-        rl.removeListener('line', onLine);
-        resolveH(msg);
-      }
-    };
-    rl.on('line', onLine);
+  let timer: NodeJS.Timeout | undefined;
 
-    child.once('exit', (code) => {
-      if (!settled) {
-        settled = true;
-        rejectH(new Error(`player exited before handshake (code=${code})`));
-      }
+  try {
+    const handshakeMsg = await new Promise<InboundT>((resolveH, rejectH) => {
+      let settled = false;
+
+      timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          child.kill('SIGKILL');
+          rejectH(new Error(`handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms`));
+        }
+      }, HANDSHAKE_TIMEOUT_MS);
+
+      const onLine = (line: string) => {
+        if (settled) return;
+        const r = parseInbound(line);
+        if (!r.ok) {
+          settled = true;
+          child.kill('SIGKILL');
+          rejectH(new Error(`invalid protocol line: ${r.error}`));
+          return;
+        }
+        const msg = r.value;
+        if (msg.type === 'response' && msg.id === helloId) {
+          settled = true;
+          resolveH(msg);
+        }
+      };
+
+      rl.on('line', onLine);
+
+      child.once('exit', (code) => {
+        if (!settled) {
+          settled = true;
+          rejectH(new Error(`player exited before handshake (code=${code})`));
+        }
+      });
+
+      child.stdin!.write(JSON.stringify(hello) + '\n');
     });
 
-    // Write hello after the listener is attached to avoid a race.
-    child.stdin!.write(JSON.stringify(hello) + '\n');
-  });
+    // Validate the handshake response with the strict HelloResponse schema.
+    const parsed = HelloResponse.safeParse(handshakeMsg);
+    if (!parsed.success) {
+      child.kill('SIGKILL');
+      throw new Error(`invalid hello response: ${parsed.error.message}`);
+    }
 
-  if (handshake.type !== 'response' || !handshake.ok) {
-    child.kill('SIGKILL');
-    if (handshake.type === 'response') {
+    const { data } = parsed.data;
+    if (data.protocol !== PROTOCOL_VERSION) {
+      child.kill('SIGKILL');
       throw new Error(
-        `handshake rejected: ${handshake.error?.code} ${handshake.error?.message}`,
+        `protocol mismatch: client=${PROTOCOL_VERSION} player=${data.protocol}`,
       );
     }
-    throw new Error('handshake did not return a response');
-  }
 
-  const data = handshake.data as {
-    protocol?: number;
-    playerVersion?: string;
-    capabilities?: string[];
-  };
-  if (data.protocol !== PROTOCOL_VERSION) {
-    child.kill('SIGKILL');
-    throw new Error(
-      `protocol mismatch: client=${PROTOCOL_VERSION} player=${data.protocol}`,
-    );
+    return {
+      protocol: data.protocol,
+      playerVersion: data.playerVersion,
+      capabilities: data.capabilities,
+      child,
+    };
+  } finally {
+    clearTimeout(timer);
+    rl.close();
   }
-
-  return {
-    protocol: data.protocol,
-    playerVersion: data.playerVersion ?? 'unknown',
-    capabilities: data.capabilities ?? [],
-    child,
-  };
 }
 
 /**
- * Send `shutdown` and wait for the child to exit cleanly.
- * On timeout, sends SIGKILL.
+ * Send `shutdown` to the player and wait for it to exit cleanly.
+ *
+ * Arms a 2-second grace period. If the child is still running after the
+ * grace period expires, it is escalated to SIGKILL.
  */
 export async function stopPlayer(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null) return;
 
   const id = newRequestId();
-  const cmd = {
-    v: PROTOCOL_VERSION,
-    type: 'command',
-    id,
-    command: 'shutdown',
-    data: {},
-  };
+  const cmd = makeShutdown(id);
 
   await new Promise<void>((resolveStop) => {
+    let timer: NodeJS.Timeout | undefined;
+
     const onExit = () => {
       clearTimeout(timer);
       resolveStop();
     };
-    const timer = setTimeout(() => {
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        // already dead
-      }
-      resolveStop();
-    }, SHUTDOWN_TIMEOUT_MS);
+
     child.once('exit', onExit);
+
     try {
-      child.stdin?.write(JSON.stringify(cmd) + '\n');
+      child.stdin?.write(JSON.stringify(cmd) + '\n', () => {
+        // Arm the grace timer ONLY once the command is flushed to the pipe.
+        timer = setTimeout(() => {
+          try {
+            child.kill('SIGKILL');
+          } catch {
+            // Child may already have exited.
+          }
+          resolveStop();
+        }, SHUTDOWN_TIMEOUT_MS);
+      });
     } catch {
-      // stdin may already be closed; exit handler will resolve.
+      // If stdin was already closed, the exit handler will resolve the promise.
     }
   });
 }

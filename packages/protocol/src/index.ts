@@ -3,7 +3,21 @@ import { z } from 'zod';
 // Stable protocol major version. Increment on breaking envelope/semantic changes.
 export const PROTOCOL_VERSION = 1 as const;
 
-// Wire-stable error codes (see TSD 06 §15).
+// Hard cap on a single NDJSON line. Larger lines are rejected as INVALID_REQUEST
+// on both sides (TUI reads, player reads). Prevents memory-exhaustion DoS via
+// a single oversized line.
+export const MAX_LINE_BYTES = 1 << 20; // 1 MiB
+
+// Handshake deadline on the TS side. Must match the Rust HANDSHAKE_TIMEOUT.
+export const HANDSHAKE_TIMEOUT_MS = 5_000;
+
+// Shutdown grace. Player gets this long to exit cleanly after receiving
+// the `shutdown` command before we force-kill it.
+export const SHUTDOWN_TIMEOUT_MS = 2_000;
+
+// Stable wire-level error codes. The set is closed; both sides (TS and Rust)
+// must agree on every literal. Adding a new code here requires also wiring it
+// into the Rust mirror (crates/player/src/protocol_codes.rs).
 export const ErrorCode = {
   AUTH_REQUIRED: 'AUTH_REQUIRED',
   AUTH_DENIED: 'AUTH_DENIED',
@@ -20,7 +34,9 @@ export const ErrorCode = {
 } as const;
 export type ErrorCodeT = (typeof ErrorCode)[keyof typeof ErrorCode];
 
-// MVP command set (see TSD 06 §7).
+// All command names this protocol ever defines. Players must reject any
+// command not on this list with INVALID_REQUEST. Adding a new command means
+// extending the discriminated-union data schemas below.
 export const COMMAND_NAMES = [
   'hello',
   'auth.status',
@@ -47,7 +63,8 @@ export const COMMAND_NAMES = [
 ] as const;
 export type CommandName = (typeof COMMAND_NAMES)[number];
 
-// MVP event set (subset used by M0; full set in TSD 06 §9+).
+// Events the player may push unprompted. M0 has no publisher, so this set is
+// declared for type completeness only.
 export const EVENT_NAMES = [
   'playback.changed',
   'playback.position',
@@ -59,7 +76,9 @@ export const EVENT_NAMES = [
 ] as const;
 export type EventName = (typeof EVENT_NAMES)[number];
 
-// Capabilities (see TSD 06 §5).
+// Capabilities the player may advertise during hello. Empty array = none.
+// The TUI must gate every capability-gated feature on `caps.includes(...)`
+// and refuse to invoke the feature when absent.
 export const CAPABILITIES = [
   'lyrics.synced',
   'lyrics.plain',
@@ -70,55 +89,60 @@ export const CAPABILITIES = [
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
-// Top Items range enum (see TSD 11 §4.1).
+// Spotify's documented "top items" time ranges.
 export const TopItemsRange = z.enum(['short_term', 'medium_term', 'long_term']);
 export type TopItemsRangeT = z.infer<typeof TopItemsRange>;
 
-// Shared error detail shape.
+// Shared error detail shape. `code` is sourced from the ErrorCode const above
+// so the set cannot drift between the const and the schema.
+const ErrorCodeSchema = z.enum(
+  Object.values(ErrorCode) as [ErrorCodeT, ...ErrorCodeT[]],
+);
+
 export const ErrorDetail = z.object({
-  code: z.enum([
-    ErrorCode.AUTH_REQUIRED,
-    ErrorCode.AUTH_DENIED,
-    ErrorCode.AUTH_FAILED,
-    ErrorCode.API_UNAVAILABLE,
-    ErrorCode.PLAYER_UNAVAILABLE,
-    ErrorCode.PLAYBACK_FAILED,
-    ErrorCode.AUDIO_DEVICE_UNAVAILABLE,
-    ErrorCode.LYRICS_UNAVAILABLE,
-    ErrorCode.INVALID_REQUEST,
-    ErrorCode.UNSUPPORTED,
-    ErrorCode.TIMEOUT,
-    ErrorCode.INTERNAL,
-  ]),
+  code: ErrorCodeSchema,
   message: z.string().min(1),
   retryable: z.boolean().default(false),
   detail: z.unknown().optional(),
 });
 export type ErrorDetailT = z.infer<typeof ErrorDetail>;
 
-// Envelope base: every line carries protocol major version and a discriminator.
+// Common envelope base. Every line on the wire carries the protocol major
+// version and a type discriminator.
 const envelopeBase = {
   v: z.literal(PROTOCOL_VERSION),
 };
 
-// Command: TS -> Rust.
+// Per-command data schemas. M0 only nails down `hello`; the other commands
+// fall through to the opaque catch-all. As each milestone lands, replace the
+// catch-all with a typed branch of the discriminated union.
+const HelloDataSchema = z.object({
+  protocols: z.array(z.number().int().min(1)).min(1).max(16),
+  uiVersion: z.string().min(1).max(64),
+});
+export type HelloDataT = z.infer<typeof HelloDataSchema>;
+
+const CommandDataSchema = z.union([HelloDataSchema, z.record(z.unknown())]);
+export type CommandDataT = z.infer<typeof CommandDataSchema>;
+
 export const Command = z.object({
   ...envelopeBase,
   type: z.literal('command'),
   id: z.string().min(1),
   command: z.enum(COMMAND_NAMES),
-  data: z.record(z.unknown()).default({}),
+  data: CommandDataSchema.default({}),
 });
 export type CommandT = z.infer<typeof Command>;
 
-// Hello command data: client advertises supported protocols + UI version.
-export const HelloData = z.object({
-  protocols: z.array(z.number().int().min(1)).min(1),
-  uiVersion: z.string().min(1),
+// Hello response data: the player tells the UI which protocol it selected
+// and which capabilities it can serve.
+export const HelloResponseData = z.object({
+  protocol: z.number().int().min(1),
+  playerVersion: z.string().min(1).max(64),
+  capabilities: z.array(z.enum(CAPABILITIES)),
 });
-export type HelloDataT = z.infer<typeof HelloData>;
+export type HelloResponseDataT = z.infer<typeof HelloResponseData>;
 
-// Response: Rust -> TS, echoes id.
 export const Response = z.object({
   ...envelopeBase,
   type: z.literal('response'),
@@ -129,15 +153,21 @@ export const Response = z.object({
 });
 export type ResponseT = z.infer<typeof Response>;
 
-// Hello response data: server reports selected protocol + capabilities.
-export const HelloResponseData = z.object({
-  protocol: z.number().int().min(1),
-  playerVersion: z.string().min(1),
-  capabilities: z.array(z.enum(CAPABILITIES)),
-});
-export type HelloResponseDataT = z.infer<typeof HelloResponseData>;
+// A response shape specifically for the hello reply. Use this schema at the
+// boundary in place of the open Response + hand-rolled cast.
+export const HelloResponse = z
+  .object({
+    v: z.literal(PROTOCOL_VERSION),
+    type: z.literal('response'),
+    id: z.string().min(1),
+    ok: z.boolean(),
+    data: HelloResponseData,
+  })
+  .refine((r) => r.ok === true, {
+    message: 'hello response must be ok=true',
+  });
+export type HelloResponseT = z.infer<typeof HelloResponse>;
 
-// Event: Rust -> TS, monotonic seq per process.
 export const Event = z.object({
   ...envelopeBase,
   type: z.literal('event'),
@@ -147,18 +177,22 @@ export const Event = z.object({
 });
 export type EventT = z.infer<typeof Event>;
 
-// Any inbound line (response or event). Commands flow TS->Rust only.
+// Any inbound line (response or event). Commands flow TS -> Rust only.
 export const Inbound = z.discriminatedUnion('type', [Response, Event]);
 export type InboundT = z.infer<typeof Inbound>;
 
-// Line-level parse helper. Returns the parsed message or a tagged error.
 export type ParseResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: string };
 
+// Parse a single NDJSON line. Empty lines and malformed JSON are tagged errors
+// with no thrown exceptions so the caller can route them through normal flow.
 export function parseInbound(line: string): ParseResult<InboundT> {
   if (line.length === 0) {
     return { ok: false, error: 'empty line' };
+  }
+  if (line.length > MAX_LINE_BYTES) {
+    return { ok: false, error: `line exceeds ${MAX_LINE_BYTES} bytes` };
   }
   let raw: unknown;
   try {
@@ -173,20 +207,30 @@ export function parseInbound(line: string): ParseResult<InboundT> {
   return { ok: true, value: r.data };
 }
 
-export function makeHello(id: string, uiVersion: string): CommandT {
+// Constructors for the wire envelope. Use these instead of hand-rolling the
+// object literal so the schema is the single source of truth.
+export function makeCommand(
+  id: string,
+  command: CommandName,
+  data: Record<string, unknown> = {},
+): CommandT {
   return {
     v: PROTOCOL_VERSION,
     type: 'command',
     id,
-    command: 'hello',
-    data: {
-      protocols: [PROTOCOL_VERSION],
-      uiVersion,
-    },
+    command,
+    data,
   };
 }
 
+export function makeHello(id: string, uiVersion: string): CommandT {
+  return makeCommand(id, 'hello', { protocols: [PROTOCOL_VERSION], uiVersion });
+}
+
+export function makeShutdown(id: string): CommandT {
+  return makeCommand(id, 'shutdown', {});
+}
+
 export function newRequestId(): string {
-  // crypto.randomUUID is available in Bun and modern Node.
   return crypto.randomUUID();
 }

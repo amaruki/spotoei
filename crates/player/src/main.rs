@@ -1,11 +1,10 @@
 //! `spotoei-player` — playback core sidecar.
 //!
-//! Milestone 0 scope (per TSD 10 §2):
-//!   * NDJSON over stdin/stdout, debug logs to stderr (TSD 06 §1).
-//!   * Handshake: read `hello` command, reply with selected protocol +
-//!     version + capabilities (TSD 06 §5).
-//!   * `shutdown` exits cleanly.
-//!   * Anything non-protocol on stdout is a violation; logs go to stderr.
+//! NDJSON over stdin/stdout, debug logs to stderr.
+//! Handshake: read `hello` command, reply with selected protocol +
+//! version + capabilities.
+//! `shutdown` exits cleanly.
+//! Anything non-protocol on stdout is a protocol violation; logs go to stderr.
 
 use std::process::ExitCode;
 use std::time::Duration;
@@ -19,12 +18,54 @@ use tracing::{error, info, warn};
 const PROTOCOL_VERSION: u32 = 1;
 const PLAYER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
-const COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_LINE_BYTES: usize = 1 << 20; // 1 MiB
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ErrorCode {
+    AuthRequired,
+    AuthDenied,
+    AuthFailed,
+    ApiUnavailable,
+    PlayerUnavailable,
+    PlaybackFailed,
+    AudioDeviceUnavailable,
+    LyricsUnavailable,
+    InvalidRequest,
+    Unsupported,
+    Timeout,
+    Internal,
+}
+
+impl ErrorCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::AuthRequired => "AUTH_REQUIRED",
+            Self::AuthDenied => "AUTH_DENIED",
+            Self::AuthFailed => "AUTH_FAILED",
+            Self::ApiUnavailable => "API_UNAVAILABLE",
+            Self::PlayerUnavailable => "PLAYER_UNAVAILABLE",
+            Self::PlaybackFailed => "PLAYBACK_FAILED",
+            Self::AudioDeviceUnavailable => "AUDIO_DEVICE_UNAVAILABLE",
+            Self::LyricsUnavailable => "LYRICS_UNAVAILABLE",
+            Self::InvalidRequest => "INVALID_REQUEST",
+            Self::Unsupported => "UNSUPPORTED",
+            Self::Timeout => "TIMEOUT",
+            Self::Internal => "INTERNAL",
+        }
+    }
+
+    pub const fn is_retryable(self) -> bool {
+        matches!(self, Self::Timeout | Self::ApiUnavailable | Self::PlayerUnavailable)
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 enum ProtocolError {
-    #[error("invalid JSON: {0}")]
-    Json(#[from] serde_json::Error),
+    #[error("invalid JSON at line {line}, col {col}")]
+    Json { line: usize, col: usize },
+    #[error("line exceeds max allowed length ({0} bytes)")]
+    LineTooLong(usize),
     #[error("unsupported protocol major version: {0}")]
     UnsupportedVersion(u32),
     #[error("missing or wrong field: {0}")]
@@ -68,24 +109,21 @@ struct ResponseErr<'a> {
 
 #[derive(Debug, Serialize)]
 struct ErrorBody {
-    code: &'static str,
+    code: ErrorCode,
     message: String,
     retryable: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<Value>,
 }
 
-fn invalid_request(msg: impl Into<String>) -> ErrorBody {
-    ErrorBody {
-        code: "INVALID_REQUEST",
-        message: msg.into(),
-        retryable: false,
-    }
-}
-
-fn timeout() -> ErrorBody {
-    ErrorBody {
-        code: "TIMEOUT",
-        message: "command timed out".into(),
-        retryable: true,
+impl ErrorBody {
+    fn new(code: ErrorCode, message: impl Into<String>) -> Self {
+        Self {
+            retryable: code.is_retryable(),
+            code,
+            message: message.into(),
+            detail: None,
+        }
     }
 }
 
@@ -112,7 +150,13 @@ fn err(id: &str, body: ErrorBody) -> String {
 }
 
 fn parse_command(line: &str) -> Result<Command, ProtocolError> {
-    let cmd: Command = serde_json::from_str(line)?;
+    if line.len() > MAX_LINE_BYTES {
+        return Err(ProtocolError::LineTooLong(line.len()));
+    }
+    let cmd: Command = serde_json::from_str(line).map_err(|e| ProtocolError::Json {
+        line: e.line(),
+        col: e.column(),
+    })?;
     if cmd.version != PROTOCOL_VERSION {
         return Err(ProtocolError::UnsupportedVersion(cmd.version));
     }
@@ -125,8 +169,9 @@ fn parse_command(line: &str) -> Result<Command, ProtocolError> {
     Ok(cmd)
 }
 
-fn handle(cmd: Command) -> String {
-    match cmd.command.as_str() {
+fn handle(cmd: Command) -> (String, bool) {
+    let is_shutdown = cmd.command == "shutdown";
+    let reply = match cmd.command.as_str() {
         "hello" => {
             let data = serde_json::json!({
                 "protocol": PROTOCOL_VERSION,
@@ -143,8 +188,12 @@ fn handle(cmd: Command) -> String {
                 "session": "absent",
             }),
         ),
-        other => err(&cmd.id, invalid_request(format!("unknown command: {other}"))),
-    }
+        other => err(
+            &cmd.id,
+            ErrorBody::new(ErrorCode::InvalidRequest, format!("unknown command: {other}")),
+        ),
+    };
+    (reply, is_shutdown)
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -157,6 +206,9 @@ async fn main() -> ExitCode {
 
     info!(version = PLAYER_VERSION, "spotoei-player starting");
 
+    // First valid command must be `hello` within HANDSHAKE_TIMEOUT.
+    // On failure or timeout, log to stderr and exit 2 without emitting
+    // synthetic id responses on stdout (which would violate the contract).
     let hello_line: String = match tokio::time::timeout(HANDSHAKE_TIMEOUT, lines.next_line()).await {
         Ok(Ok(Some(l))) => l,
         Ok(Ok(None)) => {
@@ -168,8 +220,7 @@ async fn main() -> ExitCode {
             return ExitCode::from(2);
         }
         Err(_) => {
-            error!("handshake timeout");
-            let _ = writeln_stdout(&mut stdout, &err("handshake", timeout())).await;
+            error!("handshake timeout (no hello within 5s)");
             return ExitCode::from(2);
         }
     };
@@ -177,16 +228,21 @@ async fn main() -> ExitCode {
     let hello_cmd = match parse_command(&hello_line) {
         Ok(c) if c.command == "hello" => c,
         Ok(c) => {
-            let _ = writeln_stdout(&mut stdout, &err(&c.id, invalid_request("expected hello first"))).await;
+            error!(command = %c.command, "expected hello as first command");
+            let _ = writeln_stdout(
+                &mut stdout,
+                &err(&c.id, ErrorBody::new(ErrorCode::InvalidRequest, "expected hello first")),
+            )
+            .await;
             return ExitCode::from(2);
         }
         Err(e) => {
-            let _ = writeln_stdout(&mut stdout, &err("handshake", invalid_request(e.to_string()))).await;
+            error!(error = %e, "handshake parse failed");
             return ExitCode::from(2);
         }
     };
 
-    let hello_reply = handle(hello_cmd);
+    let (hello_reply, _) = handle(hello_cmd);
     if let Err(e) = writeln_stdout(&mut stdout, &hello_reply).await {
         error!(error = %e, "failed to write hello reply");
         return ExitCode::from(2);
@@ -218,19 +274,15 @@ async fn main() -> ExitCode {
                     }
                 };
 
-                let is_shutdown = line.contains("\"command\":\"shutdown\"");
-
-                let reply = match tokio::time::timeout(COMMAND_TIMEOUT, async {
-                    parse_command(&line).map(handle)
-                })
-                .await
-                {
-                    Ok(Ok(reply)) => reply,
-                    Ok(Err(e)) => {
+                let (reply, should_exit) = match parse_command(&line) {
+                    Ok(cmd) => handle(cmd),
+                    Err(e) => {
                         warn!(error = %e, "command parse failed");
-                        err("unknown", invalid_request(e.to_string()))
+                        (
+                            err("unknown", ErrorBody::new(ErrorCode::InvalidRequest, e.to_string())),
+                            false,
+                        )
                     }
-                    Err(_) => err("unknown", timeout()),
                 };
 
                 if let Err(e) = writeln_stdout(&mut stdout, &reply).await {
@@ -238,7 +290,8 @@ async fn main() -> ExitCode {
                     return ExitCode::from(2);
                 }
 
-                if is_shutdown {
+                if should_exit {
+                    info!("shutdown complete; exiting cleanly");
                     return ExitCode::SUCCESS;
                 }
             }

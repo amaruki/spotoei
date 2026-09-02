@@ -1,5 +1,5 @@
 // M0 protocol fixtures. Synthetic data only; never include real user content.
-// See TSD 07 §18.2 + TSD 11 §18.2 for the contract-test policy.
+// Each fixture is mirrored by a Rust-side test (added in later milestones).
 
 import { PROTOCOL_VERSION } from '../src/index';
 
