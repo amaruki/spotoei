@@ -499,7 +499,7 @@ export class WebApiClient {
             if (mapped) albums.push(mapped);
           }
         }
-        const total = readNumber(json, 'total', albums.length);
+        const total = readNumber(json, 'total', 0);
         return {
           collection,
           items: albums,
@@ -516,29 +516,88 @@ export class WebApiClient {
           json !== null && typeof json === 'object' && 'artists' in json
             ? (json as { artists: unknown }).artists
             : null;
-        const rawItems = toArray(
+        const baseItems = toArray(
           artistsObj !== null && typeof artistsObj === 'object' && 'items' in artistsObj
             ? (artistsObj as { items: unknown }).items
             : undefined,
         );
-        const artists: CatalogArtistT[] = [];
-        for (const item of rawItems) {
-          const mapped = this.mapArtist(item);
-          if (mapped) artists.push(mapped);
-        }
-        const total =
+        const baseTotal =
           artistsObj !== null && typeof artistsObj === 'object' && 'total' in artistsObj
             ? typeof (artistsObj as { total: unknown }).total === 'number'
               ? (artistsObj as { total: number }).total
-              : artists.length
-            : artists.length;
+              : baseItems.length
+            : baseItems.length;
+        const baseCursor =
+          artistsObj !== null && typeof artistsObj === 'object' && 'cursors' in artistsObj
+            ? ((artistsObj as { cursors: unknown }).cursors as {
+                after?: unknown;
+              } | null)
+            : null;
+        const baseAfter =
+          baseCursor && typeof baseCursor.after === 'string' ? baseCursor.after : undefined;
+
+        type FollowedPage = {
+          items: unknown[];
+          total: number;
+          after: string | undefined;
+        };
+        const firstPage: FollowedPage = {
+          items: baseItems,
+          total: baseTotal,
+          after: baseAfter,
+        };
+        const nextUrlFrom = (page: FollowedPage): string | undefined => {
+          if (!page.after) return undefined;
+          return `/me/following?type=artist&limit=${safeLimit}&after=${encodeURIComponent(page.after)}`;
+        };
+        const fetchNext = async (url: string): Promise<FollowedPage | null> => {
+          try {
+            const next = await this.request(url);
+            const obj =
+              next !== null && typeof next === 'object' && 'artists' in next
+                ? (next as { artists: unknown }).artists
+                : null;
+            const items = toArray(
+              obj !== null && typeof obj === 'object' && 'items' in obj
+                ? (obj as { items: unknown }).items
+                : undefined,
+            );
+            const total =
+              obj !== null && typeof obj === 'object' && 'total' in obj
+                ? typeof (obj as { total: unknown }).total === 'number'
+                  ? (obj as { total: number }).total
+                  : items.length
+                : items.length;
+            const cursor =
+              obj !== null && typeof obj === 'object' && 'cursors' in obj
+                ? ((obj as { cursors: unknown }).cursors as { after?: unknown } | null)
+                : null;
+            const after = cursor && typeof cursor.after === 'string' ? cursor.after : undefined;
+            return { items, total, after };
+          } catch {
+            return null;
+          }
+        };
+        const combined = await followNextCursor<FollowedPage>(
+          firstPage,
+          fetchNext,
+          (page) => nextUrlFrom(page),
+          (a, b) => ({ items: a.items.concat(b.items), total: a.total, after: b.after }),
+          5,
+        );
+
+        const artists: CatalogArtistT[] = [];
+        for (const item of combined.items) {
+          const mapped = this.mapArtist(item);
+          if (mapped) artists.push(mapped);
+        }
         return {
           collection,
           items: artists,
-          total,
+          total: combined.total,
           offset: safeOffset,
           limit: safeLimit,
-          hasMore: safeOffset + artists.length < total,
+          hasMore: safeOffset + artists.length < combined.total,
         };
       }
 

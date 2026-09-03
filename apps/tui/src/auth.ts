@@ -4,15 +4,28 @@ import {
   makeAuthLogout,
   makeAuthGetWebToken,
   newRequestId,
+  AuthStatusData,
+  AuthTokenData,
   type AuthStatusDataT,
   type AuthTokenDataT,
   type CommandT,
   type InboundT,
   parseInbound,
 } from 'spotoei-protocol';
-import type { ChildProcess } from 'node:child_process';
 import { getSharedReadline } from './player';
 
+const validateAuthStatus = (data: unknown) => {
+  const result = AuthStatusData.safeParse(data);
+  return result.success
+    ? { ok: true as const, value: result.data }
+    : { ok: false as const, error: new Error(`invalid auth status: ${result.error.message}`) };
+};
+const validateAuthToken = (data: unknown) => {
+  const result = AuthTokenData.safeParse(data);
+  return result.success
+    ? { ok: true as const, value: result.data }
+    : { ok: false as const, error: new Error(`invalid auth token: ${result.error.message}`) };
+};
 export interface AuthClient {
   status(): Promise<AuthStatusDataT>;
   begin(scopes?: string[]): Promise<AuthStatusDataT>;
@@ -71,13 +84,15 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
         }
       }
     } else if (msg.type === 'event') {
-      if (msg.event === 'auth.changed' || msg.event === 'auth.completed') {
-        const data = msg.data as AuthStatusDataT;
-        for (const l of statusListeners) {
-          try {
-            l(data);
-          } catch {
-            // Ignore subscriber errors.
+      if (msg.event === 'auth.changed') {
+        const res = AuthStatusData.safeParse(msg.data);
+        if (res.success) {
+          for (const l of statusListeners) {
+            try {
+              l(res.data);
+            } catch {
+              // Ignore subscriber errors.
+            }
           }
         }
       }
@@ -86,7 +101,10 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
 
   rl.on('line', lineListener);
 
-  function sendCommand<T>(cmd: CommandT): Promise<T> {
+  function sendCommand<T>(
+    cmd: CommandT,
+    validate: (data: unknown) => { ok: true; value: T } | { ok: false; error: Error },
+  ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         pending.delete(cmd.id);
@@ -94,13 +112,26 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
       }, timeoutMs);
 
       pending.set(cmd.id, {
-        resolve: (val) => resolve(val as T),
+        resolve: (val) => {
+          const result = validate(val);
+          if (result.ok) {
+            resolve(result.value);
+          } else {
+            reject(result.error);
+          }
+        },
         reject,
         timer,
       });
 
       const line = JSON.stringify(cmd) + '\n';
-      child.stdin?.write(line, (err) => {
+      if (!child.stdin || !child.stdin.writable) {
+        clearTimeout(timer);
+        pending.delete(cmd.id);
+        reject(new Error('player stdin not writable'));
+        return;
+      }
+      child.stdin.write(line, (err) => {
         if (err) {
           pending.delete(cmd.id);
           clearTimeout(timer);
@@ -114,13 +145,12 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
     async status(): Promise<AuthStatusDataT> {
       const id = newRequestId();
       const cmd = makeAuthStatus(id);
-      return sendCommand<AuthStatusDataT>(cmd);
+      return sendCommand<AuthStatusDataT>(cmd, validateAuthStatus);
     },
-
     async begin(scopes?: string[]): Promise<AuthStatusDataT> {
       const id = newRequestId();
       const cmd = makeAuthBegin(id, scopes);
-      const res = await sendCommand<AuthStatusDataT>(cmd);
+      const res = await sendCommand<AuthStatusDataT>(cmd, validateAuthStatus);
       // Invalidate any old in-memory token.
       cachedToken = null;
       return res;
@@ -129,7 +159,7 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
     async logout(): Promise<AuthStatusDataT> {
       const id = newRequestId();
       const cmd = makeAuthLogout(id);
-      const res = await sendCommand<AuthStatusDataT>(cmd);
+      const res = await sendCommand<AuthStatusDataT>(cmd, validateAuthStatus);
       cachedToken = null;
       return res;
     },
@@ -149,7 +179,7 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
         try {
           const id = newRequestId();
           const cmd = makeAuthGetWebToken(id);
-          const data = await sendCommand<AuthTokenDataT>(cmd);
+          const data = await sendCommand<AuthTokenDataT>(cmd, validateAuthToken);
           cachedToken = data;
           return data.accessToken;
         } finally {

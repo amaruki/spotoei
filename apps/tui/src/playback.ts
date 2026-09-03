@@ -20,9 +20,17 @@ import {
   type InboundT,
   parseInbound,
 } from 'spotoei-protocol';
-import type { ChildProcess } from 'node:child_process';
 import { getSharedReadline } from './player';
 
+const validatePlaybackChanged = (data: unknown) => {
+  const result = PlaybackChangedData.safeParse(data);
+  return result.success
+    ? { ok: true as const, value: result.data }
+    : {
+        ok: false as const,
+        error: new Error(`invalid playback state: ${result.error.message}`),
+      };
+};
 export interface PlaybackClient {
   status(): Promise<PlaybackChangedDataT>;
   load(opts: {
@@ -122,7 +130,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
 
   rl.on('line', lineListener);
 
-  const MAX_PENDING = 256;
+  const MAX_PENDING = 32;
 
   function drainPending(err: Error) {
     for (const p of pending.values()) {
@@ -144,10 +152,13 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     drainPending(new Error('playback client child process closed'));
   });
 
-  function sendCommand<T>(cmd: CommandT): Promise<T> {
+  function sendCommand<T>(
+    cmd: CommandT,
+    validate: (data: unknown) => { ok: true; value: T } | { ok: false; error: Error },
+  ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       if (pending.size >= MAX_PENDING) {
-        reject(new Error('pending command queue full'));
+        reject(new Error(`pending command queue full (${MAX_PENDING})`));
         return;
       }
       const timer = setTimeout(() => {
@@ -156,13 +167,26 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
       }, timeoutMs);
 
       pending.set(cmd.id, {
-        resolve: (val) => resolve(val as T),
+        resolve: (val) => {
+          const result = validate(val);
+          if (result.ok) {
+            resolve(result.value);
+          } else {
+            reject(result.error);
+          }
+        },
         reject,
         timer,
       });
 
       const line = JSON.stringify(cmd) + '\n';
-      child.stdin?.write(line, (err) => {
+      if (!child.stdin || !child.stdin.writable) {
+        clearTimeout(timer);
+        pending.delete(cmd.id);
+        reject(new Error('player stdin not writable'));
+        return;
+      }
+      child.stdin.write(line, (err) => {
         if (err) {
           pending.delete(cmd.id);
           clearTimeout(timer);
@@ -176,7 +200,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     async status(): Promise<PlaybackChangedDataT> {
       const id = newRequestId();
       const cmd = makePlaybackStatus(id);
-      const data = await sendCommand<PlaybackChangedDataT>(cmd);
+      const data = await sendCommand<PlaybackChangedDataT>(cmd, validatePlaybackChanged);
       lastSnapshot = data;
       return data;
     },
@@ -184,7 +208,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     async load(opts): Promise<PlaybackChangedDataT> {
       const id = newRequestId();
       const cmd = makePlaybackLoad(id, opts);
-      const data = await sendCommand<PlaybackChangedDataT>(cmd);
+      const data = await sendCommand<PlaybackChangedDataT>(cmd, validatePlaybackChanged);
       lastSnapshot = data;
       return data;
     },
@@ -192,7 +216,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     async play(): Promise<PlaybackChangedDataT> {
       const id = newRequestId();
       const cmd = makePlaybackPlay(id);
-      const data = await sendCommand<PlaybackChangedDataT>(cmd);
+      const data = await sendCommand<PlaybackChangedDataT>(cmd, validatePlaybackChanged);
       lastSnapshot = data;
       return data;
     },
@@ -200,7 +224,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     async pause(): Promise<PlaybackChangedDataT> {
       const id = newRequestId();
       const cmd = makePlaybackPause(id);
-      const data = await sendCommand<PlaybackChangedDataT>(cmd);
+      const data = await sendCommand<PlaybackChangedDataT>(cmd, validatePlaybackChanged);
       lastSnapshot = data;
       return data;
     },
@@ -208,7 +232,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     async toggle(): Promise<PlaybackChangedDataT> {
       const id = newRequestId();
       const cmd = makePlaybackToggle(id);
-      const data = await sendCommand<PlaybackChangedDataT>(cmd);
+      const data = await sendCommand<PlaybackChangedDataT>(cmd, validatePlaybackChanged);
       lastSnapshot = data;
       return data;
     },
@@ -216,7 +240,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     async next(): Promise<PlaybackChangedDataT> {
       const id = newRequestId();
       const cmd = makePlaybackNext(id);
-      const data = await sendCommand<PlaybackChangedDataT>(cmd);
+      const data = await sendCommand<PlaybackChangedDataT>(cmd, validatePlaybackChanged);
       lastSnapshot = data;
       return data;
     },
@@ -224,7 +248,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     async previous(): Promise<PlaybackChangedDataT> {
       const id = newRequestId();
       const cmd = makePlaybackPrevious(id);
-      const data = await sendCommand<PlaybackChangedDataT>(cmd);
+      const data = await sendCommand<PlaybackChangedDataT>(cmd, validatePlaybackChanged);
       lastSnapshot = data;
       return data;
     },
@@ -232,7 +256,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     async seek(positionMs): Promise<PlaybackChangedDataT> {
       const id = newRequestId();
       const cmd = makePlaybackSeek(id, positionMs);
-      const data = await sendCommand<PlaybackChangedDataT>(cmd);
+      const data = await sendCommand<PlaybackChangedDataT>(cmd, validatePlaybackChanged);
       lastSnapshot = data;
       return data;
     },
@@ -240,7 +264,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     async setVolume(volume): Promise<PlaybackChangedDataT> {
       const id = newRequestId();
       const cmd = makePlaybackSetVolume(id, volume);
-      const data = await sendCommand<PlaybackChangedDataT>(cmd);
+      const data = await sendCommand<PlaybackChangedDataT>(cmd, validatePlaybackChanged);
       lastSnapshot = data;
       return data;
     },
@@ -248,7 +272,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     async setShuffle(shuffle): Promise<PlaybackChangedDataT> {
       const id = newRequestId();
       const cmd = makePlaybackSetShuffle(id, shuffle);
-      const data = await sendCommand<PlaybackChangedDataT>(cmd);
+      const data = await sendCommand<PlaybackChangedDataT>(cmd, validatePlaybackChanged);
       lastSnapshot = data;
       return data;
     },
@@ -256,7 +280,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     async setRepeat(repeat): Promise<PlaybackChangedDataT> {
       const id = newRequestId();
       const cmd = makePlaybackSetRepeat(id, repeat);
-      const data = await sendCommand<PlaybackChangedDataT>(cmd);
+      const data = await sendCommand<PlaybackChangedDataT>(cmd, validatePlaybackChanged);
       lastSnapshot = data;
       return data;
     },
@@ -264,7 +288,7 @@ export function createPlaybackClient(options: PlaybackClientOptions): PlaybackCl
     async setAutoplay(autoplay): Promise<PlaybackChangedDataT> {
       const id = newRequestId();
       const cmd = makePlaybackSetAutoplay(id, autoplay);
-      const data = await sendCommand<PlaybackChangedDataT>(cmd);
+      const data = await sendCommand<PlaybackChangedDataT>(cmd, validatePlaybackChanged);
       lastSnapshot = data;
       return data;
     },
