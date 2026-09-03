@@ -13,9 +13,10 @@ import { COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_DIM, COLOR_PANEL_BG } from '../
 import type { UiViewState } from '../types';
 import { getHomeContent } from '../views/home';
 import { getSettingsContent } from '../views/settings';
+import { buildEntityViews, type EntityViewNodes } from './entityViews';
 import { buildVisualizer, type VisualizerNodes } from './visualizer';
 
-export interface MainNodes extends VisualizerNodes {
+export interface MainNodes extends VisualizerNodes, EntityViewNodes {
   center: BoxRenderable;
   main: BoxRenderable;
   home: BoxRenderable;
@@ -251,6 +252,12 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
   main.add(settings);
 
   const viz = buildVisualizer(renderer, state);
+  const entity = buildEntityViews(renderer);
+  main.add(entity.artist);
+  main.add(entity.album);
+  main.add(entity.playlist);
+  main.add(entity.browse);
+  main.add(entity.visualizerFull);
 
   return {
     center,
@@ -274,5 +281,6 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     clientIdBox,
     clientIdInput,
     ...viz,
+    ...entity,
   };
 }

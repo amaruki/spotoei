@@ -27,8 +27,15 @@ export function clearRouteStack(): RouteT[] {
 export function sameRoute(a: RouteT, b: RouteT): boolean {
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
-    case 'home':
-      return (a as { tab: string }).tab === (b as { tab: string }).tab;
+    case 'home': {
+      const ha = a as { tab: string; browse?: { category?: string; entry?: string } };
+      const hb = b as { tab: string; browse?: { category?: string; entry?: string } };
+      return (
+        ha.tab === hb.tab &&
+        (ha.browse?.category ?? '') === (hb.browse?.category ?? '') &&
+        (ha.browse?.entry ?? '') === (hb.browse?.entry ?? '')
+      );
+    }
     case 'search':
       return (a.query ?? '') === ((b as { query?: string }).query ?? '');
     case 'library':

@@ -8,6 +8,8 @@ import type {
 
 import { formatArtists } from '../formatters';
 import { COLOR_DIM } from '../theme';
+import { browseCategoryOptions, browseEntryOptions } from '../views/browseView';
+import { albumTrackOptions, artistAlbumOptions, playlistTrackOptions } from '../views/entities';
 import { libraryItemOptions } from '../views/library';
 import { renderLyricsContent } from '../views/lyrics';
 import { searchHitOptions } from '../views/search';
@@ -119,6 +121,26 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       if (built.queueList.selectedIndex >= built.queueList.options.length) {
         built.queueList.setSelectedIndex(0);
       }
+    },
+    setArtistAlbums(items): void {
+      built.artistList.options = artistAlbumOptions(items as never);
+      built.artistList.setSelectedIndex(0);
+    },
+    setAlbumTracks(items): void {
+      built.albumList.options = albumTrackOptions(items as never);
+      built.albumList.setSelectedIndex(0);
+    },
+    setPlaylistTracks(items): void {
+      built.playlistList.options = playlistTrackOptions(items as never);
+      built.playlistList.setSelectedIndex(0);
+    },
+    setBrowseCategories(cats): void {
+      built.browseList.options = browseCategoryOptions(cats as never);
+      built.browseList.setSelectedIndex(0);
+    },
+    setBrowseEntries(entries): void {
+      built.browseList.options = browseEntryOptions(entries as never);
+      built.browseList.setSelectedIndex(0);
     },
     setLyrics(doc: LyricsDocumentT | null): void {
       state.lyrics = doc ?? undefined;

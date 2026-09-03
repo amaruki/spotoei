@@ -87,6 +87,43 @@ export interface Ui {
   setLibraryLoading(loading: boolean): void;
   setLibraryLines(lines: string[], empty: boolean): void;
   setQueueSnapshot(snap: QueueSnapshotT): void;
+  setArtistAlbums(
+    items: Array<{
+      id: string;
+      uri: string;
+      name: string;
+      artists: Array<{ id?: string; name: string; uri?: string }>;
+      releaseDate?: string;
+    }>,
+  ): void;
+  setAlbumTracks(
+    items: Array<{
+      id: string;
+      uri: string;
+      name: string;
+      artists: Array<{ id?: string; name: string; uri?: string }>;
+      durationMs: number;
+    }>,
+  ): void;
+  setPlaylistTracks(
+    items: Array<{
+      id: string;
+      uri: string;
+      name: string;
+      artists: Array<{ id?: string; name: string; uri?: string }>;
+      durationMs: number;
+    }>,
+  ): void;
+  setBrowseCategories(cats: Array<{ id: string; label: string; entries: unknown[] }>): void;
+  setBrowseEntries(
+    entries: Array<{
+      id: string;
+      label: string;
+      description: string;
+      enabled: boolean;
+      source: unknown;
+    }>,
+  ): void;
   setLyrics(doc: LyricsDocumentT | null): void;
   setSearchLoading(loading: boolean): void;
   setPaletteCommands(cmds: Array<{ name: string; description: string; action: () => void }>): void;
