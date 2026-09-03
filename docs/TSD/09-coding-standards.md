@@ -58,11 +58,28 @@ Infrastructure adapters are replaceable and map external types at the boundary.
 
 ## 6. Module Size and Cohesion
 
-There is no rigid line-count limit, but modules SHOULD have one clear reason to change.
+Every production source file (TypeScript and Rust) MUST be strictly under **300 lines of code (LoC)**.
 
-Warning signs requiring refactor:
+Rules for modular decomposition:
 
-- file contains unrelated auth + UI + cache logic;
+1. **One Responsibility**: A module has one clear reason to change (e.g. `types.rs`, `constants.rs`, `storage.rs`, `token.rs`, `transport_cmd.rs`).
+2. **Directory Module Pattern**: When a module approaches or exceeds 250 LoC, decompose it into a subdirectory (`<module>/mod.rs` or `<module>/index.ts`) with focused submodules. Re-export public surface from the root module so external consumers are unaffected.
+3. **No Catch-All Kitchen Sinks**: Separate transport commands from settings commands, state definitions from engine interfaces, and storage backends from business workflows.
+4. **Pure Data Types First**: Isolate type declarations (`types.rs`, `types.ts`) to eliminate circular dependencies.
+5. **No Shims**: Perform clean cutovers with direct module re-exports. Avoid deprecated aliases and backward-compatibility wrappers in active codebases.
+6. **TypeScript Submodule Pattern**: When a TypeScript file approaches 250 LoC, split into a directory `module/` containing `index.ts` (re-exports only) plus focused modules like `client.ts`, `requests.ts`, `transfer.ts`, `queue.ts`, `search.ts`, `follow.ts`. Always preserve the original public API surface through barrel re-exports.
+7. **Split Decision Threshold**: If `git diff` on a single file is over 50 lines, first try splitting the file before merging it back. If merging many small files is faster than a refactor, consider it a smell.
+8. **Verification Gate**: Every CI run MUST verify that no production file exceeds 300 LoC. Recommended command:
+
+   ```bash
+   find apps/ crates/ packages/ -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.js" \) \
+     -not -path "*/node_modules/*" -not -path "*/target/*" -not -path "*/dist/*" \
+     -exec wc -l {} + | awk '$1 > 300 && $2 != "total" {print $1, $2}' | grep . && exit 1
+   ```
+Warning signs requiring immediate refactor:
+
+- file exceeds 250 LoC;
+- file contains mixed concerns (e.g. auth + UI + cache, or transport + settings + audio sink);
 - function accepts many boolean flags;
 - function name includes `and` for multiple responsibilities;
 - component performs networking, mapping, state mutation, and rendering;
@@ -210,6 +227,22 @@ Project code SHOULD contain no `unsafe` unless absolutely required by platform/F
 
 Use `tracing`; never `println!` to stdout in the player process because stdout is IPC transport.
 
+### Module Decomposition Architecture
+
+When a subsystem exceeds 250 LoC:
+
+1. **Module Hierarchy**: Replace the single `subsystem.rs` with a directory `subsystem/` containing:
+   - `mod.rs`: Top-level re-exports only. Keep it under 50 LoC.
+   - `types.rs`: All `struct`, `enum`, and `type` definitions used across the subsystem.
+   - `constants.rs`: Constants, configuration defaults, and pure string/math helpers.
+   - `storage.rs`: Persistent storage, filesystem, and keyring I/O.
+   - Command-specific files (e.g. `transport_cmd.rs`, `settings_cmd.rs`): Group related operations.
+2. **Visibility Rules**:
+   - Use `pub(super)` for fields or helper functions shared only among sibling submodules.
+   - Avoid making internal types `pub` outside the crate unless part of the crate's public interface.
+   - When implementing traits across submodules, ensure the required trait is in scope (`use path::to::Trait;`).
+3. **Zero Deprecated Shims**: Use Rust 2018 edition directory module conventions (`subsystem/mod.rs`). Do not keep an empty `subsystem.rs` file alongside the directory as rustc flags it as ambiguous (E0761).
+
 ## 14. Protocol Rules
 
 - protocol structures are distinct from domain structures;
@@ -315,7 +348,29 @@ Known proactive performance boundaries:
 
 ## 22. Git and Commit Standard
 
-Use Conventional Commits, for example:
+Use **Conventional Commits**. Every commit message MUST follow the format:
+
+```text
+<type>(<scope>): <subject>
+```
+
+`<scope>` is a noun describing the section of the codebase affected (e.g. `player`, `tui`, `protocol`, `ipc`, `auth`, `playback`, `ui`, `visualizer`, `cache`, `config`, `webapi`).
+
+`<subject>` is a short imperative-mood description. Body and footer are optional.
+
+Allowed `<type>` values:
+
+- `feat`: a new user-visible feature.
+- `fix`: a bug fix.
+- `perf`: a change that improves performance without changing semantics.
+- `refactor`: a code change that neither fixes a bug nor adds a feature.
+- `test`: adding or correcting tests.
+- `docs`: documentation-only changes.
+- `build`: build system or external dependency changes.
+- `ci`: CI configuration changes.
+- `chore`: tooling or maintenance that does not modify production code.
+
+Examples:
 
 ```text
 feat(player): add queue revision events
@@ -327,6 +382,17 @@ docs(tsd): document cache migration policy
 ```
 
 Commits SHOULD be logically coherent and build/test where practical.
+
+### Atomic Refactor Commits
+
+When splitting a file above 300 LoC into focused submodules, the refactor MUST be a single atomic commit (not a series of partially-broken commits). The commit message MUST name the decomposed modules:
+
+```text
+refactor(player): split auth into types, constants, storage, manager, oauth_flow, and token modules
+refactor(tui): split webApi into client, requests, transfer, queue, search, and follow
+```
+
+Before committing, every file MUST be under 300 LoC. Public APIs and external contracts MUST remain stable. If the split requires visibility changes (e.g. `pub(super)` for cross-module field access), state that in the commit body.
 
 ## 23. Pull Request Checklist
 
@@ -353,4 +419,5 @@ Code is done when it is:
 - observable enough to diagnose failures;
 - secure at its trust boundaries;
 - free of knowingly duplicated business rules;
-- no more abstract than current requirements justify.
+- no more abstract than current requirements justify;
+- all production files strictly under 300 LoC.
