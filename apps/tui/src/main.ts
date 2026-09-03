@@ -11,26 +11,27 @@ import { createVisualizerController } from './visualizer';
 import { createLyricsClient } from './lyrics';
 import { getLayoutTier, drawBox, renderStatusBar, type LayoutTier } from './layout';
 import { CommandPalette } from './palette';
-import type {
-  AuthStatusDataT,
-  PlaybackChangedDataT,
-  SearchResponseT,
-  LyricsDocumentT,
-} from 'spotoei-protocol';
+import type { AuthStatusDataT, PlaybackChangedDataT, SearchResponseT } from 'spotoei-protocol';
+// eslint-disable-next-line no-control-regex
+export function sanitize(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '').replace(/[\r\n]/g, ' ');
+}
+
 function padBox(content: string, innerWidth = 40): string {
-  const truncated =
-    content.length > innerWidth ? content.slice(0, innerWidth) : content;
-  return `│${truncated.padEnd(innerWidth, ' ')}│`;
+  // eslint-disable-next-line no-control-regex
+  const visible = content.replace(/\u001b\[[0-9;]*m/g, '');
+  const pad = Math.max(0, innerWidth - visible.length);
+  return `│ ${content}${' '.repeat(pad)} │\n`;
 }
 
 function line(label: string, value: string): string {
-  return padBox(`  ${label.padEnd(8)}${value}`);
+  return padBox(`  ${label.padEnd(8)}${sanitize(value)}`);
 }
 
 function detail(label: string, value: string): string {
-  return padBox(`  ${label.padEnd(8)}${value}`);
+  return padBox(`  ${label.padEnd(8)}${sanitize(value)}`);
 }
-
 function renderShell(info?: {
   protocol: number;
   playerVersion: string;
@@ -58,9 +59,7 @@ function renderShell(info?: {
     lineCount: number;
   };
 }) {
-  const playerLine = info
-    ? line('player', info.playerVersion)
-    : line('player', '(spawning...)');
+  const playerLine = info ? line('player', info.playerVersion) : line('player', '(spawning...)');
   const protoLine = info
     ? line('proto', `v${String(info.protocol)}`)
     : line('proto', '(pending...)');
@@ -70,9 +69,7 @@ function renderShell(info?: {
       : '(none)'
     : '(pending...)';
 
-  const authLine = info?.auth
-    ? line('auth', info.auth.state)
-    : line('auth', '(pending...)');
+  const authLine = info?.auth ? line('auth', info.auth.state) : line('auth', '(pending...)');
   let authDetail: string;
   if (!info?.auth) {
     authDetail = detail('↳', '(awaiting handshake)');
@@ -154,6 +151,13 @@ function getTerminalWidth(): number {
   if (typeof cols === 'number' && cols >= 20) return cols;
   return 80;
 }
+let ttyEntered = false;
+function enterTty(): void {
+  if (ttyEntered) return;
+  // Enter alternate screen, hide cursor, clear.
+  process.stdout.write('\u001b[?1049h\u001b[?25l\u001b[2J\u001b[H');
+  ttyEntered = true;
+}
 function cleanupTty(): void {
   if (process.stdin.isTTY) {
     try {
@@ -162,8 +166,10 @@ function cleanupTty(): void {
       // ignore — raw mode may already be off
     }
   }
-  // Show the cursor and leave the alternate screen buffer.
-  process.stdout.write('\u001b[?25h\u001b[?1049l');
+  if (ttyEntered) {
+    process.stdout.write('\u001b[?25h\u001b[?1049l');
+    ttyEntered = false;
+  }
 }
 
 function routeLabel(route: Route): string {
@@ -178,32 +184,36 @@ function renderResponsive(
     auth?: AuthStatusDataT;
     playback?: PlaybackChangedDataT | null;
     lyrics?: { kind: string; lineCount: number };
+    statusMessage?: string;
   },
   route: Route,
   focus: Focus,
   tier: LayoutTier,
   palette: CommandPalette,
+  paletteOpen: boolean,
 ): void {
   const width = getTerminalWidth();
   let sidebarLines: string[];
   let mainLines: string[];
   let contextLines: string[];
 
+  const selectedRouteIndex = ['home', 'search', 'library', 'queue', 'lyrics', 'settings'].indexOf(
+    route,
+  );
+  const sidebarItems = [' Home', ' Search', ' Library', ' Queue', ' Lyrics', ' Settings'].map(
+    (label, idx) => (idx === selectedRouteIndex ? `▶${label}` : ` ${label}`),
+  );
+
   if (tier === 'wide') {
     const sidebarWidth = Math.max(14, Math.floor(width * 0.22));
     const contextWidth = Math.max(20, Math.floor(width * 0.28));
     const mainWidth = width - sidebarWidth - contextWidth;
-    sidebarLines = drawBox(
-      [
-        ' Home',
-        ' Search',
-        ' Library',
-        ' Queue',
-        ' Lyrics',
-        ' Settings',
-      ],
-      { width: sidebarWidth, height: 8, title: 'spotoei', focused: focus === 'sidebar' },
-    );
+    sidebarLines = drawBox(sidebarItems, {
+      width: sidebarWidth,
+      height: 8,
+      title: 'spotoei',
+      focused: focus === 'sidebar',
+    });
     mainLines = drawBox(
       [
         ` route:    ${routeLabel(route)}`,
@@ -231,10 +241,12 @@ function renderResponsive(
   } else if (tier === 'medium') {
     const sidebarWidth = Math.max(14, Math.floor(width * 0.28));
     const mainWidth = width - sidebarWidth;
-    sidebarLines = drawBox(
-      [' Home', ' Search', ' Library', ' Queue', ' Lyrics', ' Settings'],
-      { width: sidebarWidth, height: 8, title: 'spotoei', focused: focus === 'sidebar' },
-    );
+    sidebarLines = drawBox(sidebarItems, {
+      width: sidebarWidth,
+      height: 8,
+      title: 'spotoei',
+      focused: focus === 'sidebar',
+    });
     mainLines = drawBox(
       [
         ` route:    ${routeLabel(route)}`,
@@ -256,7 +268,7 @@ function renderResponsive(
         ` playback: ${info.playback?.state ?? 'idle'}`,
         ` lyrics:   ${info.lyrics ? `${info.lyrics.kind} (${info.lyrics.lineCount} lines)` : '(idle)'}`,
       ],
-      { width: width, height: 7, title: 'spotoei', focused: true },
+      { width: width, height: 7, title: 'spotoei', focused: focus === 'main' },
     );
     contextLines = [];
   }
@@ -273,32 +285,140 @@ function renderResponsive(
       rows.push(m);
     }
   }
-  rows.push(renderStatusBar({
-    width,
-    route,
-    playbackState: info.playback?.state,
-    trackName: info.playback?.track?.name,
-    hint: '?: palette | Space: play | Esc: back | q: quit',
-  }));
+  // Palette overlay: render filtered matches below panels when open.
+  if (paletteOpen) {
+    const matches = palette.matches();
+    const filter = palette.getFilter();
+    const sel = palette.getSelectedIndex();
+    const paletteLines: string[] = [
+      ` filter: ${filter || '(type to filter)'}`,
+      ' ─────────────────────',
+    ];
+    const visible = matches.slice(0, 6);
+    if (visible.length === 0) {
+      paletteLines.push(' (no matches)');
+    } else {
+      for (let i = 0; i < visible.length; i++) {
+        const cmd = visible[i]!;
+        const marker = i === sel ? '▶' : ' ';
+        const shortcut = cmd.shortcut ? ` [${cmd.shortcut}]` : '';
+        paletteLines.push(`${marker} ${cmd.label}${shortcut}`);
+      }
+    }
+    paletteLines.push(' ─────────────────────');
+    paletteLines.push(' ↑/k ↓/j navigate | Enter execute | Esc close');
+    const box = drawBox(paletteLines, {
+      width: Math.min(width - 4, 48),
+      title: 'palette',
+      focused: true,
+    });
+    // Center the palette box by padding left
+    const pad = Math.max(0, Math.floor((width - box[0]!.length) / 2));
+    for (const l of box) rows.push(' '.repeat(pad) + l);
+  }
+  const statusHint =
+    info.statusMessage ?? '?: palette | Space: play | Esc: back | q: quit | Tab: focus';
+  rows.push(
+    renderStatusBar({
+      width,
+      route,
+      playbackState: info.playback?.state,
+      trackName: info.playback?.track?.name,
+      hint: statusHint,
+    }),
+  );
 
-  process.stdout.write(rows.join('\n') + '\n');
+  // Clear before repaint to avoid stacking frames in scrollback.
+  process.stdout.write('\u001b[H\u001b[2J' + rows.join('\n') + '\n');
 }
 
 function buildPalette(
-  routes: { home: () => void; search: () => void; library: () => void; queue: () => void; lyrics: () => void; settings: () => void; },
-  actions: { togglePlay: () => Promise<void>; cycleViz: () => void; getLyrics: () => Promise<void>; quit: () => void; },
+  routes: {
+    home: () => void;
+    search: () => void;
+    library: () => void;
+    queue: () => void;
+    lyrics: () => void;
+    settings: () => void;
+  },
+  actions: {
+    togglePlay: () => Promise<void>;
+    cycleViz: () => void;
+    getLyrics: () => Promise<void>;
+    quit: () => void;
+  },
 ): CommandPalette {
   const p = new CommandPalette();
-  p.register({ id: 'nav.home', label: 'Go to Home', shortcut: 'g h', action: routes.home, keywords: ['root', 'main'] });
-  p.register({ id: 'nav.search', label: 'Go to Search', shortcut: '/', action: routes.search, keywords: ['find'] });
-  p.register({ id: 'nav.library', label: 'Go to Library', shortcut: 'g l', action: routes.library, keywords: ['saved', 'tracks'] });
-  p.register({ id: 'nav.queue', label: 'Go to Queue', shortcut: 'g q', action: routes.queue, keywords: ['upcoming'] });
-  p.register({ id: 'nav.lyrics', label: 'Open Lyrics', shortcut: 'l', action: routes.lyrics, keywords: ['words'] });
-  p.register({ id: 'nav.settings', label: 'Open Settings', shortcut: 'g s', action: routes.settings, keywords: ['preferences'] });
-  p.register({ id: 'act.play', label: 'Play / Pause', shortcut: 'Space', action: actions.togglePlay, keywords: ['audio'] });
-  p.register({ id: 'act.viz', label: 'Cycle Visualizer', shortcut: 'v', action: actions.cycleViz, keywords: ['visualizer', 'spectrum'] });
-  p.register({ id: 'act.lyrics.get', label: 'Fetch Lyrics', shortcut: 'L', action: actions.getLyrics, keywords: ['words'] });
-  p.register({ id: 'act.quit', label: 'Quit SPOTOEI', shortcut: 'q', action: actions.quit, keywords: ['exit'] });
+  p.register({
+    id: 'nav.home',
+    label: 'Go to Home',
+    shortcut: 'g h',
+    action: routes.home,
+    keywords: ['root', 'main'],
+  });
+  p.register({
+    id: 'nav.search',
+    label: 'Go to Search',
+    shortcut: '/',
+    action: routes.search,
+    keywords: ['find'],
+  });
+  p.register({
+    id: 'nav.library',
+    label: 'Go to Library',
+    shortcut: 'g l',
+    action: routes.library,
+    keywords: ['saved', 'tracks'],
+  });
+  p.register({
+    id: 'nav.queue',
+    label: 'Go to Queue',
+    shortcut: 'g q',
+    action: routes.queue,
+    keywords: ['upcoming'],
+  });
+  p.register({
+    id: 'nav.lyrics',
+    label: 'Open Lyrics',
+    shortcut: 'l',
+    action: routes.lyrics,
+    keywords: ['words'],
+  });
+  p.register({
+    id: 'nav.settings',
+    label: 'Open Settings',
+    shortcut: 'g s',
+    action: routes.settings,
+    keywords: ['preferences'],
+  });
+  p.register({
+    id: 'act.play',
+    label: 'Play / Pause',
+    shortcut: 'Space',
+    action: actions.togglePlay,
+    keywords: ['audio'],
+  });
+  p.register({
+    id: 'act.viz',
+    label: 'Cycle Visualizer',
+    shortcut: 'v',
+    action: actions.cycleViz,
+    keywords: ['visualizer', 'spectrum'],
+  });
+  p.register({
+    id: 'act.lyrics.get',
+    label: 'Fetch Lyrics',
+    shortcut: 'L',
+    action: actions.getLyrics,
+    keywords: ['words'],
+  });
+  p.register({
+    id: 'act.quit',
+    label: 'Quit SPOTOEI',
+    shortcut: 'q',
+    action: actions.quit,
+    keywords: ['exit'],
+  });
   return p;
 }
 
@@ -308,9 +428,11 @@ async function main(): Promise<number> {
     return runDoctor(args.slice(1));
   }
 
-  // The client renders its shell BEFORE spawning the player child, ensuring
-  // immediate visual feedback without waiting for child process startup.
-  renderShell();
+  const isTTY = !!process.stdin.isTTY && !!process.stdout.isTTY;
+  if (!isTTY) {
+    // Immediate visual feedback for non-TTY smoke test; TUI will not be used.
+    renderShell();
+  }
 
   let playerBin: string;
   try {
@@ -319,26 +441,44 @@ async function main(): Promise<number> {
     process.stderr.write(`spotoei: ${e instanceof Error ? e.message : String(e)}\n`);
     return 1;
   }
-
-  let child;
-  try {
-    const handshake = await startPlayer(playerBin);
-    child = handshake.child;
-    const onSignal = () => {
-      cleanupTty();
+  let child: ReturnType<typeof startPlayer> extends Promise<{ child: infer C }> ? C : never;
+  const requestQuit = (() => {
+    let r: (() => void) | null = null;
+    return {
+      promise: new Promise<void>((resolve) => {
+        r = resolve;
+      }),
+      trigger: () => {
+        if (r) r();
+      },
+    };
+  })();
+  const quit = async (): Promise<void> => {
+    cleanupTty();
+    if (child) {
       try {
         child.kill('SIGTERM');
       } catch {
         // ignore
       }
-      process.exit(0);
-    };
-    process.on('SIGINT', onSignal);
-    process.on('SIGTERM', onSignal);
-    process.on('SIGHUP', onSignal);
-    process.on('exit', cleanupTty);
+    }
+    requestQuit.trigger();
+  };
+  try {
+    const handshake = await startPlayer(playerBin);
+    child = handshake.child;
     const auth = createAuthClient({ child });
     const playback = createPlaybackClient({ child });
+    process.on('SIGINT', () => {
+      void quit();
+    });
+    process.on('SIGTERM', () => {
+      void quit();
+    });
+    process.on('SIGHUP', () => {
+      void quit();
+    });
+    process.on('exit', cleanupTty);
     const initialAuth = await auth.status();
     const initialPlayback = await playback.status();
 
@@ -354,13 +494,12 @@ async function main(): Promise<number> {
       cache,
       accountId: initialAuth.accountId ?? 'anonymous',
     });
-    const libraryManager = new LibraryManager({
+    void new LibraryManager({
       webApi,
       cache,
       accountId: initialAuth.accountId ?? 'anonymous',
     });
     const queueManager = new QueueManager({ webApi });
-
     const visualizer = createVisualizerController({
       child,
       initialMode: 'spectrum',
@@ -369,7 +508,6 @@ async function main(): Promise<number> {
       waveformSamples: 120,
     });
     const lyrics = createLyricsClient({ child });
-    const activeLyrics = new Map<string, LyricsDocumentT>();
 
     const currentInfo: {
       protocol: number;
@@ -397,6 +535,7 @@ async function main(): Promise<number> {
         kind: string;
         lineCount: number;
       };
+      statusMessage?: string;
     } = {
       protocol: handshake.protocol,
       playerVersion: handshake.playerVersion,
@@ -420,78 +559,55 @@ async function main(): Promise<number> {
         fps: visualizer.getCurrentFps(),
       },
     };
-    if (!process.stdin.isTTY) renderShell(currentInfo);
 
-    visualizer.subscribe((mode) => {
-      currentInfo.visualizer = {
-        mode,
-        fps: visualizer.getCurrentFps(),
-      };
-      // In full TUI, this draws frames; for smoke test, we update the shell
-    });
-    if (!process.stdin.isTTY) renderShell(currentInfo);
-
-    auth.onStatusChange((next) => {
-      currentInfo.auth = {
-        state: next.state,
-        accountId: next.accountId,
-        storage: next.storage,
-        authUrl: next.authUrl,
-      };
-      if (!process.stdin.isTTY) renderShell(currentInfo);
-      else refreshUi();
-    });
-
-    playback.onChange((next) => {
-      currentInfo.playback = next;
-      if (!process.stdin.isTTY) renderShell(currentInfo);
-      else refreshUi();
-    });
-    queueManager.subscribe((snap) => {
-      currentInfo.queue = {
-        upcomingCount: snap.upcoming.length,
-      };
-    });
-
-    lyrics.subscribe((doc) => {
-      currentInfo.lyrics = {
-        kind: doc.kind,
-        lineCount: doc.lines.length,
-      };
-      if (!process.stdin.isTTY) renderShell(currentInfo);
-      else refreshUi();
-    });
-    // Optional query argument for testing/smoke verification
-    if (args[0] === 'search' && args[1]) {
-      const q = args.slice(1).join(' ');
-      const res: SearchResponseT = await searchClient.search(q);
-      const first = res.hits[0];
-      let firstLabel = '(none)';
-      if (first) {
-        if (first.type === 'track') firstLabel = first.track.name;
-        else if (first.type === 'album') firstLabel = first.album.name;
-        else if (first.type === 'artist') firstLabel = first.artist.name;
-        else if (first.type === 'playlist') firstLabel = first.playlist.name;
-      }
-      currentInfo.search = {
-        query: q,
-        hitCount: res.hits.length,
-        firstHit: firstLabel,
-      };
-      if (!process.stdin.isTTY) renderShell(currentInfo);
-      else refreshUi();
-    }
-    // TUI state: route, focused panel, and command palette.
-    const uiState: { route: Route; focus: Focus; tier: LayoutTier; paletteOpen: boolean } = {
+    // TUI state must be initialised before any callback that may call refreshUi.
+    const initialTier: LayoutTier = getLayoutTier(getTerminalWidth());
+    const uiState: {
+      route: Route;
+      focus: Focus;
+      tier: LayoutTier;
+      paletteOpen: boolean;
+      searchBuffer: string;
+    } = {
       route: 'home',
-      focus: 'main',
-      tier: getLayoutTier(getTerminalWidth()),
+      focus: initialTier === 'narrow' ? 'main' : 'sidebar',
+      tier: initialTier,
       paletteOpen: false,
+      searchBuffer: '',
     };
+    // Helper to show transient status messages (auto-clears after 2.5s).
+    let statusTimer: ReturnType<typeof setTimeout> | null = null;
+    const setStatus = (msg: string, persist = false): void => {
+      currentInfo.statusMessage = msg;
+      if (!isTTY) renderShell(currentInfo);
+      else refreshUi();
+      if (!persist) {
+        if (statusTimer) clearTimeout(statusTimer);
+        statusTimer = setTimeout(() => {
+          currentInfo.statusMessage = undefined;
+          if (isTTY) refreshUi();
+        }, 2500);
+      }
+    };
+    let lastRenderAt = 0;
     const refreshUi = (): void => {
-      renderResponsive(currentInfo, uiState.route, uiState.focus, uiState.tier, palette);
+      if (!isTTY) return;
+      const now = Date.now();
+      if (now - lastRenderAt < 16) return;
+      lastRenderAt = now;
+      renderResponsive(
+        currentInfo,
+        uiState.route,
+        uiState.focus,
+        uiState.tier,
+        palette,
+        uiState.paletteOpen,
+      );
     };
     const setRoute = (next: Route): void => {
+      if (uiState.route === 'search' && next !== 'search') {
+        uiState.searchBuffer = '';
+      }
       uiState.route = next;
       refreshUi();
     };
@@ -499,7 +615,10 @@ async function main(): Promise<number> {
       uiState.focus = next;
       refreshUi();
     };
-    const palette = buildPalette(
+
+    // Register palette after refreshUi and requestQuit are available so
+    // the quit action can properly resolve the TUI promise.
+    palette = buildPalette(
       {
         home: () => setRoute('home'),
         search: () => setRoute('search'),
@@ -511,8 +630,12 @@ async function main(): Promise<number> {
       {
         togglePlay: async () => {
           const state = currentInfo.playback?.state ?? 'idle';
-          if (state === 'playing') await playback.pause();
-          else await playback.play();
+          try {
+            if (state === 'playing') await playback.pause();
+            else await playback.play();
+          } catch (e) {
+            setStatus(`playback: ${e instanceof Error ? e.message : String(e)}`);
+          }
         },
         cycleViz: () => {
           const next = visualizer.cycleMode();
@@ -526,141 +649,255 @@ async function main(): Promise<number> {
             if (currentInfo.playback?.track?.uri !== uri) return;
             currentInfo.lyrics = { kind: doc.kind, lineCount: doc.lines.length };
             refreshUi();
-          } catch {
-            // Ignore lyrics retrieval failure in interactive mode
+          } catch (e) {
+            setStatus(`lyrics: ${e instanceof Error ? e.message : String(e)}`);
           }
         },
         quit: () => {
-          process.stdin.removeListener('data', onKey);
+          requestQuit.trigger();
         },
       },
     );
 
+    visualizer.subscribe((mode) => {
+      currentInfo.visualizer = {
+        mode,
+        fps: visualizer.getCurrentFps(),
+      };
+      if (isTTY) refreshUi();
+    });
+
+    auth.onStatusChange((next) => {
+      currentInfo.auth = {
+        state: next.state,
+        accountId: next.accountId,
+        storage: next.storage,
+        authUrl: next.authUrl,
+      };
+      if (isTTY) refreshUi();
+    });
+
+    playback.onChange((next) => {
+      currentInfo.playback = next;
+      if (isTTY) refreshUi();
+    });
+    queueManager.subscribe((snap) => {
+      currentInfo.queue = {
+        upcomingCount: snap.upcoming.length,
+      };
+      if (isTTY) refreshUi();
+    });
+
+    lyrics.subscribe((doc) => {
+      currentInfo.lyrics = {
+        kind: doc.kind,
+        lineCount: doc.lines.length,
+      };
+      if (isTTY) refreshUi();
+    });
+    // Optional query argument for testing/smoke verification
+    if (args[0] === 'search' && args[1]) {
+      const q = args.slice(1).join(' ');
+      const res: SearchResponseT = await searchClient.search(q);
+      const first = res.hits[0];
+      let firstLabel = '(none)';
+      if (first) {
+        if (first.type === 'track') firstLabel = sanitize(first.track.name);
+        else if (first.type === 'album') firstLabel = sanitize(first.album.name);
+        else if (first.type === 'artist') firstLabel = sanitize(first.artist.name);
+        else if (first.type === 'playlist') firstLabel = sanitize(first.playlist.name);
+      }
+      currentInfo.search = {
+        query: sanitize(q),
+        hitCount: res.hits.length,
+        firstHit: firstLabel,
+      };
+      if (!isTTY) renderShell(currentInfo);
+      else refreshUi();
+    }
+
     const onResize = (): void => {
+      if (!isTTY) return;
       uiState.tier = getLayoutTier(getTerminalWidth());
+      // Clamp focus to visible panels after resize.
+      const visible: Focus[] =
+        uiState.tier === 'wide'
+          ? ['main', 'sidebar', 'context']
+          : uiState.tier === 'medium'
+            ? ['main', 'sidebar']
+            : ['main'];
+      if (!visible.includes(uiState.focus)) uiState.focus = visible[0]!;
       refreshUi();
     };
-    process.stdout.on('resize', onResize);
+    if (isTTY) process.stdout.on('resize', onResize);
 
-    if (process.stdin.isTTY) {
+    if (isTTY) {
+      enterTty();
       process.stdin.setRawMode?.(true);
       process.stdin.resume();
       process.stdin.setEncoding('utf8');
-      // Promise resolved when quit keypress received; keeps TUI alive.
-      const inputClosed = new Promise<void>((resolve) => {
-        const onKey = (chunk: string): void => {
-          // Palette filtering mode
-          if (uiState.paletteOpen) {
-            if (chunk === '\u0003' || chunk === '\u001b') {
-              palette.close();
-              uiState.paletteOpen = false;
-              refreshUi();
-              return;
-            }
-            if (chunk === '\r' || chunk === '\n') {
-              const cmd = palette.execute();
-              uiState.paletteOpen = false;
-              if (cmd) void cmd.action();
-              refreshUi();
-              return;
-            }
-            if (chunk === '\u001b[A' || chunk === 'k') {
-              palette.prev();
-              refreshUi();
-              return;
-            }
-            if (chunk === '\u001b[B' || chunk === 'j') {
-              palette.next();
-              refreshUi();
-              return;
-            }
-            if (chunk === '\u007f' || chunk === '\b') {
-              const f = palette.getFilter();
-              palette.setFilter(f.slice(0, -1));
-              refreshUi();
-              return;
-            }
-            if (chunk.length === 1 && chunk >= ' ' && chunk <= '~') {
-              palette.setFilter(palette.getFilter() + chunk);
-              refreshUi();
-              return;
-            }
-            return;
-          }
-          if (chunk === '?' || chunk === ':') {
-            palette.open();
-            uiState.paletteOpen = true;
-            refreshUi();
-            return;
-          }
-          if (chunk === ' ') {
-            const state = currentInfo.playback?.state ?? 'idle';
-            if (state === 'playing') {
-              void playback.pause();
-            } else {
-              void playback.play();
-            }
-            return;
-          }
-          if (chunk === '/') {
-            setRoute('search');
-            return;
-          }
-          if (chunk === '\u001b') {
-            setRoute('home');
-            return;
-          }
-          if (chunk === '\t') {
-            // Only cycle between panels visible in the current layout tier.
-            const order: Focus[] =
-              uiState.tier === 'wide'
-                ? ['main', 'sidebar', 'context']
-                : uiState.tier === 'medium'
-                  ? ['main', 'sidebar']
-                  : ['main'];
-            const idx = order.indexOf(uiState.focus);
-            if (idx >= 0) {
-              setFocus(order[(idx + 1) % order.length]!);
-            } else {
-              setFocus(order[0]!);
-            }
-            return;
-          }
-          if (chunk === 'v' || chunk === 'V') {
-            const next = visualizer.cycleMode();
-            currentInfo.visualizer = { mode: next, fps: visualizer.getCurrentFps() };
-            refreshUi();
-            return;
-          }
-          if (chunk === 'l') {
-            setRoute('lyrics');
-            return;
-          }
-          if (chunk === 'L') {
-            const uri = currentInfo.playback?.track?.uri ?? 'spotify:track:sample';
-            lyrics
-              .getLyrics(uri)
-              .then((doc) => {
-                if (currentInfo.playback?.track?.uri !== uri) return;
-                currentInfo.lyrics = { kind: doc.kind, lineCount: doc.lines.length };
-                refreshUi();
-              })
-              .catch(() => {
-                // Ignore lyrics retrieval failure in interactive mode
-              });
-            return;
-          }
-          if (chunk === 'q' || chunk === 'Q' || chunk === '\u0003') {
-            process.stdout.removeListener('resize', onResize);
-            process.stdin.removeListener('data', onKey);
-            process.stdin.pause();
-            cleanupTty();
-            resolve();
-            return;
-          }
-        };
-        process.stdin.on('data', onKey);
+      let onKey: ((chunk: string) => void) | null = null;
+      const inputClosed = requestQuit.promise.then(() => {
+        if (onKey) process.stdin.removeListener('data', onKey);
+        process.stdout.removeListener('resize', onResize);
+        process.stdin.pause();
+        cleanupTty();
       });
+      onKey = (chunk: string): void => {
+        // Palette filtering mode
+        if (uiState.paletteOpen) {
+          if (chunk === '\u0003' || chunk === '\u001b') {
+            palette.close();
+            uiState.paletteOpen = false;
+            refreshUi();
+            return;
+          }
+          if (chunk === '\r' || chunk === '\n') {
+            const cmd = palette.execute();
+            uiState.paletteOpen = false;
+            if (cmd) {
+              const r = cmd.action();
+              if (r instanceof Promise)
+                r.catch((e) => setStatus(String(e instanceof Error ? e.message : e)));
+            }
+            refreshUi();
+            return;
+          }
+          if (chunk === '\u001b[A' || chunk === 'k') {
+            palette.prev();
+            refreshUi();
+            return;
+          }
+          if (chunk === '\u001b[B' || chunk === 'j') {
+            palette.next();
+            refreshUi();
+            return;
+          }
+          if (chunk === '\u007f' || chunk === '\b') {
+            const f = palette.getFilter();
+            palette.setFilter(f.slice(0, -1));
+            refreshUi();
+            return;
+          }
+          if (chunk.length === 1 && chunk >= ' ' && chunk <= '~') {
+            palette.setFilter(palette.getFilter() + chunk);
+            refreshUi();
+            return;
+          }
+          return;
+        }
+        if (chunk === '?' || chunk === ':') {
+          palette.open();
+          uiState.paletteOpen = true;
+          refreshUi();
+          return;
+        }
+        if (chunk === '/') {
+          setRoute('search');
+          return;
+        }
+        if (uiState.route === 'search') {
+          if (chunk === '\u001b' || chunk === '\r' || chunk === '\n') {
+            if (chunk === '\r' || chunk === '\n') {
+              const q = uiState.searchBuffer;
+              if (q.length > 0) {
+                searchClient
+                  .search(q)
+                  .then((res: SearchResponseT) => {
+                    const first = res.hits[0];
+                    let firstLabel = '(none)';
+                    if (first) {
+                      if (first.type === 'track') firstLabel = sanitize(first.track.name);
+                      else if (first.type === 'album') firstLabel = sanitize(first.album.name);
+                      else if (first.type === 'artist') firstLabel = sanitize(first.artist.name);
+                      else if (first.type === 'playlist')
+                        firstLabel = sanitize(first.playlist.name);
+                    }
+                    currentInfo.search = {
+                      query: sanitize(q),
+                      hitCount: res.hits.length,
+                      firstHit: firstLabel,
+                    };
+                    refreshUi();
+                  })
+                  .catch((e: unknown) => {
+                    setStatus(e instanceof Error ? e.message : String(e));
+                  });
+              }
+            }
+            if (chunk === '\u001b') {
+              setRoute('home');
+            }
+            return;
+          }
+          if (chunk === '\u007f' || chunk === '\b') {
+            uiState.searchBuffer = uiState.searchBuffer.slice(0, -1);
+            refreshUi();
+            return;
+          }
+          if (chunk.length === 1 && chunk >= ' ' && chunk <= '~') {
+            uiState.searchBuffer += chunk;
+            refreshUi();
+            return;
+          }
+          return;
+        }
+        if (chunk === '\u001b') {
+          if (uiState.paletteOpen) {
+            palette.close();
+            uiState.paletteOpen = false;
+            refreshUi();
+          } else {
+            setRoute('home');
+          }
+          return;
+        }
+        if (chunk === '\t') {
+          // Only cycle between panels visible in the current layout tier.
+          const order: Focus[] =
+            uiState.tier === 'wide'
+              ? ['sidebar', 'main', 'context']
+              : uiState.tier === 'medium'
+                ? ['sidebar', 'main']
+                : ['main'];
+          const idx = order.indexOf(uiState.focus);
+          if (idx >= 0) {
+            setFocus(order[(idx + 1) % order.length]!);
+          } else {
+            setFocus(order[0]!);
+          }
+          return;
+        }
+        if (chunk === 'v' || chunk === 'V') {
+          const next = visualizer.cycleMode();
+          currentInfo.visualizer = { mode: next, fps: visualizer.getCurrentFps() };
+          refreshUi();
+          return;
+        }
+        if (chunk === 'l') {
+          setRoute('lyrics');
+          return;
+        }
+        if (chunk === 'L') {
+          const uri = currentInfo.playback?.track?.uri ?? 'spotify:track:sample';
+          lyrics
+            .getLyrics(uri)
+            .then((doc) => {
+              if (currentInfo.playback?.track?.uri !== uri) return;
+              currentInfo.lyrics = { kind: doc.kind, lineCount: doc.lines.length };
+              refreshUi();
+            })
+            .catch((e: unknown) => {
+              setStatus(e instanceof Error ? e.message : String(e));
+            });
+          return;
+        }
+        if (chunk === 'q' || chunk === 'Q' || chunk === '\u0003') {
+          requestQuit.trigger();
+          return;
+        }
+      };
+      process.stdin.on('data', onKey);
       // Initial responsive render before any keypress.
       refreshUi();
       await inputClosed;
@@ -669,6 +906,8 @@ async function main(): Promise<number> {
       renderShell(currentInfo);
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
+    if (statusTimer) clearTimeout(statusTimer);
+    process.stdout.removeListener('resize', onResize);
     searchClient.close();
     cache.close();
     playback.close();
@@ -676,14 +915,19 @@ async function main(): Promise<number> {
     lyrics.close();
     auth.close();
   } catch (e) {
-    process.stderr.write(`spotoei: failed to start player: ${e instanceof Error ? e.message : String(e)}\n`);
+    cleanupTty();
+    process.stderr.write(
+      `spotoei: failed to start player: ${e instanceof Error ? e.message : String(e)}\n`,
+    );
     return 1;
   }
 
   try {
     await stopPlayer(child);
   } catch (e) {
-    process.stderr.write(`spotoei: shutdown error: ${e instanceof Error ? e.message : String(e)}\n`);
+    process.stderr.write(
+      `spotoei: shutdown error: ${e instanceof Error ? e.message : String(e)}\n`,
+    );
     try {
       child.kill('SIGKILL');
     } catch {
