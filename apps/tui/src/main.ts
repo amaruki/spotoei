@@ -420,7 +420,7 @@ async function main(): Promise<number> {
         fps: visualizer.getCurrentFps(),
       },
     };
-    renderShell(currentInfo);
+    if (!process.stdin.isTTY) renderShell(currentInfo);
 
     visualizer.subscribe((mode) => {
       currentInfo.visualizer = {
@@ -429,7 +429,7 @@ async function main(): Promise<number> {
       };
       // In full TUI, this draws frames; for smoke test, we update the shell
     });
-    renderShell(currentInfo);
+    if (!process.stdin.isTTY) renderShell(currentInfo);
 
     auth.onStatusChange((next) => {
       currentInfo.auth = {
@@ -438,14 +438,15 @@ async function main(): Promise<number> {
         storage: next.storage,
         authUrl: next.authUrl,
       };
-      renderShell(currentInfo);
+      if (!process.stdin.isTTY) renderShell(currentInfo);
+      else refreshUi();
     });
 
     playback.onChange((next) => {
       currentInfo.playback = next;
-      renderShell(currentInfo);
+      if (!process.stdin.isTTY) renderShell(currentInfo);
+      else refreshUi();
     });
-
     queueManager.subscribe((snap) => {
       currentInfo.queue = {
         upcomingCount: snap.upcoming.length,
@@ -457,7 +458,8 @@ async function main(): Promise<number> {
         kind: doc.kind,
         lineCount: doc.lines.length,
       };
-      renderShell(currentInfo);
+      if (!process.stdin.isTTY) renderShell(currentInfo);
+      else refreshUi();
     });
     // Optional query argument for testing/smoke verification
     if (args[0] === 'search' && args[1]) {
@@ -476,7 +478,8 @@ async function main(): Promise<number> {
         hitCount: res.hits.length,
         firstHit: firstLabel,
       };
-      renderShell(currentInfo);
+      if (!process.stdin.isTTY) renderShell(currentInfo);
+      else refreshUi();
     }
     // TUI state: route, focused panel, and command palette.
     const uiState: { route: Route; focus: Focus; tier: LayoutTier; paletteOpen: boolean } = {
@@ -543,119 +546,129 @@ async function main(): Promise<number> {
       process.stdin.setRawMode?.(true);
       process.stdin.resume();
       process.stdin.setEncoding('utf8');
-      const onKey = (chunk: string): void => {
-        // Palette filtering mode
-        if (uiState.paletteOpen) {
-          if (chunk === '\u0003' || chunk === '\u001b') {
-            palette.close();
-            uiState.paletteOpen = false;
-            refreshUi();
-            return;
-          }
-          if (chunk === '\r' || chunk === '\n') {
-            const cmd = palette.execute();
-            uiState.paletteOpen = false;
-            if (cmd) void cmd.action();
-            refreshUi();
-            return;
-          }
-          if (chunk === '\u001b[A' || chunk === 'k') {
-            palette.prev();
-            refreshUi();
-            return;
-          }
-          if (chunk === '\u001b[B' || chunk === 'j') {
-            palette.next();
-            refreshUi();
-            return;
-          }
-          if (chunk === '\u007f' || chunk === '\b') {
-            const f = palette.getFilter();
-            palette.setFilter(f.slice(0, -1));
-            refreshUi();
-            return;
-          }
-          if (chunk.length === 1 && chunk >= ' ' && chunk <= '~') {
-            palette.setFilter(palette.getFilter() + chunk);
-            refreshUi();
-            return;
-          }
-          return;
-        }
-        if (chunk === '?' || chunk === ':') {
-          palette.open();
-          uiState.paletteOpen = true;
-          refreshUi();
-          return;
-        }
-        if (chunk === ' ') {
-          const state = currentInfo.playback?.state ?? 'idle';
-          if (state === 'playing') {
-            void playback.pause();
-          } else {
-            void playback.play();
-          }
-          return;
-        }
-        if (chunk === '/') {
-          setRoute('search');
-          return;
-        }
-        if (chunk === '\u001b') {
-          setRoute('home');
-          return;
-        }
-        if (chunk === '\t') {
-          // Only cycle between panels visible in the current layout tier.
-          const order: Focus[] =
-            uiState.tier === 'wide'
-              ? ['main', 'sidebar', 'context']
-              : uiState.tier === 'medium'
-                ? ['main', 'sidebar']
-                : ['main'];
-          const idx = order.indexOf(uiState.focus);
-          if (idx >= 0) {
-            setFocus(order[(idx + 1) % order.length]);
-          } else {
-            setFocus(order[0]!);
-          }
-          return;
-        }
-        if (chunk === 'v' || chunk === 'V') {
-          const next = visualizer.cycleMode();
-          currentInfo.visualizer = { mode: next, fps: visualizer.getCurrentFps() };
-          refreshUi();
-          return;
-        }
-        if (chunk === 'l') {
-          setRoute('lyrics');
-          return;
-        }
-        if (chunk === 'L') {
-          const uri = currentInfo.playback?.track?.uri ?? 'spotify:track:sample';
-          lyrics
-            .getLyrics(uri)
-            .then((doc) => {
-              if (currentInfo.playback?.track?.uri !== uri) return;
-              currentInfo.lyrics = { kind: doc.kind, lineCount: doc.lines.length };
+      // Promise resolved when quit keypress received; keeps TUI alive.
+      const inputClosed = new Promise<void>((resolve) => {
+        const onKey = (chunk: string): void => {
+          // Palette filtering mode
+          if (uiState.paletteOpen) {
+            if (chunk === '\u0003' || chunk === '\u001b') {
+              palette.close();
+              uiState.paletteOpen = false;
               refreshUi();
-            })
-            .catch(() => {
-              // Ignore lyrics retrieval failure in interactive mode
-            });
-          return;
-        }
-        if (chunk === 'q' || chunk === 'Q' || chunk === '\u0003') {
-          process.stdout.removeListener('resize', onResize);
-          process.stdin.removeListener('data', onKey);
-          cleanupTty();
-          return;
-        }
-      };
-      process.stdin.on('data', onKey);
+              return;
+            }
+            if (chunk === '\r' || chunk === '\n') {
+              const cmd = palette.execute();
+              uiState.paletteOpen = false;
+              if (cmd) void cmd.action();
+              refreshUi();
+              return;
+            }
+            if (chunk === '\u001b[A' || chunk === 'k') {
+              palette.prev();
+              refreshUi();
+              return;
+            }
+            if (chunk === '\u001b[B' || chunk === 'j') {
+              palette.next();
+              refreshUi();
+              return;
+            }
+            if (chunk === '\u007f' || chunk === '\b') {
+              const f = palette.getFilter();
+              palette.setFilter(f.slice(0, -1));
+              refreshUi();
+              return;
+            }
+            if (chunk.length === 1 && chunk >= ' ' && chunk <= '~') {
+              palette.setFilter(palette.getFilter() + chunk);
+              refreshUi();
+              return;
+            }
+            return;
+          }
+          if (chunk === '?' || chunk === ':') {
+            palette.open();
+            uiState.paletteOpen = true;
+            refreshUi();
+            return;
+          }
+          if (chunk === ' ') {
+            const state = currentInfo.playback?.state ?? 'idle';
+            if (state === 'playing') {
+              void playback.pause();
+            } else {
+              void playback.play();
+            }
+            return;
+          }
+          if (chunk === '/') {
+            setRoute('search');
+            return;
+          }
+          if (chunk === '\u001b') {
+            setRoute('home');
+            return;
+          }
+          if (chunk === '\t') {
+            // Only cycle between panels visible in the current layout tier.
+            const order: Focus[] =
+              uiState.tier === 'wide'
+                ? ['main', 'sidebar', 'context']
+                : uiState.tier === 'medium'
+                  ? ['main', 'sidebar']
+                  : ['main'];
+            const idx = order.indexOf(uiState.focus);
+            if (idx >= 0) {
+              setFocus(order[(idx + 1) % order.length]!);
+            } else {
+              setFocus(order[0]!);
+            }
+            return;
+          }
+          if (chunk === 'v' || chunk === 'V') {
+            const next = visualizer.cycleMode();
+            currentInfo.visualizer = { mode: next, fps: visualizer.getCurrentFps() };
+            refreshUi();
+            return;
+          }
+          if (chunk === 'l') {
+            setRoute('lyrics');
+            return;
+          }
+          if (chunk === 'L') {
+            const uri = currentInfo.playback?.track?.uri ?? 'spotify:track:sample';
+            lyrics
+              .getLyrics(uri)
+              .then((doc) => {
+                if (currentInfo.playback?.track?.uri !== uri) return;
+                currentInfo.lyrics = { kind: doc.kind, lineCount: doc.lines.length };
+                refreshUi();
+              })
+              .catch(() => {
+                // Ignore lyrics retrieval failure in interactive mode
+              });
+            return;
+          }
+          if (chunk === 'q' || chunk === 'Q' || chunk === '\u0003') {
+            process.stdout.removeListener('resize', onResize);
+            process.stdin.removeListener('data', onKey);
+            process.stdin.pause();
+            cleanupTty();
+            resolve();
+            return;
+          }
+        };
+        process.stdin.on('data', onKey);
+      });
+      // Initial responsive render before any keypress.
+      refreshUi();
+      await inputClosed;
+    } else {
+      // Non-TTY (smoke test): render the static shell once and exit.
+      renderShell(currentInfo);
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
-
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
     searchClient.close();
     cache.close();
     playback.close();
