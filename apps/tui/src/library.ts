@@ -59,19 +59,43 @@ export class LibraryManager {
   }
 
   async save(type: 'track' | 'album', id: string): Promise<boolean> {
-    const ok = await this.webApi.saveItem(type, id);
+    const uri = type === 'track' ? `spotify:track:${id}` : `spotify:album:${id}`;
+    const ok = await this.webApi.saveUris([uri]);
     if (ok) {
       const collection: LibraryCollectionT = type === 'track' ? 'saved_tracks' : 'saved_albums';
       this.cache.invalidateQueryPrefix(this.accountId, this.makePrefix(collection));
+      this.cache.invalidateQuery(this.accountId, `membership:v1:${uri}`);
     }
     return ok;
   }
 
   async remove(type: 'track' | 'album', id: string): Promise<boolean> {
-    const ok = await this.webApi.removeItem(type, id);
+    const uri = type === 'track' ? `spotify:track:${id}` : `spotify:album:${id}`;
+    const ok = await this.webApi.removeUris([uri]);
     if (ok) {
       const collection: LibraryCollectionT = type === 'track' ? 'saved_tracks' : 'saved_albums';
       this.cache.invalidateQueryPrefix(this.accountId, this.makePrefix(collection));
+      this.cache.invalidateQuery(this.accountId, `membership:v1:${uri}`);
+    }
+    return ok;
+  }
+
+  async savePlaylist(id: string): Promise<boolean> {
+    const uri = `spotify:playlist:${id}`;
+    const ok = await this.webApi.saveUris([uri]);
+    if (ok) {
+      this.cache.invalidateQueryPrefix(this.accountId, this.makePrefix('playlists'));
+      this.cache.invalidateQuery(this.accountId, `membership:v1:${uri}`);
+    }
+    return ok;
+  }
+
+  async removePlaylist(id: string): Promise<boolean> {
+    const uri = `spotify:playlist:${id}`;
+    const ok = await this.webApi.removeUris([uri]);
+    if (ok) {
+      this.cache.invalidateQueryPrefix(this.accountId, this.makePrefix('playlists'));
+      this.cache.invalidateQuery(this.accountId, `membership:v1:${uri}`);
     }
     return ok;
   }

@@ -125,10 +125,10 @@ describe('LibraryManager', () => {
           hasMore: false,
         };
       },
-      async saveItem(): Promise<boolean> {
+      async saveUris(): Promise<boolean> {
         return true;
       },
-      async removeItem(): Promise<boolean> {
+      async removeUris(): Promise<boolean> {
         return true;
       },
     } as unknown as WebApiClient;
