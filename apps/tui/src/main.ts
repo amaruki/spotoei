@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type ChildProcess } from 'node:child_process';
 import { locatePlayer, startPlayer, stopPlayer } from './player';
 import { createAuthClient } from './auth';
 import { createPlaybackClient } from './playback';
@@ -18,13 +18,44 @@ export function sanitize(s: string): string {
   return s.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '').replace(/[\r\n]/g, ' ');
 }
 
+// Compute the visual column width of a string for terminal layout.
+// CJK / full-width / emoji codepoints occupy two columns; everything
+// else is a single column. Stays inline to avoid a new dependency.
+export function displayWidth(s: string): number {
+  let w = 0;
+  for (const ch of s) {
+    const cp = ch.codePointAt(0) ?? 0;
+    w += isWide(cp) ? 2 : 1;
+  }
+  return w;
+}
+
+function isWide(cp: number): boolean {
+  return (
+    (cp >= 0x1100 && cp <= 0x115f) ||
+    cp === 0x2329 ||
+    cp === 0x232a ||
+    (cp >= 0x2e80 && cp <= 0x303e) ||
+    (cp >= 0x3041 && cp <= 0x33ff) ||
+    (cp >= 0x3400 && cp <= 0x4dbf) ||
+    (cp >= 0x4e00 && cp <= 0x9fff) ||
+    (cp >= 0xa000 && cp <= 0xa4cf) ||
+    (cp >= 0xac00 && cp <= 0xd7a3) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe30 && cp <= 0xfe4f) ||
+    (cp >= 0xff00 && cp <= 0xff60) ||
+    (cp >= 0xffe0 && cp <= 0xffe6) ||
+    (cp >= 0x20000 && cp <= 0x2fffd) ||
+    (cp >= 0x30000 && cp <= 0x3fffd)
+  );
+}
+
 function padBox(content: string, innerWidth = 40): string {
   // eslint-disable-next-line no-control-regex
   const visible = content.replace(/\u001b\[[0-9;]*m/g, '');
-  const pad = Math.max(0, innerWidth - visible.length);
+  const pad = Math.max(0, innerWidth - displayWidth(visible));
   return `│ ${content}${' '.repeat(pad)} │\n`;
 }
-
 function line(label: string, value: string): string {
   return padBox(`  ${label.padEnd(8)}${sanitize(value)}`);
 }
@@ -215,20 +246,29 @@ function renderResponsive(
       focused: focus === 'sidebar',
     });
     mainLines = drawBox(
-      [
-        ` route:    ${routeLabel(route)}`,
-        ` player:   ${info.playerVersion}`,
-        ` proto:    v${String(info.protocol)}`,
-        ` caps:     ${info.capabilities.join(', ')}`,
-        ` auth:     ${info.auth?.state ?? 'pending'}`,
-        ` playback: ${info.playback?.state ?? 'idle'} [vol:${Math.round((info.playback?.volume ?? 0) * 100)}%]`,
-      ],
+      route === 'search'
+        ? [
+            ` route:    search`,
+            ` query:    ${info.search?.query ? sanitize(info.search.query.slice(0, 28)) : '(empty)'}`,
+            ` hits:     ${info.search?.hitCount ?? 0}`,
+            ` top:      ${info.search?.firstHit ? sanitize(info.search.firstHit.slice(0, 28)) : '(none)'}`,
+            ` player:   ${info.playerVersion}`,
+            ` auth:     ${info.auth?.state ?? 'pending'}`,
+          ]
+        : [
+            ` route:    ${routeLabel(route)}`,
+            ` player:   ${info.playerVersion}`,
+            ` proto:    v${String(info.protocol)}`,
+            ` caps:     ${info.capabilities.join(', ')}`,
+            ` auth:     ${info.auth?.state ?? 'pending'}`,
+            ` playback: ${info.playback?.state ?? 'idle'} [vol:${Math.round((info.playback?.volume ?? 0) * 100)}%]`,
+          ],
       { width: mainWidth, height: 8, title: 'main', focused: focus === 'main' },
     );
     contextLines = drawBox(
       [
-        ` track:   ${info.playback?.track?.name ?? '(no track)'}`,
-        ` artist:  ${info.playback?.track?.artists.join(', ') ?? '-'}`,
+        ` track:   ${info.playback?.track?.name ? sanitize(info.playback.track.name) : '(no track)'}`,
+        ` artist:  ${info.playback?.track?.artists ? sanitize(info.playback.track.artists.join(', ')) : '-'}`,
         ` lyrics:  ${info.lyrics ? `${info.lyrics.kind} (${info.lyrics.lineCount} lines)` : '(idle)'}`,
         '',
         ` commands: ${palette.size()}`,
@@ -248,26 +288,41 @@ function renderResponsive(
       focused: focus === 'sidebar',
     });
     mainLines = drawBox(
-      [
-        ` route:    ${routeLabel(route)}`,
-        ` player:   ${info.playerVersion}`,
-        ` auth:     ${info.auth?.state ?? 'pending'}`,
-        ` playback: ${info.playback?.state ?? 'idle'} [vol:${Math.round((info.playback?.volume ?? 0) * 100)}%]`,
-        ` lyrics:   ${info.lyrics ? `${info.lyrics.kind} (${info.lyrics.lineCount} lines)` : '(idle)'}`,
-      ],
+      route === 'search'
+        ? [
+            ` route:    search`,
+            ` query:    ${info.search?.query ? sanitize(info.search.query.slice(0, 24)) : '(empty)'}`,
+            ` hits:     ${info.search?.hitCount ?? 0}`,
+            ` player:   ${info.playerVersion}`,
+            ` auth:     ${info.auth?.state ?? 'pending'}`,
+          ]
+        : [
+            ` route:    ${routeLabel(route)}`,
+            ` player:   ${info.playerVersion}`,
+            ` auth:     ${info.auth?.state ?? 'pending'}`,
+            ` playback: ${info.playback?.state ?? 'idle'} [vol:${Math.round((info.playback?.volume ?? 0) * 100)}%]`,
+            ` lyrics:   ${info.lyrics ? `${info.lyrics.kind} (${info.lyrics.lineCount} lines)` : '(idle)'}`,
+          ],
       { width: mainWidth, height: 8, title: 'main', focused: focus === 'main' },
     );
     contextLines = [];
   } else {
     sidebarLines = [];
     mainLines = drawBox(
-      [
-        ` route:    ${routeLabel(route)}`,
-        ` player:   ${info.playerVersion}`,
-        ` auth:     ${info.auth?.state ?? 'pending'}`,
-        ` playback: ${info.playback?.state ?? 'idle'}`,
-        ` lyrics:   ${info.lyrics ? `${info.lyrics.kind} (${info.lyrics.lineCount} lines)` : '(idle)'}`,
-      ],
+      route === 'search'
+        ? [
+            ` route:    search`,
+            ` query:    ${info.search?.query ? sanitize(info.search.query.slice(0, 20)) : '(empty)'}`,
+            ` hits:     ${info.search?.hitCount ?? 0}`,
+            ` top:      ${info.search?.firstHit ? sanitize(info.search.firstHit.slice(0, 20)) : '(none)'}`,
+          ]
+        : [
+            ` route:    ${routeLabel(route)}`,
+            ` player:   ${info.playerVersion}`,
+            ` auth:     ${info.auth?.state ?? 'pending'}`,
+            ` playback: ${info.playback?.state ?? 'idle'}`,
+            ` lyrics:   ${info.lyrics ? `${info.lyrics.kind} (${info.lyrics.lineCount} lines)` : '(idle)'}`,
+          ],
       { width: width, height: 7, title: 'spotoei', focused: focus === 'main' },
     );
     contextLines = [];
@@ -345,6 +400,7 @@ function buildPalette(
     togglePlay: () => Promise<void>;
     cycleViz: () => void;
     getLyrics: () => Promise<void>;
+    login: () => Promise<void>;
     quit: () => void;
   },
 ): CommandPalette {
@@ -413,6 +469,13 @@ function buildPalette(
     keywords: ['words'],
   });
   p.register({
+    id: 'act.auth.login',
+    label: 'Login with Spotify',
+    shortcut: 'A',
+    action: actions.login,
+    keywords: ['auth', 'signin', 'spotify'],
+  });
+  p.register({
     id: 'act.quit',
     label: 'Quit SPOTOEI',
     shortcut: 'q',
@@ -441,7 +504,10 @@ async function main(): Promise<number> {
     process.stderr.write(`spotoei: ${e instanceof Error ? e.message : String(e)}\n`);
     return 1;
   }
-  let child: ReturnType<typeof startPlayer> extends Promise<{ child: infer C }> ? C : never;
+
+  let child: ChildProcess | null = null;
+  let palette: CommandPalette = new CommandPalette();
+
   const requestQuit = (() => {
     let r: (() => void) | null = null;
     return {
@@ -453,32 +519,41 @@ async function main(): Promise<number> {
       },
     };
   })();
+
   const quit = async (): Promise<void> => {
     cleanupTty();
     if (child) {
       try {
-        child.kill('SIGTERM');
+        await stopPlayer(child);
       } catch {
-        // ignore
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          // ignore
+        }
       }
     }
     requestQuit.trigger();
   };
+
+  // Register signal and exit handlers before any async work or sidecar
+  // spawning so a quick SIGINT never leaves an unmanaged zombie process.
+  process.on('SIGINT', () => {
+    void quit();
+  });
+  process.on('SIGTERM', () => {
+    void quit();
+  });
+  process.on('SIGHUP', () => {
+    void quit();
+  });
+  process.on('exit', cleanupTty);
+
   try {
     const handshake = await startPlayer(playerBin);
     child = handshake.child;
     const auth = createAuthClient({ child });
     const playback = createPlaybackClient({ child });
-    process.on('SIGINT', () => {
-      void quit();
-    });
-    process.on('SIGTERM', () => {
-      void quit();
-    });
-    process.on('SIGHUP', () => {
-      void quit();
-    });
-    process.on('exit', cleanupTty);
     const initialAuth = await auth.status();
     const initialPlayback = await playback.status();
 
@@ -494,7 +569,7 @@ async function main(): Promise<number> {
       cache,
       accountId: initialAuth.accountId ?? 'anonymous',
     });
-    void new LibraryManager({
+    const libraryManager = new LibraryManager({
       webApi,
       cache,
       accountId: initialAuth.accountId ?? 'anonymous',
@@ -609,6 +684,11 @@ async function main(): Promise<number> {
         uiState.searchBuffer = '';
       }
       uiState.route = next;
+      if (next === 'library') {
+        void libraryManager.refresh().catch(() => {
+          // ignore background refresh error
+        });
+      }
       refreshUi();
     };
     const setFocus = (next: Focus): void => {
@@ -745,8 +825,15 @@ async function main(): Promise<number> {
       });
       onKey = (chunk: string): void => {
         // Palette filtering mode
+
         if (uiState.paletteOpen) {
-          if (chunk === '\u0003' || chunk === '\u001b') {
+          if (chunk === '\u0003') {
+            palette.close();
+            uiState.paletteOpen = false;
+            void quit();
+            return;
+          }
+          if (chunk === '\u001b') {
             palette.close();
             uiState.paletteOpen = false;
             refreshUi();
@@ -779,8 +866,15 @@ async function main(): Promise<number> {
             refreshUi();
             return;
           }
-          if (chunk.length === 1 && chunk >= ' ' && chunk <= '~') {
-            palette.setFilter(palette.getFilter() + chunk);
+          // Handle pasted or multi-character ASCII input
+          let append = '';
+          for (const ch of chunk) {
+            if (ch >= ' ' && ch <= '~') {
+              append += ch;
+            }
+          }
+          if (append.length > 0) {
+            palette.setFilter(palette.getFilter() + append);
             refreshUi();
             return;
           }
