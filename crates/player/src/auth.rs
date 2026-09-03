@@ -43,7 +43,7 @@ pub enum AuthError {
     NotImplemented(&'static str),
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum AuthState {
     Unauthenticated,
     Authenticating,
@@ -307,6 +307,12 @@ impl AuthManager {
             }
         };
         self.emit(
+            "auth.changed",
+            serde_json::to_value(&snap)
+                .map_err(|e| AuthError::OAuth(format!("snapshot encode: {e}")))?,
+        )
+        .await;
+        self.emit(
             "auth.completed",
             json!({
                 "accountId": account_id,
@@ -525,24 +531,31 @@ impl AuthManager {
             .await?;
         let account_id = at.account_id.clone();
         let scopes = at.scopes.clone();
-        let mut s = self.state.lock().await;
-        s.current = Some(at);
-        s.state = AuthState::Authenticated;
-        s.pkce = None;
-        s.last_auth_url = None;
-        if matches!(s.storage, Storage::Keyring) {
-            if let Err(e) = self
-                .save_to_keyring(s.current.as_ref().expect("just set"))
-                .await
-            {
-                warn!(error = %e, "keyring save on complete failed");
+        let snap = {
+            let mut s = self.state.lock().await;
+            s.current = Some(at);
+            s.state = AuthState::Authenticated;
+            s.pkce = None;
+            s.last_auth_url = None;
+            if matches!(s.storage, Storage::Keyring) {
+                if let Err(e) = self
+                    .save_to_keyring(s.current.as_ref().expect("just set"))
+                    .await
+                {
+                    warn!(error = %e, "keyring save on complete failed");
+                }
             }
-        }
-        drop(s);
-        // The `auth.completed` event carries a slim { accountId, scopes }
-        // payload, not the full AuthStatus snapshot. The TUI consumes
-        // `auth.changed` for status updates; this event signals that the
-        // PKCE handshake has finished.
+            self.snapshot_locked(&s, None)
+        };
+        // TUI relies on `auth.changed` to update the auth panel status; the
+        // slim `auth.completed` payload alone leaves the panel frozen on
+        // "authenticating" because the TUI's only handler matches `auth.changed`.
+        self.emit(
+            "auth.changed",
+            serde_json::to_value(&snap)
+                .map_err(|e| AuthError::OAuth(format!("snapshot encode: {e}")))?,
+        )
+        .await;
         self.emit(
             "auth.completed",
             json!({

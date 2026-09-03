@@ -241,6 +241,8 @@ async fn handle(
                     "lyrics.plain",
                     "visualizer.spectrum",
                     "visualizer.waveform",
+                    "queue.mutation",
+                    "auth.single-token-session",
                 ],
             });
             ok(&cmd.id, data)
