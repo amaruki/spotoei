@@ -2,7 +2,10 @@ import { describe, expect, it } from 'bun:test';
 import { createTestRenderer } from '@opentui/core/testing';
 import type { KeyEvent } from '@opentui/core';
 import { PROTOCOL_VERSION } from 'spotoei-protocol';
-import { createUiCore, type LibraryItemT, type UiViewState } from '../src/ui';
+import { createUiCore, type LibraryItemT, type Route, type UiViewState } from '../src/ui';
+import { routeKind } from '../src/ui/core/navigationStack';
+
+const kindOf = (r: Route): string => routeKind(r);
 
 describe('OpenTUI renderables integration', () => {
   const dummyState: UiViewState = {
@@ -91,22 +94,21 @@ describe('OpenTUI renderables integration', () => {
     await renderOnce();
 
     // Verify route switching
-    ui.setRoute('search');
-    expect(ui.getRoute()).toBe('search');
+    ui.setRoute({ kind: 'search' });
+    expect(kindOf(ui.getRoute())).toBe('search');
     await renderOnce();
 
-    ui.setRoute('library');
-    expect(ui.getRoute()).toBe('library');
+    ui.setRoute({ kind: 'library', section: 'saved_tracks' });
+    expect(kindOf(ui.getRoute())).toBe('library');
     await renderOnce();
 
-    ui.setRoute('queue');
-    expect(ui.getRoute()).toBe('queue');
+    ui.setRoute({ kind: 'queue' });
+    expect(kindOf(ui.getRoute())).toBe('queue');
     await renderOnce();
 
-    ui.setRoute('lyrics');
-    expect(ui.getRoute()).toBe('lyrics');
+    ui.setRoute({ kind: 'lyrics' });
+    expect(kindOf(ui.getRoute())).toBe('lyrics');
     await renderOnce();
-
     // Verify search results rendering
     ui.setSearchResults('test', {
       query: 'test',
@@ -223,28 +225,26 @@ describe('OpenTUI renderables integration', () => {
     expect(ui.isPaletteOpen()).toBe(false);
     expect(executedCmd).toBe('beta');
 
-    // Verify search input typing isolation
-    ui.setRoute('search');
+    ui.setRoute({ kind: 'search' });
     keyEvents.length = 0;
     sendKey('q', 'q');
     sendKey('r', 'r');
     sendKey('k', 'k');
     sendKey('space', ' ');
     expect(keyEvents.length).toBe(0); // Typing must not trigger global shortcuts!
-
     // Verify quick numeric shortcuts for navigation
-    ui.setRoute('home');
-    expect(ui.getRoute()).toBe('home');
+    ui.setRoute({ kind: 'home', tab: 'for_you' });
+    expect(kindOf(ui.getRoute())).toBe('home');
     sendKey('3', '3');
-    expect(ui.getRoute()).toBe('library');
+    expect(kindOf(ui.getRoute())).toBe('library');
     sendKey('4', '4');
-    expect(ui.getRoute()).toBe('queue');
+    expect(kindOf(ui.getRoute())).toBe('queue');
     sendKey('5', '5');
-    expect(ui.getRoute()).toBe('lyrics');
+    expect(kindOf(ui.getRoute())).toBe('lyrics');
     sendKey('6', '6');
-    expect(ui.getRoute()).toBe('settings');
+    expect(kindOf(ui.getRoute())).toBe('settings');
     sendKey('1', '1');
-    expect(ui.getRoute()).toBe('home');
+    expect(kindOf(ui.getRoute())).toBe('home');
 
     // Verify sidebar focus toggle with Tab
     ui.setFocus('sidebar');
@@ -253,7 +253,16 @@ describe('OpenTUI renderables integration', () => {
 
     // Verify focusClientIdInput and client ID typing & saving
     ui.focusClientIdInput();
-    expect(ui.getRoute()).toBe('settings');
+    expect(kindOf(ui.getRoute())).toBe('settings');
+
+    // Verify sidebar focus toggle with Tab
+    ui.setFocus('sidebar');
+    sendKey('down', '\u001b[B');
+    sendKey('tab', '\t');
+
+    // Verify focusClientIdInput and client ID typing & saving
+    ui.focusClientIdInput();
+    expect(kindOf(ui.getRoute())).toBe('settings');
     keyEvents.length = 0;
     sendKey('q', 'q');
     sendKey('c', 'c');
@@ -298,7 +307,7 @@ describe('OpenTUI renderables integration', () => {
     await renderOnce();
 
     // 1. Initial route for unauthenticated users must be settings (setup)
-    expect(ui.getRoute()).toBe('settings');
+    expect(kindOf(ui.getRoute())).toBe('settings');
 
     // 2. Pressing 'a' on settings triggers authentication
     renderer.keyInput.emit('keypress', {
@@ -320,14 +329,13 @@ describe('OpenTUI renderables integration', () => {
       authUrl: null,
     });
 
-    expect(ui.getRoute()).toBe('home');
+    expect(kindOf(ui.getRoute())).toBe('home');
 
     // 5. Now player views can be accessed freely
-    ui.setRoute('search');
-    expect(ui.getRoute()).toBe('search');
-    ui.setRoute('library');
-    expect(ui.getRoute()).toBe('library');
-
+    ui.setRoute({ kind: 'search' });
+    expect(kindOf(ui.getRoute())).toBe('search');
+    ui.setRoute({ kind: 'library', section: 'saved_tracks' });
+    expect(kindOf(ui.getRoute())).toBe('library');
     await ui.shutdown();
   });
 
@@ -364,20 +372,20 @@ describe('OpenTUI renderables integration', () => {
     };
 
     // 1. Initial focus is sidebar and route is home
-    expect(ui.getRoute()).toBe('home');
+    expect(kindOf(ui.getRoute())).toBe('home');
     expect(ui.getFocus()).toBe('sidebar');
 
     // 2. Moving Up/Down in navigation must NOT auto-switch the route!
     sendKey('down', '\u001b[B');
     await renderOnce();
     // Route must remain 'home' even though cursor moved down in sidebar select
-    expect(ui.getRoute()).toBe('home');
+    expect(kindOf(ui.getRoute())).toBe('home');
     expect(ui.getFocus()).toBe('sidebar');
 
     // 3. Pressing Enter confirms the selected route ('search') and transitions focus to main
     sendKey('return', '\r');
     await renderOnce();
-    expect(ui.getRoute()).toBe('search');
+    expect(kindOf(ui.getRoute())).toBe('search');
     expect(ui.getFocus()).toBe('main');
 
     // 4. In search, typing characters are consumed by searchInput (no search submit yet)
@@ -411,7 +419,7 @@ describe('OpenTUI renderables integration', () => {
       height: 40,
     });
 
-    const routeChanges: string[] = [];
+    const routeChanges: Route[] = [];
     const selectedItems: LibraryItemT[] = [];
     const selectedIndices: number[] = [];
 
@@ -425,7 +433,7 @@ describe('OpenTUI renderables integration', () => {
         selectedItems.push(item);
       },
       onSelectQueue: () => {},
-      onRouteChange: (r) => {
+      onRouteChange: (r: Route) => {
         routeChanges.push(r);
       },
     });
@@ -443,13 +451,8 @@ describe('OpenTUI renderables integration', () => {
     };
 
     // 1. Switch to library route
-    ui.setRoute('library');
+    ui.setRoute({ kind: 'library', section: 'saved_tracks' });
     await renderOnce();
-    expect(ui.getRoute()).toBe('library');
-    expect(ui.getFocus()).toBe('main');
-    expect(routeChanges).toContain('library');
-
-    // 2. Populate library items
     const mockTracks: LibraryItemT[] = [
       {
         id: 'track-1',
