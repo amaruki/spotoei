@@ -31,6 +31,8 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>;
 }
 
+const MAX_PENDING = 32;
+
 export class VisualizerController {
   private child: ChildProcess;
   private timeoutMs: number;
@@ -43,6 +45,7 @@ export class VisualizerController {
   private listeners: Set<VisualizerFrameListener> = new Set();
   private pending = new Map<string, PendingRequest>();
   private lineListener: ((line: string) => void) | null = null;
+  private running = false;
 
   // Adaptive FPS state
   private frameLatencies: number[] = [];
@@ -61,6 +64,8 @@ export class VisualizerController {
   }
 
   start(): void {
+    if (this.running) return;
+    this.running = true;
     const rl = getSharedReadline(this.child);
 
     this.lineListener = (line: string): void => {
@@ -88,12 +93,17 @@ export class VisualizerController {
       if (msg.type === 'event') {
         if (!this.enabled) return;
 
-        const now = performance.now();
-        if (this.lastFrameTimestamp > 0) {
-          const frameTime = now - this.lastFrameTimestamp;
-          this.recordFrameLatency(frameTime);
+        // Adaptive FPS measurement must only see visualizer frames;
+        // otherwise unrelated events (auth, playback, lyrics) skew
+        // the latency history and trigger spurious throttling.
+        if (msg.event === 'visualizer.spectrum' || msg.event === 'visualizer.waveform') {
+          const now = performance.now();
+          if (this.lastFrameTimestamp > 0) {
+            const frameTime = now - this.lastFrameTimestamp;
+            this.recordFrameLatency(frameTime);
+          }
+          this.lastFrameTimestamp = now;
         }
-        this.lastFrameTimestamp = now;
 
         if (msg.event === 'visualizer.spectrum') {
           const result = SpectrumFrame.safeParse(msg.data);
@@ -102,7 +112,7 @@ export class VisualizerController {
               try {
                 l(this.mode, result.data.bands);
               } catch {
-                // ignore listener errors
+                // ignore listener exceptions
               }
             }
           }
@@ -113,7 +123,7 @@ export class VisualizerController {
               try {
                 l(this.mode, result.data.samples);
               } catch {
-                // ignore listener errors
+                // ignore listener exceptions
               }
             }
           }
@@ -128,6 +138,7 @@ export class VisualizerController {
   }
 
   stop(): void {
+    this.running = false;
     if (this.lineListener) {
       const rl = getSharedReadline(this.child);
       rl.off('line', this.lineListener);
@@ -148,33 +159,35 @@ export class VisualizerController {
     };
   }
 
-  getMode(): VisualizerModeT {
-    return this.mode;
+  async setMode(mode: VisualizerModeT): Promise<void> {
+    this.mode = mode;
+    this.enabled = mode !== 'off';
+    await this.syncConfig();
   }
 
-  setMode(mode: VisualizerModeT): void {
-    if (this.mode !== mode) {
-      this.mode = mode;
-      this.syncConfig().catch(() => {});
-    }
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    this.syncConfig().catch(() => {});
   }
 
   cycleMode(): VisualizerModeT {
     const modes: VisualizerModeT[] = ['spectrum', 'winamp', 'oscilloscope'];
     const nextIdx = (modes.indexOf(this.mode) + 1) % modes.length;
-    this.setMode(modes[nextIdx]);
-    return this.mode;
+    const next = modes[nextIdx] ?? 'spectrum';
+    this.setMode(next).catch(() => {});
+    return next;
   }
 
-  setEnabled(enabled: boolean): void {
-    if (this.enabled !== enabled) {
-      this.enabled = enabled;
-      this.syncConfig().catch(() => {});
-    }
+  getMode(): VisualizerModeT {
+    return this.mode;
   }
 
   getCurrentFps(): number {
     return this.currentFps;
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
   }
 
   private recordFrameLatency(ms: number): void {
@@ -206,7 +219,7 @@ export class VisualizerController {
       }
 
       if (this.fastFrameCount >= 60) {
-        this.currentFps = 60;
+        this.currentFps = this.targetFps;
         this.fastFrameCount = 0;
         this.slowFrameCount = 0;
         this.syncConfig().catch(() => {});
@@ -214,28 +227,42 @@ export class VisualizerController {
     }
   }
 
-  private sendCommand<T>(cmd: CommandT): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(cmd.id);
-        reject(new Error(`timeout waiting for response to ${cmd.command}`));
-      }, this.timeoutMs);
+  private async sendCommand<T>(cmd: CommandT): Promise<T> {
+    if (this.pending.size >= MAX_PENDING) {
+      throw new Error(`visualizer pending queue full (${MAX_PENDING})`);
+    }
 
-      this.pending.set(cmd.id, {
-        resolve: (v) => resolve(v as T),
-        reject,
-        timer,
-      });
+    const { promise, resolve, reject } = Promise.withResolvers<T>();
 
-      const line = JSON.stringify(cmd) + '\n';
-      this.child.stdin?.write(line, (err) => {
-        if (err) {
-          this.pending.delete(cmd.id);
-          clearTimeout(timer);
-          reject(err);
-        }
-      });
+    const timer = setTimeout(() => {
+      this.pending.delete(cmd.id);
+      reject(new Error(`timeout waiting for response to ${cmd.command}`));
+    }, this.timeoutMs);
+
+    this.pending.set(cmd.id, {
+      resolve: (v) => resolve(v as T),
+      reject,
+      timer,
     });
+
+    const line = JSON.stringify(cmd) + '\n';
+
+    if (!this.child.stdin || !this.child.stdin.writable) {
+      clearTimeout(timer);
+      this.pending.delete(cmd.id);
+      reject(new Error('player stdin not writable'));
+      return promise;
+    }
+
+    await new Promise<void>((resolveWrite, rejectWrite) => {
+      this.child.stdin!.write(line, (err) => (err ? rejectWrite(err) : resolveWrite()));
+    }).catch((err: unknown) => {
+      clearTimeout(timer);
+      this.pending.delete(cmd.id);
+      reject(err instanceof Error ? err : new Error(String(err)));
+    });
+
+    return promise;
   }
 
   private async syncConfig(): Promise<void> {

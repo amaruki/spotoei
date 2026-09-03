@@ -25,12 +25,15 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>;
 }
 
+const MAX_PENDING = 32;
+
 export class LyricsClient {
   private child: ChildProcess;
   private timeoutMs: number;
   private listeners: Set<LyricsListener> = new Set();
   private pending = new Map<string, PendingRequest>();
   private lineListener: ((line: string) => void) | null = null;
+  private running = false;
 
   constructor(opts: LyricsClientOptions) {
     this.child = opts.child;
@@ -38,6 +41,8 @@ export class LyricsClient {
   }
 
   start(): void {
+    if (this.running) return;
+    this.running = true;
     const rl = getSharedReadline(this.child);
 
     this.lineListener = (line: string): void => {
@@ -87,6 +92,7 @@ export class LyricsClient {
   }
 
   close(): void {
+    this.running = false;
     if (this.lineListener) {
       const rl = getSharedReadline(this.child);
       rl.off('line', this.lineListener);
@@ -108,6 +114,9 @@ export class LyricsClient {
   }
 
   async getLyrics(trackUri: string): Promise<LyricsDocumentT> {
+    if (this.pending.size >= MAX_PENDING) {
+      throw new Error(`lyrics pending queue full (${MAX_PENDING})`);
+    }
     const id = crypto.randomUUID();
     const cmd = makeLyricsGet(id, trackUri);
     const line = JSON.stringify(cmd) + '\n';
@@ -128,20 +137,17 @@ export class LyricsClient {
       return promise;
     }
 
-    this.child.stdin.write(line, (err) => {
-      if (err) {
-        clearTimeout(timer);
-        this.pending.delete(id);
-        reject(err);
-      }
+    // Wait for the write to be drained to the OS pipe. A fast sidecar
+    // reply can race the readline and time out if we don't synchronize
+    // here. Errors reject so callers don't sit on a silent promise.
+    await new Promise<void>((resolveWrite, rejectWrite) => {
+      this.child.stdin!.write(line, (err) => (err ? rejectWrite(err) : resolveWrite()));
+    }).catch((err: unknown) => {
+      clearTimeout(timer);
+      this.pending.delete(id);
+      reject(err instanceof Error ? err : new Error(String(err)));
     });
 
     return promise;
   }
-}
-
-export function createLyricsClient(opts: LyricsClientOptions): LyricsClient {
-  const client = new LyricsClient(opts);
-  client.start();
-  return client;
 }
