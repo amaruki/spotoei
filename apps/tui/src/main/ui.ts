@@ -2,6 +2,7 @@ import type { CatalogTrackT } from 'spotoei-protocol';
 
 import { createUi, type Ui } from '../ui';
 import { routeKind } from '../ui/core/navigationStack';
+import { handleSearchHitSelect, routeForLibraryItem } from './entitySelect';
 import { contextActionCommands } from './paletteContextActions';
 import type { AppContext } from './types';
 export async function initUi(
@@ -76,27 +77,24 @@ export async function initUi(
         });
     },
     onSelectSearchHit: (hit) => {
-      if (hit.type === 'track') {
+      const opened = handleSearchHitSelect(hit, getUi(), (track) => {
         if (state.currentSearchHits.length > 0) {
           state.activePlaylistTracks = state.currentSearchHits
             .filter((h): h is { type: 'track'; track: CatalogTrackT } => h.type === 'track')
             .map((h) => h.track);
         }
-        void actions.playTrackOrContext({
-          trackUri: hit.track.uri,
-          title: hit.track.name,
-        });
+        void actions.playTrackOrContext({ trackUri: track.uri, title: track.name });
         void actions.updateQueueView();
         void actions.ensureAutoplayTracks();
-      } else if (hit.type === 'album') {
-        void actions.playTrackOrContext({ contextUri: hit.album.uri, title: hit.album.name });
-      } else if (hit.type === 'playlist') {
-        void actions.playTrackOrContext({ contextUri: hit.playlist.uri, title: hit.playlist.name });
-      } else if (hit.type === 'artist') {
-        void actions.playTrackOrContext({ contextUri: hit.artist.uri, title: hit.artist.name });
-      }
+      });
+      void opened;
     },
     onSelectLibraryItem: (item) => {
+      const route = routeForLibraryItem(item);
+      if (route) {
+        getUi()?.setRoute(route);
+        return;
+      }
       const isTrackLike = 'durationMs' in item;
       if (isTrackLike) {
         state.activePlaylistTracks = state.libraryItems.filter(
