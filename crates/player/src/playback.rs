@@ -286,6 +286,9 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
     pub async fn pause(&self) -> Result<PlaybackChangedPayload, PlaybackError> {
         let snap = {
             let mut inner = self.inner.lock().await;
+            if inner.track.is_none() {
+                return Err(PlaybackError);
+            }
             if inner.state == PlaybackState::Playing {
                 inner.revision = inner.revision.wrapping_add(1);
                 inner.state = PlaybackState::Paused;
@@ -322,9 +325,29 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
     pub async fn next(&self) -> Result<PlaybackChangedPayload, PlaybackError> {
         let snap = {
             let mut inner = self.inner.lock().await;
+            if inner.track.is_none() {
+                return Err(PlaybackError);
+            }
             inner.revision = inner.revision.wrapping_add(1);
-            if let Some(t) = inner.track.as_mut() {
-                t.uri = format!("{}#next", t.uri);
+            if let Some(ctx) = inner.context_uri.as_deref() {
+                let current_uri = inner
+                    .track
+                    .as_ref()
+                    .map(|t| t.uri.clone())
+                    .unwrap_or_default();
+                let tracks = self.engine.context_tracks(ctx);
+                if !tracks.is_empty() {
+                    let pos = tracks.iter().position(|t| t.uri == current_uri);
+                    let next_pos = match pos {
+                        Some(p) => (p + 1) % tracks.len(),
+                        None => 0,
+                    };
+                    if let Some(t) = tracks.get(next_pos) {
+                        if let Some(resolved) = self.engine.resolve_track(&t.uri) {
+                            inner.track = Some(resolved);
+                        }
+                    }
+                }
             }
             inner.position_ms = 0;
             inner.last_change_at = Instant::now();
@@ -338,9 +361,30 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
     pub async fn previous(&self) -> Result<PlaybackChangedPayload, PlaybackError> {
         let snap = {
             let mut inner = self.inner.lock().await;
+            if inner.track.is_none() {
+                return Err(PlaybackError);
+            }
             inner.revision = inner.revision.wrapping_add(1);
-            if let Some(t) = inner.track.as_mut() {
-                t.uri = format!("{}#prev", t.uri);
+            if let Some(ctx) = inner.context_uri.as_deref() {
+                let current_uri = inner
+                    .track
+                    .as_ref()
+                    .map(|t| t.uri.clone())
+                    .unwrap_or_default();
+                let tracks = self.engine.context_tracks(ctx);
+                if !tracks.is_empty() {
+                    let pos = tracks.iter().position(|t| t.uri == current_uri);
+                    let prev_pos = match pos {
+                        Some(0) => tracks.len() - 1,
+                        Some(p) => p - 1,
+                        None => tracks.len() - 1,
+                    };
+                    if let Some(t) = tracks.get(prev_pos) {
+                        if let Some(resolved) = self.engine.resolve_track(&t.uri) {
+                            inner.track = Some(resolved);
+                        }
+                    }
+                }
             }
             inner.position_ms = 0;
             inner.last_change_at = Instant::now();
@@ -444,32 +488,90 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
         inner.position_ms = new_pos;
         let reached_end = inner.duration_ms > 0 && new_pos >= inner.duration_ms;
         if reached_end {
-            // Track finished: roll to idle and advance to the next track in
-            // the active context, if any.
-            inner.state = PlaybackState::Idle;
-            inner.position_ms = inner.duration_ms;
-            let current_uri = inner
-                .track
-                .as_ref()
-                .map(|t| t.uri.clone())
-                .unwrap_or_default();
-            let next_track = inner.context_uri.as_deref().and_then(|ctx| {
-                self.engine
-                    .context_tracks(ctx)
-                    .into_iter()
-                    .find(|t| t.uri != current_uri)
-            });
-            if let Some(t) = next_track {
-                if let Some(resolved) = self.engine.resolve_track(&t.uri) {
-                    inner.track = Some(resolved);
+            // Honor repeat modes and autoplay rules when track finishes.
+            match inner.repeat {
+                RepeatMode::Track => {
                     inner.position_ms = 0;
+                    inner.last_change_at = Instant::now();
+                    inner.last_emitted_position_ms = 0;
+                    inner.revision = inner.revision.wrapping_add(1);
+                    let snap = self.snapshot_locked(&inner);
+                    drop(inner);
+                    self.emit_changed(&snap).await;
+                    return;
+                }
+                RepeatMode::Context => {
+                    let current_uri = inner
+                        .track
+                        .as_ref()
+                        .map(|t| t.uri.clone())
+                        .unwrap_or_default();
+                    let mut advanced = false;
+                    if let Some(ctx) = inner.context_uri.as_deref() {
+                        let tracks = self.engine.context_tracks(ctx);
+                        if !tracks.is_empty() {
+                            let pos = tracks.iter().position(|t| t.uri == current_uri);
+                            let next_pos = match pos {
+                                Some(p) => (p + 1) % tracks.len(),
+                                None => 0,
+                            };
+                            if let Some(t) = tracks.get(next_pos) {
+                                if let Some(resolved) = self.engine.resolve_track(&t.uri) {
+                                    inner.track = Some(resolved);
+                                    inner.position_ms = 0;
+                                    inner.last_change_at = Instant::now();
+                                    inner.last_emitted_position_ms = 0;
+                                    advanced = true;
+                                }
+                            }
+                        }
+                    }
+                    if !advanced {
+                        inner.state = PlaybackState::Idle;
+                        inner.position_ms = inner.duration_ms;
+                    }
+                    inner.revision = inner.revision.wrapping_add(1);
+                    let snap = self.snapshot_locked(&inner);
+                    drop(inner);
+                    self.emit_changed(&snap).await;
+                    return;
+                }
+                RepeatMode::Off => {
+                    let mut advanced = false;
+                    if inner.autoplay {
+                        let current_uri = inner
+                            .track
+                            .as_ref()
+                            .map(|t| t.uri.clone())
+                            .unwrap_or_default();
+                        if let Some(ctx) = inner.context_uri.as_deref() {
+                            let tracks = self.engine.context_tracks(ctx);
+                            if let Some(pos) = tracks.iter().position(|t| t.uri == current_uri) {
+                                if pos + 1 < tracks.len() {
+                                    if let Some(t) = tracks.get(pos + 1) {
+                                        if let Some(resolved) = self.engine.resolve_track(&t.uri) {
+                                            inner.track = Some(resolved);
+                                            inner.position_ms = 0;
+                                            inner.last_change_at = Instant::now();
+                                            inner.last_emitted_position_ms = 0;
+                                            advanced = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !advanced {
+                        inner.state = PlaybackState::Idle;
+                        inner.position_ms = inner.duration_ms;
+                    }
+                    inner.revision = inner.revision.wrapping_add(1);
+                    let snap = self.snapshot_locked(&inner);
+                    drop(inner);
+                    self.emit_changed(&snap).await;
+                    return;
                 }
             }
-            inner.revision = inner.revision.wrapping_add(1);
-            let snap = self.snapshot_locked(&inner);
-            drop(inner);
-            self.emit_changed(&snap).await;
-            return;
         }
         let should_emit_position = inner
             .position_ms
@@ -487,10 +589,7 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
     }
 
     pub async fn next_seq(&self) -> u64 {
-        let mut s = self.seq.lock().await;
-        let v = *s;
-        *s = s.wrapping_add(1);
-        v
+        crate::next_event_seq()
     }
 
     async fn emit_changed(&self, snap: &PlaybackChangedPayload) {

@@ -1,8 +1,3 @@
-//! `spotoei-player` — playback core sidecar.
-//!
-//! NDJSON over stdin/stdout, debug logs to stderr.
-//! Handshake: read `hello` command, reply with selected protocol +
-//! version + capabilities.
 //! `shutdown` exits cleanly.
 //! Anything non-protocol on stdout is a protocol violation; logs go to stderr.
 
@@ -11,6 +6,7 @@ pub mod lyrics;
 pub mod playback;
 pub mod visualizer;
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -26,6 +22,20 @@ const PROTOCOL_VERSION: u32 = 1;
 const PLAYER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_LINE_BYTES: usize = 1 << 20; // 1 MiB
+const MAX_ID_BYTES: usize = 64;
+const PROTOCOL_STDOUT_CAP: usize = 1024;
+const VIZ_STDOUT_CAP: usize = 64;
+
+/// Process-global monotonic event sequence counter shared across
+/// subsystems (auth, playback, lyrics, visualizer).
+pub static NEXT_EVENT_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Reserve and return the next monotonic event sequence number.
+pub fn next_event_seq() -> u64 {
+    NEXT_EVENT_SEQ
+        .fetch_add(1, Ordering::Relaxed)
+        .wrapping_add(1)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -76,6 +86,8 @@ enum ProtocolError {
     Json { line: usize, col: usize },
     #[error("line exceeds max allowed length ({0} bytes)")]
     LineTooLong(usize),
+    #[error("id exceeds max allowed length ({0} bytes)")]
+    IdTooLong(usize),
     #[error("unsupported protocol major version: {0}")]
     UnsupportedVersion(u32),
     #[error("missing or wrong field: {0}")]
@@ -147,11 +159,19 @@ impl ErrorBody {
     }
 }
 
+fn cap_id(id: &str) -> &str {
+    if id.len() > MAX_ID_BYTES {
+        &id[..MAX_ID_BYTES]
+    } else {
+        id
+    }
+}
+
 fn ok(id: &str, data: Value) -> String {
     let r = ResponseOk {
         version: PROTOCOL_VERSION,
         kind: "response",
-        id,
+        id: cap_id(id),
         ok: true,
         data,
     };
@@ -162,7 +182,7 @@ fn err(id: &str, body: ErrorBody) -> String {
     let r = ResponseErr {
         version: PROTOCOL_VERSION,
         kind: "response",
-        id,
+        id: cap_id(id),
         ok: false,
         error: body,
     };
@@ -196,6 +216,9 @@ fn parse_command(line: &str) -> Result<Command, ProtocolError> {
     }
     if cmd.id.is_empty() {
         return Err(ProtocolError::MissingField("id"));
+    }
+    if cmd.id.len() > MAX_ID_BYTES {
+        return Err(ProtocolError::IdTooLong(cmd.id.len()));
     }
     Ok(cmd)
 }
@@ -440,11 +463,18 @@ async fn handle(
         }
 
         "playback.set_autoplay" => {
-            let autoplay = cmd
-                .data
-                .get("autoplay")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
+            let autoplay = match cmd.data.get("autoplay").and_then(|v| v.as_bool()) {
+                Some(b) => b,
+                None => {
+                    return (
+                        err(
+                            &cmd.id,
+                            ErrorBody::new(ErrorCode::InvalidRequest, "autoplay must be a boolean"),
+                        ),
+                        false,
+                    );
+                }
+            };
             match playback.set_autoplay(autoplay).await {
                 Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
                 Err(PlaybackError) => err(
@@ -454,35 +484,101 @@ async fn handle(
             }
         }
         "visualizer.configure" => {
-            let enabled = cmd
-                .data
-                .get("enabled")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-            let mode_str = cmd
-                .data
-                .get("mode")
-                .and_then(|v| v.as_str())
-                .unwrap_or("spectrum");
-            let mode = match mode_str {
-                "winamp" => visualizer::VisualizerMode::Winamp,
-                "oscilloscope" => visualizer::VisualizerMode::Oscilloscope,
-                _ => visualizer::VisualizerMode::Spectrum,
+            let enabled = match cmd.data.get("enabled").and_then(|v| v.as_bool()) {
+                Some(b) => b,
+                None => true,
             };
-            let fps = cmd.data.get("fps").and_then(|v| v.as_u64()).unwrap_or(60) as u32;
-            let bands = cmd.data.get("bands").and_then(|v| v.as_u64()).unwrap_or(64) as usize;
-            let waveform_samples = cmd
-                .data
-                .get("waveformSamples")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(120) as usize;
+            let mode = if let Some(m) = cmd.data.get("mode").and_then(|v| v.as_str()) {
+                match m {
+                    "spectrum" => visualizer::VisualizerMode::Spectrum,
+                    "winamp" => visualizer::VisualizerMode::Winamp,
+                    "oscilloscope" => visualizer::VisualizerMode::Oscilloscope,
+                    _ => {
+                        return (
+                            err(
+                                &cmd.id,
+                                ErrorBody::new(
+                                    ErrorCode::InvalidRequest,
+                                    "mode must be spectrum|winamp|oscilloscope",
+                                ),
+                            ),
+                            false,
+                        );
+                    }
+                }
+            } else {
+                visualizer::VisualizerMode::Spectrum
+            };
+            let fps = if let Some(f) = cmd.data.get("fps") {
+                match f.as_u64() {
+                    Some(val) if (1..=120).contains(&val) => val as u32,
+                    _ => {
+                        return (
+                            err(
+                                &cmd.id,
+                                ErrorBody::new(
+                                    ErrorCode::InvalidRequest,
+                                    "fps must be between 1 and 120",
+                                ),
+                            ),
+                            false,
+                        );
+                    }
+                }
+            } else {
+                60
+            };
+            let bands = if let Some(b) = cmd.data.get("bands") {
+                match b.as_u64() {
+                    Some(val) if (8..=256).contains(&val) => val as usize,
+                    _ => {
+                        return (
+                            err(
+                                &cmd.id,
+                                ErrorBody::new(
+                                    ErrorCode::InvalidRequest,
+                                    "bands must be between 8 and 256",
+                                ),
+                            ),
+                            false,
+                        );
+                    }
+                }
+            } else {
+                64
+            };
+            let waveform_samples = if let Some(w) = cmd.data.get("waveformSamples") {
+                match w.as_u64() {
+                    Some(val) if (16..=512).contains(&val) => val as usize,
+                    _ => {
+                        return (
+                            err(
+                                &cmd.id,
+                                ErrorBody::new(
+                                    ErrorCode::InvalidRequest,
+                                    "waveformSamples must be between 16 and 512",
+                                ),
+                            ),
+                            false,
+                        );
+                    }
+                }
+            } else {
+                120
+            };
 
             let mut cfg = visualizer_cfg.write().await;
             cfg.enabled = enabled;
             cfg.mode = mode;
-            cfg.fps = fps.clamp(1, 120);
-            cfg.bands = bands.clamp(8, 256);
-            cfg.waveform_samples = waveform_samples.clamp(16, 512);
+            cfg.fps = fps;
+            cfg.bands = bands;
+            cfg.waveform_samples = waveform_samples;
+
+            let mode_str = match mode {
+                visualizer::VisualizerMode::Winamp => "winamp",
+                visualizer::VisualizerMode::Oscilloscope => "oscilloscope",
+                visualizer::VisualizerMode::Spectrum => "spectrum",
+            };
 
             ok(
                 &cmd.id,
@@ -535,19 +631,37 @@ async fn main() -> ExitCode {
     if args.len() >= 2 && args[1] == "doctor" {
         return run_doctor(&args[2..]).await;
     }
-    // Single multiplexed stdout channel so responses and events never
-    // interleave or collide.
-    let (stdout_tx, mut stdout_rx) = mpsc::channel::<String>(256);
+    // Separate multiplexed stdout channels so high-frequency visualizer
+    // frames cannot starve or block critical protocol responses / events.
+    let (stdout_tx, mut stdout_rx) = mpsc::channel::<String>(PROTOCOL_STDOUT_CAP);
+    let (viz_stdout_tx, mut viz_stdout_rx) = mpsc::channel::<String>(VIZ_STDOUT_CAP);
     let writer_handle = tokio::spawn(async move {
         let mut stdout = tokio::io::stdout();
-        while let Some(line) = stdout_rx.recv().await {
-            if let Err(e) = writeln_stdout(&mut stdout, &line).await {
-                error!(error = %e, "stdout write error");
-                break;
+        loop {
+            tokio::select! {
+                biased;
+                line = stdout_rx.recv() => {
+                    match line {
+                        Some(l) => {
+                            if let Err(e) = writeln_stdout(&mut stdout, &l).await {
+                                error!(error = %e, "stdout write error");
+                                break;
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                viz_line = viz_stdout_rx.recv() => {
+                    if let Some(l) = viz_line {
+                        if let Err(e) = writeln_stdout(&mut stdout, &l).await {
+                            error!(error = %e, "stdout write error");
+                            break;
+                        }
+                    }
+                }
             }
         }
     });
-
     let client_id = std::env::var("SPOTOEI_CLIENT_ID").unwrap_or_default();
     let auth = Arc::new(AuthManager::new(client_id, stdout_tx.clone()));
     let _initial_status = auth.hydrate().await;
@@ -565,7 +679,7 @@ async fn main() -> ExitCode {
     // never blocked on visualizer traffic).
     let visualizer_publisher = playback.clone();
     let viz_cfg = visualizer_cfg.clone();
-    let viz_stdout = stdout_tx.clone();
+    let viz_stdout_tx = viz_stdout_tx.clone();
     let viz_handle = tokio::spawn(async move {
         let mut analyzer = visualizer::Analyzer::new(64);
         let mut phase: f32 = 0.0;
@@ -587,24 +701,25 @@ async fn main() -> ExitCode {
             analyzer.set_bands(bands);
 
             let snap = visualizer_publisher.snapshot().await;
-            let samples = if snap.state == "playing" {
-                let elapsed = last_tick.elapsed().as_secs_f32();
-                last_tick = std::time::Instant::now();
-                let n = 1024_usize;
-                let mut samples = Vec::with_capacity(n);
-                for i in 0..n {
-                    let t = phase + (i as f32) / sample_rate + elapsed;
-                    let s = 0.6 * (2.0 * std::f32::consts::PI * 440.0 * t).sin()
-                        + 0.3 * (2.0 * std::f32::consts::PI * 1320.0 * t).sin();
-                    samples.push(s);
-                }
-                phase = (phase + elapsed) % 1.0;
-                samples
-            } else {
-                vec![0.0; 1024]
-            };
+            if snap.state != "playing" {
+                // Skip spectrum compute while paused / stopped. The TUI keeps
+                // the last frame on screen; producing zero-band frames here
+                // wastes CPU and starves the writer task.
+                continue;
+            }
+            let elapsed = last_tick.elapsed().as_secs_f32();
+            last_tick = std::time::Instant::now();
+            let n = 1024_usize;
+            let mut samples = Vec::with_capacity(n);
+            for i in 0..n {
+                let t = phase + (i as f32) / sample_rate + elapsed;
+                let s = 0.6 * (2.0 * std::f32::consts::PI * 440.0 * t).sin()
+                    + 0.3 * (2.0 * std::f32::consts::PI * 1320.0 * t).sin();
+                samples.push(s);
+            }
+            phase = (phase + elapsed) % 1.0;
 
-            let seq = visualizer_publisher.next_seq().await;
+            let seq = next_event_seq();
             let line = match mode {
                 visualizer::VisualizerMode::Oscilloscope => {
                     let downsampled =
@@ -618,10 +733,12 @@ async fn main() -> ExitCode {
                     event("visualizer.spectrum", seq, payload)
                 }
             };
-            let _ = viz_stdout.try_send(line);
+            // Drop on full: the audio path must never be blocked on viz
+            // traffic; missing a frame is preferable to back-pressuring
+            // the protocol response channel.
+            let _ = viz_stdout_tx.try_send(line);
         }
     });
-
     // Position ticker task: advances position while playing and emits
     // periodic position events.
     let ticker_playback = playback.clone();
@@ -729,6 +846,9 @@ async fn main() -> ExitCode {
             }
         }
     }
+    // Cancel OAuth callback server and join its task before tearing the
+    // process down so the loopback listener is released cleanly.
+    auth.cancel_in_flight().await;
     ticker_handle.abort();
     viz_handle.abort();
     drop(auth);

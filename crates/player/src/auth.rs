@@ -7,7 +7,6 @@
 //! Secret material (verifier, code, access token, refresh token) MUST NOT
 //! appear in stderr logs or in any response sent over the IPC envelope.
 //! The `auth.*` data shapes only carry opaque metadata.
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -99,12 +98,13 @@ pub struct AuthManager {
     state: Mutex<InnerState>,
     /// In-flight single-flight refresh lock.
     refresh_lock: Mutex<()>,
-    /// Monotonic event sequence shared across subsystems.
-    seq: AtomicU64,
     /// Sink for outgoing protocol events.
     events: mpsc::Sender<String>,
     /// Cancellation for the in-flight loopback callback server, if any.
     cancel: Mutex<Option<oneshot::Sender<()>>>,
+    /// `JoinHandle` for the in-flight loopback callback server, if any.
+    /// Held so the sidecar main loop can abort + await it on shutdown.
+    join_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 struct InnerState {
@@ -130,15 +130,15 @@ impl AuthManager {
                 last_auth_url: None,
             }),
             refresh_lock: Mutex::new(()),
-            seq: AtomicU64::new(0),
             events,
             cancel: Mutex::new(None),
+            join_handle: Mutex::new(None),
         }
     }
 
     /// Reserve and return the next monotonic event sequence number.
     pub fn next_seq(&self) -> u64 {
-        self.seq.fetch_add(1, Ordering::Relaxed).wrapping_add(1)
+        crate::next_event_seq()
     }
 
     async fn emit(&self, name: &str, data: Value) {
@@ -147,10 +147,14 @@ impl AuthManager {
         let _ = self.events.send(line).await;
     }
 
-    /// Cancel any in-flight loopback callback server.
+    /// Cancel any in-flight loopback callback server and join its task.
     pub async fn cancel_in_flight(&self) {
         if let Some(tx) = self.cancel.lock().await.take() {
             let _ = tx.send(());
+        }
+        if let Some(handle) = self.join_handle.lock().await.take() {
+            handle.abort();
+            let _ = handle.await;
         }
     }
     /// Determine storage tier and load any persisted refresh material.
@@ -211,10 +215,23 @@ impl AuthManager {
         s.last_auth_url = None;
         s.state = AuthState::Authenticating;
 
-        // Bind a loopback port for the callback.
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .map_err(|e| AuthError::Http(format!("bind: {e}")))?;
+        // Bind a loopback port for the callback. If binding fails, roll
+        // the state back to Unauthenticated so the system never leaves
+        // a half-initialized Authenticating snapshot behind.
+        let listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+            Ok(l) => l,
+            Err(e) => {
+                s.pkce = None;
+                s.state = AuthState::Unauthenticated;
+                let snap = self.snapshot_locked(&s, None);
+                drop(s);
+                if let Ok(value) = serde_json::to_value(&snap) {
+                    self.emit("auth.changed", value).await;
+                }
+                let _ = self.cancel.lock().await.take();
+                return Err(AuthError::Http(format!("bind: {e}")));
+            }
+        };
         let bound_port = listener
             .local_addr()
             .map_err(|e| AuthError::Http(format!("local_addr: {e}")))?
@@ -238,12 +255,14 @@ impl AuthManager {
         }
 
         // Spawn a server task that waits for the callback and validates state.
+        // The JoinHandle is stored so shutdown can abort + await it cleanly.
         let this = Arc::clone(self);
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             if let Err(e) = this.serve_callback(listener, bound_port, cancel_rx).await {
                 warn!(error = %e, "auth callback server failed");
             }
         });
+        *self.join_handle.lock().await = Some(handle);
 
         Ok(snap)
     }
@@ -266,13 +285,16 @@ impl AuthManager {
             scopes: self.scopes.clone(),
         };
         // Persist to keyring when available.
-        let snap = match self.save_to_keyring(&at).await {
+        let saved_account_id = at.account_id.clone();
+        let saved_scopes = at.scopes.clone();
+        let (snap, account_id, scopes) = match self.save_to_keyring(&at).await {
             Ok(()) => {
                 let mut s = self.state.lock().await;
                 s.storage = Storage::Keyring;
                 s.current = Some(at);
                 s.state = AuthState::Authenticated;
-                self.snapshot_locked(&s, None)
+                let snap = self.snapshot_locked(&s, None);
+                (snap, saved_account_id, saved_scopes)
             }
             Err(e) => {
                 warn!(error = %e, "mock auth: keyring save failed; staying in-memory");
@@ -280,12 +302,18 @@ impl AuthManager {
                 s.storage = Storage::Memory;
                 s.current = Some(at);
                 s.state = AuthState::Authenticated;
-                self.snapshot_locked(&s, None)
+                let snap = self.snapshot_locked(&s, None);
+                (snap, saved_account_id, saved_scopes)
             }
         };
-        if let Ok(value) = serde_json::to_value(&snap) {
-            self.emit("auth.completed", value).await;
-        }
+        self.emit(
+            "auth.completed",
+            json!({
+                "accountId": account_id,
+                "scopes": scopes,
+            }),
+        )
+        .await;
         Ok(snap)
     }
     /// Logout: erase from keyring (when present) and clear memory.
@@ -459,23 +487,30 @@ impl AuthManager {
                 let state = parts.next().unwrap_or_default().to_string();
                 if let Err(e) = self.complete_flow(&code, &state, port).await {
                     warn!(error = %e, "auth complete flow failed");
-                    self.emit("auth.failed", json!({ "error": e.to_string() }))
-                        .await;
+                    let (reason, message) = classify_auth_failure(&e);
+                    self.emit(
+                        "auth.failed",
+                        json!({ "reason": reason, "message": message }),
+                    )
+                    .await;
                 }
             }
             Some(Err(e)) => {
                 warn!(error = %e, "auth callback received error");
-                let mut s = self.state.lock().await;
-                s.state = AuthState::Unauthenticated;
-                drop(s);
-                self.emit("auth.failed", json!({ "error": e.to_string() }))
-                    .await;
+                {
+                    let mut s = self.state.lock().await;
+                    s.state = AuthState::Unauthenticated;
+                }
+                self.emit(
+                    "auth.failed",
+                    json!({ "reason": "other", "message": e.to_string() }),
+                )
+                .await;
             }
             None => {}
         }
         Ok(())
     }
-
     async fn complete_flow(&self, code: &str, state: &str, port: u16) -> Result<(), AuthError> {
         let pkce = {
             let s = self.state.lock().await;
@@ -485,46 +520,55 @@ impl AuthManager {
         if pkce.state != state {
             return Err(AuthError::OAuth("state mismatch".into()));
         }
-        let (at, account_id) = self
+        let (at, _account_id) = self
             .exchange_code(code, &pkce.verifier, "127.0.0.1", port)
             .await?;
+        let account_id = at.account_id.clone();
+        let scopes = at.scopes.clone();
         let mut s = self.state.lock().await;
-        s.current = Some(at.clone());
+        s.current = Some(at);
         s.state = AuthState::Authenticated;
         s.pkce = None;
         s.last_auth_url = None;
         if matches!(s.storage, Storage::Keyring) {
-            if let Err(e) = self.save_to_keyring(&at).await {
+            if let Err(e) = self
+                .save_to_keyring(s.current.as_ref().expect("just set"))
+                .await
+            {
                 warn!(error = %e, "keyring save on complete failed");
             }
         }
-        let snap = self.snapshot_locked(&s, None);
         drop(s);
-        if let Ok(value) = serde_json::to_value(&snap) {
-            self.emit("auth.completed", value).await;
-        }
-        let _ = account_id;
+        // The `auth.completed` event carries a slim { accountId, scopes }
+        // payload, not the full AuthStatus snapshot. The TUI consumes
+        // `auth.changed` for status updates; this event signals that the
+        // PKCE handshake has finished.
+        self.emit(
+            "auth.completed",
+            json!({
+                "accountId": account_id,
+                "scopes": scopes,
+            }),
+        )
+        .await;
         Ok(())
     }
-
-    // ---------- token exchange (real, non-mock) ----------
 
     async fn exchange_code(
         &self,
         code: &str,
         verifier: &str,
-        _host: &str,
+        host: &str,
         port: u16,
     ) -> Result<(AccessToken, String), AuthError> {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()
             .map_err(|e| AuthError::Http(e.to_string()))?;
-        let redirect_uri = format!("http://127.0.0.1:{port}{REDIRECT_PATH}");
         let body = [
             ("grant_type", "authorization_code"),
             ("code", code),
-            ("redirect_uri", &redirect_uri),
+            ("redirect_uri", &format!("http://{host}:{port}/callback")),
             ("client_id", &self.client_id),
             ("code_verifier", verifier),
         ];
@@ -628,6 +672,25 @@ impl AuthManager {
             Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(AuthError::KeyringUnavailable(e.to_string())),
         }
+    }
+}
+
+/// Map an [`AuthError`] to the slim `{ reason, message }` shape the
+/// protocol uses for the `auth.failed` event. The TUI can render the
+/// reason as an icon and surface the message verbatim.
+fn classify_auth_failure(e: &AuthError) -> (&'static str, String) {
+    match e {
+        AuthError::OAuth(msg) if msg == "state mismatch" => ("state_mismatch", msg.clone()),
+        AuthError::OAuth(msg) if msg == "no in-flight PKCE tx" => {
+            ("other", "no in-flight authentication request".to_string())
+        }
+        AuthError::OAuth(msg) if msg.contains("denied") || msg.contains("access_denied") => {
+            ("user_denied", msg.clone())
+        }
+        AuthError::OAuth(msg) => ("other", msg.clone()),
+        AuthError::Http(msg) if msg.contains("status ") => ("token_exchange", msg.clone()),
+        AuthError::Http(msg) => ("network", msg.clone()),
+        _ => ("other", e.to_string()),
     }
 }
 
