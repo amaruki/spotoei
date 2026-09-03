@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.check.json"
   },
   "dependencies": {
+    "@opentui/core": "^0.5.10",
     "spotoei-protocol": "workspace:*"
   }
 }
