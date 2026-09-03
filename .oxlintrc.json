@@ -7,11 +7,5 @@
   },
   "rules": {
     "no-console": "off"
-  },
-  "ignore": [
-    "node_modules",
-    "target",
-    "dist",
-    "build"
-  ]
+  }
 }
