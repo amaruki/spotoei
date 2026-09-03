@@ -23,10 +23,7 @@ export interface VisualizerClientOptions {
   waveformSamples?: number;
 }
 
-export type VisualizerFrameListener = (
-  mode: VisualizerModeT,
-  data: number[],
-) => void;
+export type VisualizerFrameListener = (mode: VisualizerModeT, data: number[]) => void;
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
@@ -81,9 +78,7 @@ export class VisualizerController {
             req.resolve(msg.data);
           } else {
             req.reject(
-              new Error(
-                `${msg.error?.code ?? 'ERROR'}: ${msg.error?.message ?? 'unknown'}`,
-              ),
+              new Error(`${msg.error?.code ?? 'ERROR'}: ${msg.error?.message ?? 'unknown'}`),
             );
           }
         }
@@ -223,9 +218,7 @@ export class VisualizerController {
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(cmd.id);
-        reject(
-          new Error(`timeout waiting for response to ${cmd.command}`),
-        );
+        reject(new Error(`timeout waiting for response to ${cmd.command}`));
       }, this.timeoutMs);
 
       this.pending.set(cmd.id, {
@@ -257,9 +250,7 @@ export class VisualizerController {
   }
 }
 
-export function createVisualizerController(
-  options: VisualizerClientOptions,
-): VisualizerController {
+export function createVisualizerController(options: VisualizerClientOptions): VisualizerController {
   const ctrl = new VisualizerController(options);
   ctrl.start();
   return ctrl;

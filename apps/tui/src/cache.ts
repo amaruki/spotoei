@@ -32,7 +32,7 @@ export class Cache {
   private filename: string;
 
   constructor(opts: CacheOptions = {}) {
-    this.filename = opts.filename ?? ':memory:';
+    this.filename = opts.filename ?? defaultCachePath();
     this.db = this.openWithRecovery(this.filename, opts.wal ?? true);
     this.initSchema();
   }
@@ -41,7 +41,9 @@ export class Cache {
     let db = new Database(filename);
     if (filename !== ':memory:') {
       try {
-        const res = db.query('PRAGMA integrity_check;').get() as { integrity_check?: string } | null;
+        const res = db.query('PRAGMA integrity_check;').get() as {
+          integrity_check?: string;
+        } | null;
         if (!res || res.integrity_check !== 'ok') {
           // Corrupted database: close, remove file, and re-create.
           db.close();
@@ -72,7 +74,9 @@ export class Cache {
 
   checkIntegrity(): boolean {
     try {
-      const res = this.db.query('PRAGMA integrity_check;').get() as { integrity_check?: string } | null;
+      const res = this.db.query('PRAGMA integrity_check;').get() as {
+        integrity_check?: string;
+      } | null;
       return res?.integrity_check === 'ok';
     } catch {
       return false;
@@ -84,7 +88,15 @@ export class Cache {
         version INTEGER PRIMARY KEY,
         applied_at TEXT NOT NULL
       );
+    `);
+    const maxVersionRow = this.db
+      .query('SELECT MAX(version) as max_v FROM schema_migrations;')
+      .get() as { max_v?: number } | null;
+    if (maxVersionRow && typeof maxVersionRow.max_v === 'number' && maxVersionRow.max_v > 1) {
+      throw new Error(`unsupported database schema version: ${maxVersionRow.max_v}`);
+    }
 
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS entities (
         account_id TEXT NOT NULL,
         entity_type TEXT NOT NULL,
@@ -120,13 +132,12 @@ export class Cache {
     );
     stmt.run(new Date().toISOString());
   }
-
   // --- Migration check helper ---
 
   getSchemaVersion(): number {
-    const row = this.db
-      .prepare('SELECT MAX(version) as max_v FROM schema_migrations;')
-      .get() as { max_v: number | null } | null;
+    const row = this.db.prepare('SELECT MAX(version) as max_v FROM schema_migrations;').get() as {
+      max_v: number | null;
+    } | null;
     return row?.max_v ?? 0;
   }
 
@@ -149,21 +160,10 @@ export class Cache {
         fetched_at = excluded.fetched_at,
         expires_at = excluded.expires_at;
     `);
-    stmt.run(
-      accountId,
-      entityType,
-      entityId,
-      JSON.stringify(payload),
-      now,
-      expiresAt,
-    );
+    stmt.run(accountId, entityType, entityId, JSON.stringify(payload), now, expiresAt);
   }
 
-  getEntity<T>(
-    accountId: string,
-    entityType: string,
-    entityId: string,
-  ): CachedEntity<T> | null {
+  getEntity<T>(accountId: string, entityType: string, entityId: string): CachedEntity<T> | null {
     const stmt = this.db.prepare(`
       SELECT account_id, entity_type, entity_id, payload_json, fetched_at, expires_at
       FROM entities
@@ -197,12 +197,7 @@ export class Cache {
 
   // --- Queries ---
 
-  putQuery<T>(
-    accountId: string,
-    queryKey: string,
-    payload: T,
-    ttlMs?: number,
-  ): void {
+  putQuery<T>(accountId: string, queryKey: string, payload: T, ttlMs?: number): void {
     const now = Date.now();
     const expiresAt = ttlMs !== undefined ? now + ttlMs : null;
     const stmt = this.db.prepare(`
@@ -249,9 +244,7 @@ export class Cache {
   // --- Cache invalidation & pruning ---
 
   invalidateQuery(accountId: string, queryKey: string): void {
-    const stmt = this.db.prepare(
-      'DELETE FROM query_cache WHERE account_id = ? AND query_key = ?;',
-    );
+    const stmt = this.db.prepare('DELETE FROM query_cache WHERE account_id = ? AND query_key = ?;');
     stmt.run(accountId, queryKey);
   }
 
@@ -285,4 +278,23 @@ export class Cache {
   close(): void {
     this.db.close();
   }
+}
+
+export function defaultCachePath(): string {
+  if (process.env.SPOTOEI_CACHE_FILE) {
+    return process.env.SPOTOEI_CACHE_FILE;
+  }
+  if (process.env.NODE_ENV === 'test' || process.env.BUN_ENV === 'test') {
+    return ':memory:';
+  }
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? '/tmp';
+  const cacheDir = process.env.XDG_CACHE_HOME ?? `${home}/.cache`;
+  const dir = `${cacheDir}/spotoei`;
+  try {
+    const fs = require('node:fs');
+    fs.mkdirSync(dir, { recursive: true });
+  } catch {
+    // Ignore
+  }
+  return `${dir}/cache.db`;
 }

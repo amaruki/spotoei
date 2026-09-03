@@ -60,9 +60,7 @@ export class LyricsClient {
             }
           } else {
             req.reject(
-              new Error(
-                `${msg.error?.code ?? 'ERROR'}: ${msg.error?.message ?? 'unknown'}`,
-              ),
+              new Error(`${msg.error?.code ?? 'ERROR'}: ${msg.error?.message ?? 'unknown'}`),
             );
           }
         }
@@ -114,8 +112,7 @@ export class LyricsClient {
     const cmd = makeLyricsGet(id, trackUri);
     const line = JSON.stringify(cmd) + '\n';
 
-    const { promise, resolve, reject } =
-      Promise.withResolvers<LyricsDocumentT>();
+    const { promise, resolve, reject } = Promise.withResolvers<LyricsDocumentT>();
 
     const timer = setTimeout(() => {
       this.pending.delete(id);

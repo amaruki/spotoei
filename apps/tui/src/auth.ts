@@ -64,11 +64,14 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
         if (msg.ok) {
           p.resolve(msg.data);
         } else {
-          p.reject(new Error(`${msg.error.code}: ${msg.error.message}`));
+          const err = msg.error;
+          const code = err ? err.code : 'UNKNOWN';
+          const message = err ? err.message : 'unknown error';
+          p.reject(new Error(`${code}: ${message}`));
         }
       }
     } else if (msg.type === 'event') {
-      if (msg.event === 'auth.changed') {
+      if (msg.event === 'auth.changed' || msg.event === 'auth.completed') {
         const data = msg.data as AuthStatusDataT;
         for (const l of statusListeners) {
           try {
