@@ -7,6 +7,11 @@ import type { ChildProcess } from 'node:child_process';
 import { LyricsClient } from '../src/lyrics';
 import { PROTOCOL_VERSION, type LyricsDocumentT } from 'spotoei-protocol';
 
+const writeImpl = (_chunk: unknown, cb?: (err: null | Error) => void): boolean => {
+  if (typeof cb === 'function') cb(null);
+  return true;
+};
+
 function makeMockChild(): {
   child: ChildProcess;
   stdout: PassThrough;
@@ -14,15 +19,7 @@ function makeMockChild(): {
 } {
   const stdout = new PassThrough();
   const stdin = new PassThrough();
-  const writeImpl = (
-    _chunk: unknown,
-    cb?: (err: null | Error) => void,
-  ): boolean => {
-    if (typeof cb === 'function') cb(null);
-    return true;
-  };
   (stdin as unknown as { write: typeof writeImpl }).write = writeImpl;
-
   const child = {
     stdout,
     stdin,
@@ -85,9 +82,11 @@ function interceptWriteAndRespond(
   stdout: PassThrough,
   makeResponse: (id: string) => string,
 ): void {
-  (child.stdin as unknown as {
-    write: (c: string, cb?: (err: null | Error) => void) => boolean;
-  }).write = ((chunk: string, cb?: (err: null | Error) => void): boolean => {
+  (
+    child.stdin as unknown as {
+      write: (c: string, cb?: (err: null | Error) => void) => boolean;
+    }
+  ).write = ((chunk: string, cb?: (err: null | Error) => void): boolean => {
     if (typeof chunk === 'string' && chunk.includes('"lyrics.get"')) {
       const parsed = JSON.parse(chunk) as { id: string };
       queueMicrotask(() => stdout.write(makeResponse(parsed.id)));
@@ -132,9 +131,9 @@ describe('LyricsClient unit tests', () => {
     client.start();
     interceptWriteAndRespond(child, stdout, unavailableErrResponse);
 
-    await expect(
-      client.getLyrics('spotify:track:test_unavailable'),
-    ).rejects.toThrow(/LYRICS_UNAVAILABLE/);
+    await expect(client.getLyrics('spotify:track:test_unavailable')).rejects.toThrow(
+      /LYRICS_UNAVAILABLE/,
+    );
     client.close();
   });
 

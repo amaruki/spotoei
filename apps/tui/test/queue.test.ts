@@ -23,9 +23,7 @@ describe('QueueManager', () => {
             id: 'now1',
             uri: 'spotify:track:now1',
             name: 'Now Playing',
-            artists: [
-              { id: 'a1', name: 'Artist', uri: 'spotify:artist:a1' },
-            ],
+            artists: [{ id: 'a1', name: 'Artist', uri: 'spotify:artist:a1' }],
             albumId: 'al1',
             albumName: 'Album',
             durationMs: 180000,
@@ -94,9 +92,7 @@ describe('QueueManager', () => {
                 id: 't1',
                 uri: 'spotify:track:t1',
                 name: 'Test',
-                artists: [
-                  { id: 'a1', name: 'A', uri: 'spotify:artist:a1' },
-                ],
+                artists: [{ id: 'a1', name: 'A', uri: 'spotify:artist:a1' }],
                 albumId: 'al1',
                 albumName: 'Al',
                 durationMs: 1000,

@@ -104,10 +104,10 @@ describe('WebApiClient and SearchClient', () => {
       const url = new URL(String(input));
       queries.push(url.searchParams.get('q') ?? '');
       callCount++;
-      return new Response(
-        JSON.stringify({ tracks: { items: [] } }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      );
+      return new Response(JSON.stringify({ tracks: { items: [] } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }) as unknown as typeof fetch;
 
     try {

@@ -7,6 +7,11 @@ import type { ChildProcess } from 'node:child_process';
 import { VisualizerController } from '../src/visualizer';
 import { PROTOCOL_VERSION, type VisualizerModeT } from 'spotoei-protocol';
 
+const writeImpl = (_chunk: unknown, cb?: (err: null | Error) => void): boolean => {
+  if (typeof cb === 'function') cb(null);
+  return true;
+};
+
 function makeMockChild(): {
   child: ChildProcess;
   stdout: PassThrough;
@@ -14,12 +19,7 @@ function makeMockChild(): {
 } {
   const stdout = new PassThrough();
   const stdin = new PassThrough();
-  const writeImpl = (_chunk: unknown, cb?: (err: null | Error) => void): boolean => {
-    if (typeof cb === 'function') cb(null);
-    return true;
-  };
   (stdin as unknown as { write: typeof writeImpl }).write = writeImpl;
-
   const child = {
     stdout,
     stdin,
@@ -200,6 +200,7 @@ describe('VisualizerController unit tests', () => {
           data: { bands: [0.1, 0.2] },
         }) + '\n',
       );
+      // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, 30));
     }
     await new Promise((r) => setTimeout(r, 50));
@@ -216,6 +217,7 @@ describe('VisualizerController unit tests', () => {
           data: { bands: [0.5, 0.5] },
         }) + '\n',
       );
+      // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, 20));
     }
     await new Promise((r) => setTimeout(r, 50));

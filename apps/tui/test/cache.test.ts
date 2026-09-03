@@ -10,11 +10,7 @@ describe('Cache', () => {
 
   test('putEntity and getEntity round-trip', () => {
     cache.putEntity('acct1', 'track', 't1', { name: 'Foo', durationMs: 240_000 });
-    const got = cache.getEntity<{ name: string; durationMs: number }>(
-      'acct1',
-      'track',
-      't1',
-    );
+    const got = cache.getEntity<{ name: string; durationMs: number }>('acct1', 'track', 't1');
     expect(got).not.toBeNull();
     expect(got!.payload.name).toBe('Foo');
     expect(got!.payload.durationMs).toBe(240_000);
@@ -33,7 +29,7 @@ describe('Cache', () => {
   });
 
   test('getEntity respects expiresAt', () => {
-    const past = Date.now() - 1_000;
+    // Manually expire the entry by setting expires_at to a past time.
     cache.putEntity('acct1', 'track', 't1', { name: 'A' });
     // Manually expire the entry by setting expires_at to a past time.
     cache.putEntity('acct1', 'track', 't1', { name: 'A' }, 0);
@@ -72,12 +68,8 @@ describe('Cache', () => {
   test('accountId scopes entity and query rows', () => {
     cache.putEntity('acct1', 'track', 't1', { name: 'A1' });
     cache.putEntity('acct2', 'track', 't1', { name: 'A2' });
-    expect(
-      cache.getEntity<{ name: string }>('acct1', 'track', 't1')!.payload.name,
-    ).toBe('A1');
-    expect(
-      cache.getEntity<{ name: string }>('acct2', 'track', 't1')!.payload.name,
-    ).toBe('A2');
+    expect(cache.getEntity<{ name: string }>('acct1', 'track', 't1')!.payload.name).toBe('A1');
+    expect(cache.getEntity<{ name: string }>('acct2', 'track', 't1')!.payload.name).toBe('A2');
   });
 
   test('clearAccount removes all data for the account', () => {
