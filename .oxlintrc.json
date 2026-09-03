@@ -6,6 +6,11 @@
     "perf": "warn"
   },
   "rules": {
-    "no-console": "off"
+    "no-console": "off",
+    "no-unused-vars": "error",
+    "no-explicit-any": "warn",
+    "no-var": "error",
+    "prefer-const": "error",
+    "eqeqeq": "error"
   }
 }

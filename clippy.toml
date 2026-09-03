@@ -1,0 +1,11 @@
+# clippy configuration for spotOEI
+# See: docs/TSD/09-coding-standards.md Section 6 (Module Size and Cohesion)
+
+# Warn on functions exceeding this number of lines.
+too-many-lines-threshold = 300
+
+# A single function with too many lines is a decomposition smell.
+too-many-arguments-threshold = 8
+
+# Cognitive complexity threshold for a single function.
+cognitive-complexity-threshold = 30
