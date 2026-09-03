@@ -1,4 +1,5 @@
 import { resolveClientId } from '../../config';
+import { handleEntityBrowseKeys } from './keyboardEntity';
 import { routeKind } from './navigationStack';
 import type { Route, UiCoreContext } from './types';
 // Key dispatcher for the full TUI. Implements focus isolation: when an
@@ -225,6 +226,11 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         // SelectRenderable handles list scrolling and enter selection
         return;
       }
+    }
+
+    // 4d. Entity / browse / visualizer keys (split for LoC cap)
+    if (handleEntityBrowseKeys(ctx, e)) {
+      return;
     }
 
     // 5. Context exit keys (Esc/Tab/Left to return to sidebar or exit lyrics)
