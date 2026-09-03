@@ -70,30 +70,50 @@ export class LibraryEndpoints {
     }
   }
 
-  async saveItem(type: 'track' | 'album', id: string): Promise<boolean> {
-    const path =
-      type === 'track'
-        ? `/me/tracks?ids=${encodeURIComponent(id)}`
-        : `/me/albums?ids=${encodeURIComponent(id)}`;
+  async checkMembership(uris: string[]): Promise<boolean[]> {
+    if (uris.length === 0) return [];
+    const safeBatch = uris.slice(0, 50);
+    const list = safeBatch.map(encodeURIComponent).join(',');
     try {
-      await this.transport.request(path, {}, 'PUT');
+      const json = await this.transport.request(`/me/library/contains?uris=${list}`);
+      return Array.isArray(json) ? (json as boolean[]) : safeBatch.map(() => false);
+    } catch {
+      return safeBatch.map(() => false);
+    }
+  }
+
+  async saveUris(uris: string[]): Promise<boolean> {
+    if (uris.length === 0) return true;
+    const list = uris.map(encodeURIComponent).join(',');
+    try {
+      await this.transport.request(`/me/library?uris=${list}`, {}, 'PUT');
       return true;
     } catch {
       return false;
     }
   }
 
-  async removeItem(type: 'track' | 'album', id: string): Promise<boolean> {
-    const path =
-      type === 'track'
-        ? `/me/tracks?ids=${encodeURIComponent(id)}`
-        : `/me/albums?ids=${encodeURIComponent(id)}`;
+  async removeUris(uris: string[]): Promise<boolean> {
+    if (uris.length === 0) return true;
+    const list = uris.map(encodeURIComponent).join(',');
     try {
-      await this.transport.request(path, {}, 'DELETE');
+      await this.transport.request(`/me/library?uris=${list}`, {}, 'DELETE');
       return true;
     } catch {
       return false;
     }
+  }
+
+  // Deprecated: kept for compatibility until callers migrate to URI mutations.
+  async saveItem(type: 'track' | 'album', id: string): Promise<boolean> {
+    const uri = type === 'track' ? `spotify:track:${id}` : `spotify:album:${id}`;
+    return this.saveUris([uri]);
+  }
+
+  // Deprecated: kept for compatibility until callers migrate to URI mutations.
+  async removeItem(type: 'track' | 'album', id: string): Promise<boolean> {
+    const uri = type === 'track' ? `spotify:track:${id}` : `spotify:album:${id}`;
+    return this.removeUris([uri]);
   }
 
   private async fetchSavedTracks(
