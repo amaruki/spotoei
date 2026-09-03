@@ -8,3 +8,7 @@ export * from './playback';
 export * from './catalog';
 export * from './visualizer';
 export * from './lyrics';
+export * from './membership';
+export * from './home';
+export * from './browse';
+export * from './routes';
