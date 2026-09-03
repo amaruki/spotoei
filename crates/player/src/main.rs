@@ -11,13 +11,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use auth::{AuthManager, AuthStatus};
-use playback::{FakeEngine, Playback, PlaybackError};
+use playback::{FakeEngine, LoadRequest, Playback, PlaybackError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Stdout};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
-
 const PROTOCOL_VERSION: u32 = 1;
 const PLAYER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -223,10 +222,49 @@ fn parse_command(line: &str) -> Result<Command, ProtocolError> {
     Ok(cmd)
 }
 
+fn load_client_id_from_config() -> String {
+    let config_dir = std::env::var("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join(".config"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
+    let config_path = config_dir.join("spotoei").join("config.json");
+    if let Ok(content) = std::fs::read_to_string(&config_path) {
+        if let Ok(val) = serde_json::from_str::<Value>(&content) {
+            if let Some(id) = val
+                .get("spotify")
+                .and_then(|s| s.get("clientId"))
+                .and_then(|c| c.as_str())
+            {
+                if !id.trim().is_empty() {
+                    return id.trim().to_string();
+                }
+            }
+        }
+    }
+    String::new()
+}
+
+fn resolve_client_id() -> String {
+    match std::env::var("SPOTOEI_CLIENT_ID") {
+        Ok(v) if !v.trim().is_empty() => v.trim().to_string(),
+        _ => {
+            let from_config = load_client_id_from_config();
+            if !from_config.is_empty() {
+                from_config
+            } else {
+                auth::KEYMASTER_CLIENT_ID.to_string()
+            }
+        }
+    }
+}
+
 async fn handle(
     cmd: Command,
     auth: &Arc<AuthManager>,
-    playback: &Playback<FakeEngine>,
+    playback: &Playback,
     visualizer_cfg: &Arc<tokio::sync::RwLock<visualizer::VisualizerConfig>>,
     lyrics: &lyrics::LyricsService,
 ) -> (String, bool) {
@@ -241,7 +279,6 @@ async fn handle(
                     "lyrics.plain",
                     "visualizer.spectrum",
                     "visualizer.waveform",
-                    "queue.mutation",
                     "auth.single-token-session",
                 ],
             });
@@ -308,6 +345,24 @@ async fn handle(
                 ),
             ),
         },
+        "auth.set_client_id" => {
+            let id = cmd
+                .data
+                .get("clientId")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            if id.is_empty() {
+                err(
+                    &cmd.id,
+                    ErrorBody::new(ErrorCode::InvalidRequest, "clientId cannot be empty"),
+                )
+            } else {
+                auth.set_client_id(id.clone()).await;
+                ok(&cmd.id, serde_json::json!({ "ok": true, "clientId": id }))
+            }
+        },
         "playback.load" => {
             let context_uri = cmd.data.get("contextUri").and_then(|v| v.as_str());
             let track_uri = cmd.data.get("trackUri").and_then(|v| v.as_str());
@@ -316,8 +371,31 @@ async fn handle(
                 .get("autoplay")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
+            let name = cmd.data.get("name").and_then(|v| v.as_str());
+            let artists = cmd.data.get("artists").and_then(|v| v.as_array()).map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>()
+            });
+            let album = cmd.data.get("album").and_then(|v| v.as_str());
+            let duration_ms = cmd
+                .data
+                .get("durationMs")
+                .and_then(|v| v.as_u64());
+            let genre = cmd.data.get("genre").and_then(|v| v.as_str());
             let _ = playback.set_autoplay(autoplay).await;
-            match playback.load(context_uri, track_uri).await {
+            match playback
+                .load(LoadRequest {
+                    context_uri,
+                    track_uri,
+                    name,
+                    artists,
+                    album,
+                    duration_ms,
+                    genre,
+                })
+                .await
+            {
                 Ok(snap) => {
                     let final_snap = if autoplay {
                         match playback.play().await {
@@ -325,7 +403,10 @@ async fn handle(
                             Err(_) => snap,
                         }
                     } else {
-                        snap
+                        match playback.pause().await {
+                            Ok(s) => s,
+                            Err(_) => snap,
+                        }
                     };
                     ok(
                         &cmd.id,
@@ -664,27 +745,36 @@ async fn main() -> ExitCode {
             }
         }
     });
-    let client_id = std::env::var("SPOTOEI_CLIENT_ID").unwrap_or_default();
+    let client_id = resolve_client_id();
     let auth = Arc::new(AuthManager::new(client_id, stdout_tx.clone()));
     let _initial_status = auth.hydrate().await;
 
     let lyrics = lyrics::LyricsService::new(Arc::new(lyrics::MockLyricsProvider::new()));
-    let playback = Playback::new(FakeEngine, stdout_tx.clone());
+    let use_mock_playback = std::env::var("SPOTOEI_MOCK_AUTH").is_ok()
+        || std::env::var("SPOTOEI_MOCK_PLAYER").is_ok();
+    let (playback, pcm_rx) = if use_mock_playback {
+        info!("Playback engine: FakeEngine (mock mode)");
+        let (_pcm_tx, pcm_rx) = crossbeam_channel::bounded(64);
+        (Playback::new(FakeEngine, stdout_tx.clone()), pcm_rx)
+    } else {
+        info!("Playback engine: LibrespotEngine (native audio output)");
+        let engine = playback::LibrespotEngine::new(auth.clone());
+        let pcm_rx = engine.pcm_receiver();
+        (Playback::new(engine, stdout_tx.clone()), pcm_rx)
+    };
     let visualizer_cfg = Arc::new(tokio::sync::RwLock::new(
         visualizer::VisualizerConfig::default(),
     ));
-    // Visualizer publisher: emits spectrum/waveform events at the
-    // configured FPS. Synthesizes audio samples from a 440Hz + 1320Hz
-    // harmonic while playing; emits zero-band frames while paused or
-    // stopped so the TS side keeps a stable render target. Drops
-    // frames silently if the stdout channel is full (audio path is
-    // never blocked on visualizer traffic).
+    // Visualizer publisher: emits real-time CAVA FFT spectrum and waveform
+    // events from audio decoded by Librespot. Drops frames silently if
+    // the stdout channel is full so the audio playback path is never blocked.
     let visualizer_publisher = playback.clone();
     let viz_cfg = visualizer_cfg.clone();
     let viz_stdout_tx = viz_stdout_tx.clone();
     let viz_handle = tokio::spawn(async move {
         let mut analyzer = visualizer::Analyzer::new(64);
-        let mut phase: f32 = 0.0;
+        let mut ring_buffer = vec![0.0f32; 1024];
+        let mut mock_phase: f32 = 0.0;
         let sample_rate = 44100.0_f32;
         let mut last_tick = std::time::Instant::now();
         loop {
@@ -704,40 +794,65 @@ async fn main() -> ExitCode {
 
             let snap = visualizer_publisher.snapshot().await;
             if snap.state != "playing" {
-                // Skip spectrum compute while paused / stopped. The TUI keeps
-                // the last frame on screen; producing zero-band frames here
-                // wastes CPU and starves the writer task.
+                let empty_samples: [f32; 0] = [];
+                let seq = next_event_seq();
+                let line = match mode {
+                    visualizer::VisualizerMode::Oscilloscope => {
+                        let payload = serde_json::json!({ "samples": vec![0.0; waveform_samples] });
+                        event("visualizer.waveform", seq, payload)
+                    }
+                    _ => {
+                        let bands = analyzer.compute_spectrum(&empty_samples, mode);
+                        let payload = serde_json::json!({ "bands": bands });
+                        event("visualizer.spectrum", seq, payload)
+                    }
+                };
+                let _ = viz_stdout_tx.try_send(line);
                 continue;
             }
-            let elapsed = last_tick.elapsed().as_secs_f32();
-            last_tick = std::time::Instant::now();
-            let n = 1024_usize;
-            let mut samples = Vec::with_capacity(n);
-            for i in 0..n {
-                let t = phase + (i as f32) / sample_rate + elapsed;
-                let s = 0.6 * (2.0 * std::f32::consts::PI * 440.0 * t).sin()
-                    + 0.3 * (2.0 * std::f32::consts::PI * 1320.0 * t).sin();
-                samples.push(s);
+
+            // Drain fresh PCM packets from audio sink
+            let mut got_real_pcm = false;
+            while let Ok(chunk) = pcm_rx.try_recv() {
+                got_real_pcm = true;
+                if chunk.len() >= 1024 {
+                    ring_buffer.copy_from_slice(&chunk[chunk.len() - 1024..]);
+                } else {
+                    ring_buffer.rotate_left(chunk.len());
+                    let start = 1024 - chunk.len();
+                    ring_buffer[start..].copy_from_slice(&chunk);
+                }
             }
-            phase = (phase + elapsed) % 1.0;
+
+            if !got_real_pcm {
+                let elapsed = last_tick.elapsed().as_secs_f32();
+                for i in 0..1024 {
+                    let t = mock_phase + (i as f32) / sample_rate;
+                    let bass = 0.40 * (2.0 * std::f32::consts::PI * 65.0 * t).sin();
+                    let kick = 0.30 * (2.0 * std::f32::consts::PI * 130.0 * t).sin();
+                    let mid1 = 0.25 * (2.0 * std::f32::consts::PI * 440.0 * t).sin();
+                    let mid2 = 0.20 * (2.0 * std::f32::consts::PI * 880.0 * t).sin();
+                    let treble = 0.15 * (2.0 * std::f32::consts::PI * 3520.0 * t).sin();
+                    ring_buffer[i] = (bass + kick + mid1 + mid2 + treble).clamp(-1.0, 1.0);
+                }
+                mock_phase = (mock_phase + elapsed) % 1000.0;
+            }
+            last_tick = std::time::Instant::now();
 
             let seq = next_event_seq();
             let line = match mode {
                 visualizer::VisualizerMode::Oscilloscope => {
                     let downsampled =
-                        visualizer::Analyzer::compute_waveform(&samples, waveform_samples);
+                        visualizer::Analyzer::compute_waveform(&ring_buffer, waveform_samples);
                     let payload = serde_json::json!({ "samples": downsampled });
                     event("visualizer.waveform", seq, payload)
                 }
                 _ => {
-                    let bands = analyzer.compute_spectrum(&samples, mode);
+                    let bands = analyzer.compute_spectrum(&ring_buffer, mode);
                     let payload = serde_json::json!({ "bands": bands });
                     event("visualizer.spectrum", seq, payload)
                 }
             };
-            // Drop on full: the audio path must never be blocked on viz
-            // traffic; missing a frame is preferable to back-pressuring
-            // the protocol response channel.
             let _ = viz_stdout_tx.try_send(line);
         }
     });
@@ -753,25 +868,37 @@ async fn main() -> ExitCode {
     });
 
     let stdin = tokio::io::stdin();
-    let mut lines = BufReader::new(stdin).lines();
-
+    // Bounded buffered reader: enforces MAX_LINE_BYTES on every
+    // `read_line` call so a misbehaving peer can't cause unbounded
+    // allocation by streaming bytes that never include '\n'.
+    let mut stdin_reader = BufReader::with_capacity(8 * 1024, stdin);
+    let mut line_buf = String::with_capacity(8 * 1024);
     info!(version = PLAYER_VERSION, "spotoei-player starting");
 
-    // First valid command must be `hello` within HANDSHAKE_TIMEOUT.
-    let hello_line: String = match tokio::time::timeout(HANDSHAKE_TIMEOUT, lines.next_line()).await
-    {
-        Ok(Ok(Some(l))) => l,
-        Ok(Ok(None)) => {
-            error!("stdin closed before hello");
-            return ExitCode::from(2);
-        }
-        Ok(Err(e)) => {
-            error!(error = %e, "stdin read error");
-            return ExitCode::from(2);
-        }
-        Err(_) => {
-            error!("handshake timeout (no hello within 5s)");
-            return ExitCode::from(2);
+    // Read the first line with size bound.
+    let hello_line: String = {
+        line_buf.clear();
+        match tokio::time::timeout(HANDSHAKE_TIMEOUT, stdin_reader.read_line(&mut line_buf)).await {
+            Ok(Ok(0)) => {
+                error!("stdin closed before hello");
+                return ExitCode::from(2);
+            }
+            Ok(Ok(n)) => {
+                if n > MAX_LINE_BYTES {
+                    error!("handshake line exceeds MAX_LINE_BYTES limit");
+                    return ExitCode::from(2);
+                }
+                let trimmed = line_buf.trim_end_matches(['\r', '\n']).to_string();
+                trimmed
+            }
+            Ok(Err(e)) => {
+                error!(error = %e, "stdin read error");
+                return ExitCode::from(2);
+            }
+            Err(_) => {
+                error!("handshake timeout (no hello within 5s)");
+                return ExitCode::from(2);
+            }
         }
     };
 
@@ -808,17 +935,24 @@ async fn main() -> ExitCode {
 
     let mut exit_code = ExitCode::SUCCESS;
     loop {
+        line_buf.clear();
         tokio::select! {
             _ = shutdown_rx.recv() => {
                 info!("ctrl-c received; exiting");
                 break;
             }
-            line_res = lines.next_line() => {
-                let line: String = match line_res {
-                    Ok(Some(l)) => l,
-                    Ok(None) => {
+            read_res = stdin_reader.read_line(&mut line_buf) => {
+                let line: String = match read_res {
+                    Ok(0) => {
                         info!("stdin closed; exiting");
                         break;
+                    }
+                    Ok(n) => {
+                        if n > MAX_LINE_BYTES {
+                            warn!("line exceeded MAX_LINE_BYTES limit");
+                            continue;
+                        }
+                        line_buf.trim_end_matches(['\r', '\n']).to_string()
                     }
                     Err(e) => {
                         error!(error = %e, "stdin read error");
@@ -831,7 +965,14 @@ async fn main() -> ExitCode {
                     Ok(cmd) => handle(cmd, &auth, &playback, &visualizer_cfg, &lyrics).await,
                     Err(e) => {
                         warn!(error = %e, "command parse failed");
-                        continue;
+                        let reply = err(
+                            "0",
+                            ErrorBody::new(
+                                ErrorCode::InvalidRequest,
+                                format!("command parse error: {e}"),
+                            ),
+                        );
+                        (reply, false)
                     }
                 };
 
@@ -872,9 +1013,18 @@ async fn run_doctor(args: &[String]) -> ExitCode {
     }
 
     if sub == "all" || sub == "audio" {
-        // Audio backend detection requires the librespot stack at runtime.
-        // We report it as deferred (the player surfaces backend issues on startup).
-        println!("[--] audio backend: deferred to runtime (see player startup logs)");
+        let client_id = resolve_client_id();
+        let (tx, _rx) = mpsc::channel::<String>(8);
+        let auth = Arc::new(AuthManager::new(client_id, tx));
+        let _ = auth.hydrate().await;
+        let engine = playback::LibrespotEngine::new(auth);
+        match engine.ensure_player().await {
+            Ok(_) => println!("[ok] audio engine and librespot connection successful"),
+            Err(e) => {
+                println!("[err] audio engine failure: {e}");
+                problems += 1;
+            }
+        }
     }
 
     if sub == "all" || sub == "sidecar" {
@@ -886,28 +1036,24 @@ async fn run_doctor(args: &[String]) -> ExitCode {
     }
 
     if sub == "all" || sub == "config" {
-        match std::env::var("SPOTOEI_CLIENT_ID") {
-            Ok(v) if !v.is_empty() => println!("[ok] config readable (client_id=<set>)"),
-            Ok(_) => {
-                println!("[warn] SPOTOEI_CLIENT_ID is empty");
-                problems += 1;
-            }
-            Err(_) => {
-                println!("[warn] SPOTOEI_CLIENT_ID is not set");
-                problems += 1;
-            }
+        let id = resolve_client_id();
+        if !id.is_empty() {
+            println!("[ok] config readable (client_id=<set>)");
+        } else {
+            println!("[warn] SPOTOEI_CLIENT_ID is not configured (set SPOTOEI_CLIENT_ID or create ~/.config/spotoei/config.json)");
+            problems += 1;
         }
     }
 
     if sub == "all" || sub == "auth" {
-        let client_id = std::env::var("SPOTOEI_CLIENT_ID").unwrap_or_default();
+        let client_id = resolve_client_id();
         let (tx, _rx) = mpsc::channel::<String>(8);
         let auth = AuthManager::new(client_id.clone(), tx);
         let status: AuthStatus = auth.hydrate().await;
         println!(
             "Client ID: {}",
             if client_id.is_empty() {
-                "<not set: SPOTOEI_CLIENT_ID>"
+                "<not set: SPOTOEI_CLIENT_ID or ~/.config/spotoei/config.json>"
             } else {
                 "<set>"
             }
@@ -926,6 +1072,23 @@ async fn run_doctor(args: &[String]) -> ExitCode {
                 status.scopes.join(", ")
             }
         );
+        if let Ok((token, _)) = auth.get_web_token().await {
+            let client = reqwest::Client::new();
+            if let Ok(resp) = client
+                .get("https://api.spotify.com/v1/me")
+                .bearer_auth(token)
+                .send()
+                .await
+            {
+                if let Ok(val) = resp.json::<serde_json::Value>().await {
+                    println!("Spotify /v1/me: {}", val);
+                    let user_id = val.get("id").and_then(|v| v.as_str()).unwrap_or("<unknown>");
+                    let product = val.get("product").and_then(|v| v.as_str()).unwrap_or("<unknown>");
+                    println!("Spotify User ID: {user_id}");
+                    println!("Spotify Product Plan: {product}");
+                }
+            }
+        }
     }
 
     if sub == "all" || sub == "cache" {
@@ -994,12 +1157,50 @@ async fn writeln_stdout(stdout: &mut Stdout, line: &str) -> std::io::Result<()> 
     stdout.flush().await
 }
 
+fn get_log_file_path() -> std::path::PathBuf {
+    if let Ok(path) = std::env::var("SPOTOEI_LOG_FILE") {
+        return std::path::PathBuf::from(path);
+    }
+    let config_dir = std::env::var("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join(".config"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
+    let spotoei_dir = config_dir.join("spotoei");
+    let _ = std::fs::create_dir_all(&spotoei_dir);
+    spotoei_dir.join("spotoei.log")
+}
+
 fn init_tracing() {
-    use tracing_subscriber::{fmt, EnvFilter};
+    use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    let _ = fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(filter)
-        .with_target(false)
-        .try_init();
+    let log_path = get_log_file_path();
+
+    if let Ok(file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+    {
+        let file_layer = fmt::layer()
+            .with_writer(std::sync::Arc::new(file))
+            .with_ansi(false)
+            .with_target(false);
+        let stderr_layer = fmt::layer()
+            .with_writer(std::io::stderr)
+            .with_target(false);
+
+        let _ = tracing_subscriber::registry()
+            .with(filter)
+            .with(file_layer)
+            .with(stderr_layer)
+            .try_init();
+    } else {
+        let _ = fmt()
+            .with_writer(std::io::stderr)
+            .with_env_filter(filter)
+            .with_target(false)
+            .try_init();
+    }
 }

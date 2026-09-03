@@ -17,21 +17,21 @@ function waitMs(ms: number): Promise<void> {
   return promise;
 }
 
-function noop() {}
-
 async function waitForChangedEvent(
-  onChange: (snap: PlaybackChangedDataT) => void,
+  registerOnChange: (listener: (snap: PlaybackChangedDataT) => void) => () => void,
   predicate: (snap: PlaybackChangedDataT) => boolean,
-  timeoutMs: number = 1_000,
+  timeoutMs = 1_000,
 ): Promise<PlaybackChangedDataT> {
   const { promise, resolve, reject } = Promise.withResolvers<PlaybackChangedDataT>();
+  let unsubscribe: (() => void) | null = null;
   const timer = setTimeout(() => {
-    onChange(noop);
+    if (unsubscribe) unsubscribe();
     reject(new Error(`timed out after ${timeoutMs}ms waiting for change event`));
   }, timeoutMs);
-  onChange((snap) => {
+  unsubscribe = registerOnChange((snap) => {
     if (predicate(snap)) {
       clearTimeout(timer);
+      if (unsubscribe) unsubscribe();
       resolve(snap);
     }
   });
@@ -190,7 +190,7 @@ describe('playback integration with player sidecar', () => {
         // eslint-disable-next-line no-await-in-loop
         await waitMs(SHORT_WAIT_MS);
       }
-      expect(positionEvents[0].positionMs).toBeGreaterThan(0);
+      expect(positionEvents[0]!.positionMs).toBeGreaterThan(0);
     } finally {
       unsubscribe();
       playback.close();

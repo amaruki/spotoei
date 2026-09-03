@@ -46,11 +46,12 @@ describe('WebApiClient and SearchClient', () => {
       const client = new WebApiClient({ tokenProvider: fakeTokenProvider });
       const res = await client.search('Track One');
       expect(res.hits.length).toBe(1);
-      expect(res.hits[0].type).toBe('track');
-      if (res.hits[0].type === 'track') {
-        expect(res.hits[0].track.name).toBe('Track One');
-        expect(res.hits[0].track.durationMs).toBe(210000);
-        expect(res.hits[0].track.artists[0].name).toBe('Artist A');
+      const hit = res.hits[0];
+      expect(hit?.type).toBe('track');
+      if (hit && hit.type === 'track') {
+        expect(hit.track.name).toBe('Track One');
+        expect(hit.track.durationMs).toBe(210000);
+        expect(hit.track.artists[0]?.name).toBe('Artist A');
       }
     } finally {
       globalThis.fetch = originalFetch;
@@ -189,6 +190,64 @@ describe('WebApiClient and SearchClient', () => {
 
       searchClient.close();
       cache.close();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('search enforces Spotify maximum limit 10 and includes all media types', async () => {
+    const originalFetch = globalThis.fetch;
+    let interceptedUrl: string | undefined;
+
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      interceptedUrl = String(input);
+      return new Response(JSON.stringify({ tracks: { items: [] } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const client = new WebApiClient({ tokenProvider: fakeTokenProvider });
+      await client.search('radiohead', undefined, 50);
+      expect(interceptedUrl).toBeDefined();
+      const parsed = new URL(interceptedUrl!);
+      expect(parsed.searchParams.get('limit')).toBe('10');
+      expect(parsed.searchParams.get('type')).toBe('track,album,artist,playlist');
+      expect(parsed.searchParams.get('q')).toBe('radiohead');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('shuffle and repeat call Spotify player API with correct query parameters and PUT method', async () => {
+    const originalFetch = globalThis.fetch;
+    const requests: Array<{ url: string; method: string }> = [];
+
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push({ url: String(input), method: init?.method ?? 'GET' });
+      return new Response(null, { status: 204 });
+    }) as unknown as typeof fetch;
+
+    try {
+      const client = new WebApiClient({ tokenProvider: fakeTokenProvider });
+      await client.shuffle(true);
+      await client.shuffle(false);
+      await client.repeat('track');
+      await client.repeat('context');
+      await client.repeat('off');
+
+      expect(requests.length).toBe(5);
+      expect(requests[0]?.url).toContain('/me/player/shuffle?state=true');
+      expect(requests[0]?.method).toBe('PUT');
+      expect(requests[1]?.url).toContain('/me/player/shuffle?state=false');
+      expect(requests[1]?.method).toBe('PUT');
+      expect(requests[2]?.url).toContain('/me/player/repeat?state=track');
+      expect(requests[2]?.method).toBe('PUT');
+      expect(requests[3]?.url).toContain('/me/player/repeat?state=context');
+      expect(requests[3]?.method).toBe('PUT');
+      expect(requests[4]?.url).toContain('/me/player/repeat?state=off');
+      expect(requests[4]?.method).toBe('PUT');
     } finally {
       globalThis.fetch = originalFetch;
     }

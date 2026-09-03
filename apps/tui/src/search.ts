@@ -59,7 +59,7 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
       const expired = cached.expiresAt !== null && cached.expiresAt < Date.now();
       if (!expired) {
         if (pq.id === activeQueryId) {
-          pq.resolve(cached.payload);
+          pq.resolve({ ...cached.payload, query: pq.query });
         } else {
           pq.resolve({ query: pq.query, hits: [] });
         }
@@ -101,7 +101,12 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
   return {
     async search(
       query: string,
-      types: Array<'track' | 'album' | 'artist' | 'playlist'> = ['track'],
+      types: Array<'track' | 'album' | 'artist' | 'playlist'> = [
+        'track',
+        'album',
+        'artist',
+        'playlist',
+      ],
     ): Promise<SearchResponseT> {
       const trimmed = query.trim();
       if (!trimmed) {

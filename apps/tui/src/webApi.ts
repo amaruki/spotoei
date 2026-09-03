@@ -34,6 +34,7 @@ export async function followNextCursor<T>(
   while (nextUrl && pages < maxPages) {
     // eslint-disable-next-line no-await-in-loop
     const nextPage = await fetchNext(nextUrl);
+    if (!nextPage) break;
     current = combine(current, nextPage);
     nextUrl = getNextUrl(nextPage);
     pages++;
@@ -43,6 +44,7 @@ export async function followNextCursor<T>(
 
 export interface TokenProvider {
   getAccessToken(): Promise<string>;
+  invalidateToken?(): void;
 }
 export interface WebApiClientOptions {
   tokenProvider: TokenProvider;
@@ -80,6 +82,14 @@ interface RawTrack {
   is_playable?: unknown;
 }
 
+interface RawPage {
+  items?: unknown[];
+  total?: unknown;
+  limit?: unknown;
+  offset?: unknown;
+  next?: unknown;
+}
+
 interface RawAlbum {
   id?: unknown;
   uri?: unknown;
@@ -89,7 +99,7 @@ interface RawAlbum {
   release_date?: unknown;
   total_tracks?: unknown;
   album_type?: unknown;
-  tracks?: unknown;
+  tracks?: RawPage;
 }
 
 interface RawArtist {
@@ -114,10 +124,10 @@ interface RawPlaylist {
 }
 
 interface RawSearchResponse {
-  tracks?: unknown;
-  albums?: unknown;
-  artists?: unknown;
-  playlists?: unknown;
+  tracks?: RawPage;
+  albums?: RawPage;
+  artists?: RawPage;
+  playlists?: RawPage;
 }
 
 export class WebApiClient {
@@ -132,62 +142,117 @@ export class WebApiClient {
 
   private async request(
     path: string,
-    params: Record<string, string> = {},
+    paramsOrBody: unknown = {},
     method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
   ): Promise<unknown> {
-    const url = new URL(`${this.baseUrl}${path}`);
-    for (const [k, v] of Object.entries(params)) {
-      url.searchParams.set(k, v);
-    }
-    const cacheKey = `${method} ${url.toString()}`;
+    const isGet = method === 'GET';
+    let urlStr = path.startsWith('http') ? path : `${this.baseUrl}${path}`;
 
-    if (method === 'GET' && this.inFlight.has(cacheKey)) {
+    let bodyStr: string | undefined;
+    if (isGet) {
+      if (paramsOrBody && typeof paramsOrBody === 'object') {
+        const url = new URL(urlStr);
+        for (const [k, v] of Object.entries(paramsOrBody as Record<string, string>)) {
+          url.searchParams.set(k, String(v));
+        }
+        urlStr = url.toString();
+      }
+    } else if (paramsOrBody && typeof paramsOrBody === 'object' && Object.keys(paramsOrBody).length > 0) {
+      bodyStr = JSON.stringify(paramsOrBody);
+    }
+
+    const cacheKey = `${method} ${urlStr}`;
+    if (isGet && this.inFlight.has(cacheKey)) {
       return this.inFlight.get(cacheKey);
     }
 
+    const doFetch = async (retryCount = 0): Promise<unknown> => {
+      const token = await this.tokenProvider.getAccessToken();
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+        'User-Agent': 'spotoei/0.0.0',
+      };
+      if (bodyStr) {
+        headers['Content-Type'] = 'application/json';
+      }
+
+      const res = await fetch(urlStr, {
+        method,
+        headers,
+        ...(bodyStr ? { body: bodyStr } : {}),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        let detail = res.statusText;
+        try {
+          const parsed = JSON.parse(errBody) as { error?: { message?: string } | string };
+          if (typeof parsed?.error === 'object' && parsed.error?.message) {
+            detail = parsed.error.message;
+          } else if (typeof parsed?.error === 'string') {
+            detail = parsed.error;
+          } else if (errBody.trim()) {
+            detail = errBody.trim();
+          }
+        } catch {
+          if (errBody.trim()) {
+            detail = errBody.trim();
+          }
+        }
+
+        // 401 Unauthorized: invalidate token and retry once
+        if (res.status === 401 && retryCount === 0) {
+          this.tokenProvider.invalidateToken?.();
+          return doFetch(retryCount + 1);
+        }
+        if (res.status === 401) {
+          throw new Error(`AUTH_EXPIRED: 401 Unauthorized (${detail})`);
+        }
+
+        // 429 Too Many Requests: wait Retry-After seconds and retry once
+        if (res.status === 429 && retryCount === 0) {
+          const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10);
+          const baseWaitMs = Math.min(10000, Math.max(1, isNaN(retryAfterSec) ? 1 : retryAfterSec) * 1000);
+          const isBun = 'Bun' in globalThis;
+          const waitMs = isBun ? Math.min(50, baseWaitMs) : baseWaitMs;
+          await new Promise((r) => setTimeout(r, waitMs));
+          return doFetch(retryCount + 1);
+        }
+        if (res.status === 429) {
+          const retryAfter = res.headers.get('Retry-After');
+          throw new Error(
+            `RATE_LIMITED: 429 Too Many Requests (retry after ${retryAfter ?? 'unknown'}s)`,
+          );
+        }
+
+        if (res.status === 403) {
+          throw new Error(`FORBIDDEN: 403 Forbidden (${detail})`);
+        }
+        throw new Error(`HTTP_${res.status}: ${detail}`);
+      }
+
+      if (res.status === 204) {
+        return null;
+      }
+      const text = await res.text();
+      if (!text.trim()) {
+        return null;
+      }
+      return JSON.parse(text);
+    };
+
     const p = (async () => {
       try {
-        const token = await this.tokenProvider.getAccessToken();
-        const res = await fetch(url.toString(), {
-          method,
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'User-Agent': 'spotoei/0.0.0',
-          },
-        });
-
-        if (!res.ok) {
-          if (res.status === 401) {
-            throw new Error('AUTH_EXPIRED: 401 Unauthorized');
-          }
-          if (res.status === 429) {
-            const retryAfter = res.headers.get('Retry-After');
-            throw new Error(
-              `RATE_LIMITED: 429 Too Many Requests (retry after ${retryAfter ?? 'unknown'}s)`,
-            );
-          }
-          if (res.status === 403) {
-            throw new Error('FORBIDDEN: 403 Forbidden');
-          }
-          throw new Error(`HTTP_${res.status}: ${res.statusText}`);
-        }
-
-        if (res.status === 204) {
-          return null;
-        }
-        const text = await res.text();
-        if (!text.trim()) {
-          return null;
-        }
-        return JSON.parse(text);
+        return await doFetch();
       } finally {
-        if (method === 'GET') {
+        if (isGet) {
           this.inFlight.delete(cacheKey);
         }
       }
     })();
 
-    if (method === 'GET') {
+    if (isGet) {
       this.inFlight.set(cacheKey, p);
     }
     return p;
@@ -197,18 +262,26 @@ export class WebApiClient {
 
   async search(
     query: string,
-    types: Array<'track' | 'album' | 'artist' | 'playlist'> = ['track'],
-    limit = 20,
+    types: Array<'track' | 'album' | 'artist' | 'playlist'> = [
+      'track',
+      'album',
+      'artist',
+      'playlist',
+    ],
+    limit = 10,
   ): Promise<SearchResponseT> {
     if (!query.trim()) {
       return { query, hits: [] };
     }
 
+    // Spotify restricts search limit to max 10; values > 10 return 400 Bad Request ("Invalid limit")
+    const safeLimit = Math.min(Math.max(1, limit), 10);
+
     try {
       const json = await this.request('/search', {
         q: query,
         type: types.join(','),
-        limit: String(limit),
+        limit: String(safeLimit),
       });
 
       const root = toSearchResponse(json);
@@ -656,7 +729,10 @@ export class WebApiClient {
   // --- Library Save / Remove Mutations ---
 
   async saveItem(type: 'track' | 'album', id: string): Promise<boolean> {
-    const path = type === 'track' ? `/me/tracks?ids=${id}` : `/me/albums?ids=${id}`;
+    const path =
+      type === 'track'
+        ? `/me/tracks?ids=${encodeURIComponent(id)}`
+        : `/me/albums?ids=${encodeURIComponent(id)}`;
     try {
       await this.request(path, {}, 'PUT');
       return true;
@@ -666,7 +742,10 @@ export class WebApiClient {
   }
 
   async removeItem(type: 'track' | 'album', id: string): Promise<boolean> {
-    const path = type === 'track' ? `/me/tracks?ids=${id}` : `/me/albums?ids=${id}`;
+    const path =
+      type === 'track'
+        ? `/me/tracks?ids=${encodeURIComponent(id)}`
+        : `/me/albums?ids=${encodeURIComponent(id)}`;
     try {
       await this.request(path, {}, 'DELETE');
       return true;
@@ -690,7 +769,11 @@ export class WebApiClient {
     try {
       const json = await this.request('/me/player/queue');
       const currentlyPlayingRaw = pickObjectKey(json, 'currently_playing');
-      const current = currentlyPlayingRaw ? this.mapTrack(currentlyPlayingRaw) : null;
+      const isTrack =
+        currentlyPlayingRaw &&
+        (pickObjectKey(currentlyPlayingRaw, 'currently_playing_type') === 'track' ||
+          !pickObjectKey(currentlyPlayingRaw, 'currently_playing_type'));
+      const current = isTrack ? this.mapTrack(currentlyPlayingRaw) : null;
       const rawQueue = toArray(pickObjectKey(json, 'queue'));
       const upcoming: QueueItemT[] = [];
       let idx = 0;
@@ -713,6 +796,116 @@ export class WebApiClient {
     } catch {
       return null;
     }
+  }
+
+  async getRecommendations(opts: {
+    seedTracks?: string[];
+    seedArtists?: string[];
+    seedGenres?: string[];
+    limit?: number;
+  }): Promise<CatalogTrackT[]> {
+    const params = new URLSearchParams();
+    if (opts.seedTracks && opts.seedTracks.length > 0) {
+      params.set('seed_tracks', opts.seedTracks.slice(0, 5).join(','));
+    }
+    if (opts.seedArtists && opts.seedArtists.length > 0) {
+      params.set('seed_artists', opts.seedArtists.slice(0, 5).join(','));
+    }
+    if (opts.seedGenres && opts.seedGenres.length > 0) {
+      params.set('seed_genres', opts.seedGenres.slice(0, 5).join(','));
+    }
+    params.set('limit', String(opts.limit ?? 20));
+
+    try {
+      const json = await this.request(`/recommendations?${params.toString()}`);
+      const rawTracks = toArray(pickObjectKey(json, 'tracks'));
+      const tracks: CatalogTrackT[] = [];
+      for (const item of rawTracks) {
+        const mapped = this.mapTrack(item);
+        if (mapped) tracks.push(mapped);
+      }
+      return tracks;
+    } catch {
+      return [];
+    }
+  }
+
+  // --- Playback / Spotify Connect Operations ---
+
+  async play(opts: { uris?: string[]; context_uri?: string; position_ms?: number; device_id?: string }): Promise<void> {
+    const query = opts.device_id ? `?device_id=${encodeURIComponent(opts.device_id)}` : '';
+    const body: Record<string, unknown> = {};
+    if (opts.uris) body.uris = opts.uris;
+    if (opts.context_uri) body.context_uri = opts.context_uri;
+    if (typeof opts.position_ms === 'number') body.position_ms = opts.position_ms;
+    await this.request(`/me/player/play${query}`, body, 'PUT');
+  }
+
+  async pause(): Promise<void> {
+    await this.request('/me/player/pause', {}, 'PUT');
+  }
+
+  async nextTrack(): Promise<void> {
+    await this.request('/me/player/next', {}, 'POST');
+  }
+
+  async previousTrack(): Promise<void> {
+    await this.request('/me/player/previous', {}, 'POST');
+  }
+
+  async seek(positionMs: number): Promise<void> {
+    await this.request(`/me/player/seek?position_ms=${Math.max(0, Math.floor(positionMs))}`, {}, 'PUT');
+  }
+
+  async setVolume(volumePercent: number): Promise<void> {
+    const vol = Math.min(100, Math.max(0, Math.round(volumePercent)));
+    await this.request(`/me/player/volume?volume_percent=${vol}`, {}, 'PUT');
+  }
+
+  async shuffle(state: boolean): Promise<void> {
+    await this.request(`/me/player/shuffle?state=${Boolean(state)}`, {}, 'PUT');
+  }
+
+  async repeat(state: 'off' | 'track' | 'context'): Promise<void> {
+    await this.request(`/me/player/repeat?state=${state}`, {}, 'PUT');
+  }
+
+  async getPlaybackState(): Promise<Record<string, unknown> | null> {
+    try {
+      const json = await this.request('/me/player');
+      return json as Record<string, unknown> | null;
+    } catch {
+      return null;
+    }
+  }
+
+  async getDevices(): Promise<Array<{ id: string; name: string; is_active: boolean; type: string }>> {
+    try {
+      const json = await this.request('/me/player/devices');
+      if (json && typeof json === 'object' && 'devices' in json && Array.isArray((json as Record<string, unknown>).devices)) {
+        return (json as { devices: Array<{ id: string; name: string; is_active: boolean; type: string }> }).devices;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  }
+
+  async transferPlayback(deviceId: string, play = true): Promise<void> {
+    await this.request('/me/player', { device_ids: [deviceId], play }, 'PUT');
+  }
+
+  async getArtistGenres(artistId: string): Promise<string[]> {
+    if (!artistId || artistId === 'unknown') return [];
+    try {
+      const json = await this.request(`/artists/${artistId}`);
+      if (json && typeof json === 'object' && 'genres' in json && Array.isArray((json as Record<string, unknown>).genres)) {
+        return (json as { genres: string[] }).genres;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
   }
 }
 

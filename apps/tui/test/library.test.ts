@@ -8,7 +8,7 @@ describe('LibraryManager', () => {
   let cache: Cache;
 
   beforeEach(() => {
-    cache = new Cache(':memory:');
+    cache = new Cache({ filename: ':memory:' });
   });
 
   afterEach(() => {

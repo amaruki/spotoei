@@ -66,7 +66,7 @@ export class CommandPalette {
     this.active = false;
     this.filter = '';
     this.selected = 0;
-    return cmd;
+    return cmd ?? null;
   }
 
   matches(): Command[] {

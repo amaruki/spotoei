@@ -79,13 +79,15 @@ export class LibraryManager {
     this.cache.invalidateQueryPrefix(this.accountId, this.makePrefix(collection));
   }
 
-  refresh(collection?: LibraryCollectionT): void {
+  async refresh(collection?: LibraryCollectionT): Promise<void> {
     if (collection) {
       this.invalidate(collection);
+      await this.getPage(collection, 0, 20, true).catch(() => null);
     } else {
       for (const c of ['saved_tracks', 'saved_albums', 'playlists', 'followed_artists'] as const) {
         this.invalidate(c);
       }
+      await this.getPage('saved_tracks', 0, 20, true).catch(() => null);
     }
   }
 }

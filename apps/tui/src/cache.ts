@@ -35,6 +35,11 @@ export class Cache {
     this.filename = opts.filename ?? defaultCachePath();
     this.db = this.openWithRecovery(this.filename, opts.wal ?? true);
     this.initSchema();
+    try {
+      this.pruneExpired();
+    } catch {
+      // ignore
+    }
   }
 
   private openWithRecovery(filename: string, wal: boolean): Database {
@@ -180,6 +185,16 @@ export class Cache {
 
     if (!row) return null;
 
+    // TTL pruning on read: drop expired rows immediately
+    if (row.expires_at !== null && row.expires_at < Date.now()) {
+      this.db
+        .prepare(
+          'DELETE FROM entities WHERE account_id = ? AND entity_type = ? AND entity_id = ?;',
+        )
+        .run(accountId, entityType, entityId);
+      return null;
+    }
+
     try {
       const payload = JSON.parse(row.payload_json) as T;
       return {
@@ -210,7 +225,6 @@ export class Cache {
     `);
     stmt.run(accountId, queryKey, JSON.stringify(payload), now, expiresAt);
   }
-
   getQuery<T>(accountId: string, queryKey: string): CachedQuery<T> | null {
     const stmt = this.db.prepare(`
       SELECT account_id, query_key, payload_json, fetched_at, expires_at
@@ -226,6 +240,14 @@ export class Cache {
     } | null;
 
     if (!row) return null;
+
+    // TTL pruning on read: drop expired rows immediately
+    if (row.expires_at !== null && row.expires_at < Date.now()) {
+      this.db
+        .prepare('DELETE FROM query_cache WHERE account_id = ? AND query_key = ?;')
+        .run(accountId, queryKey);
+      return null;
+    }
 
     try {
       const payload = JSON.parse(row.payload_json) as T;
@@ -249,10 +271,11 @@ export class Cache {
   }
 
   invalidateQueryPrefix(accountId: string, queryKeyPrefix: string): number {
+    const escaped = queryKeyPrefix.replace(/([_%])/g, '\\$1');
     const stmt = this.db.prepare(
-      'DELETE FROM query_cache WHERE account_id = ? AND query_key LIKE ?;',
+      "DELETE FROM query_cache WHERE account_id = ? AND query_key LIKE ? ESCAPE '\\';",
     );
-    const r = stmt.run(accountId, `${queryKeyPrefix}%`);
+    const r = stmt.run(accountId, `${escaped}%`);
     return r.changes ?? 0;
   }
 
@@ -287,9 +310,10 @@ export function defaultCachePath(): string {
   if (process.env.NODE_ENV === 'test' || process.env.BUN_ENV === 'test') {
     return ':memory:';
   }
-  const home = process.env.HOME ?? process.env.USERPROFILE ?? '/tmp';
-  const cacheDir = process.env.XDG_CACHE_HOME ?? `${home}/.cache`;
-  const dir = `${cacheDir}/spotoei`;
+  // Cross-platform cache dir lives in config.ts so behavior stays consistent
+  // across Linux / macOS / Windows.
+  const { getCacheDir } = require('./config') as typeof import('./config');
+  const dir = getCacheDir();
   try {
     const fs = require('node:fs');
     fs.mkdirSync(dir, { recursive: true });

@@ -32,12 +32,10 @@ describe('Cache', () => {
     // Manually expire the entry by setting expires_at to a past time.
     cache.putEntity('acct1', 'track', 't1', { name: 'A' });
     // Manually expire the entry by setting expires_at to a past time.
-    cache.putEntity('acct1', 'track', 't1', { name: 'A' }, 0);
+    cache.putEntity('acct1', 'track', 't1', { name: 'A' }, -1);
     // Wait a tick to ensure Date.now() > past+ttl
     const got = cache.getEntity('acct1', 'track', 't1');
-    expect(got).not.toBeNull();
-    expect(got!.expiresAt).not.toBeNull();
-    expect(got!.expiresAt!).toBeLessThanOrEqual(Date.now());
+    expect(got).toBeNull();
   });
 
   test('putQuery and getQuery round-trip', () => {

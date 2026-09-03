@@ -9,6 +9,7 @@
   ],
   "type": "module",
   "scripts": {
+    "start": "bun run --filter spotoei-tui start",
     "dev": "bun run --filter spotoei-tui dev",
     "build": "bun run --filter spotoei-protocol build && bun run --filter spotoei-tui build",
     "test": "bun test",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@types/bun": "*",
+    "@types/node": "^26.4.1",
     "oxfmt": "*",
     "oxlint": "*",
     "typescript": "*"

@@ -150,6 +150,120 @@ export class LyricsClient {
 
     return promise;
   }
+
+  async loadLyrics(opts: FetchLyricsOptions): Promise<LyricsDocumentT> {
+    // 1. Try public LRCLIB for real synced lyrics
+    const fromLrc = await fetchLyricsFromLrclib(opts);
+    if (fromLrc) {
+      return fromLrc;
+    }
+    // 2. Fall back to sidecar player if track URI is present
+    if (opts.trackUri) {
+      return this.getLyrics(opts.trackUri);
+    }
+    throw new Error('No lyrics found for track');
+  }
+}
+
+export interface FetchLyricsOptions {
+  trackUri?: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  durationMs?: number;
+}
+
+export function parseLrc(lrcText: string): Array<{ startMs: number; text: string }> {
+  const lines: Array<{ startMs: number; text: string }> = [];
+  const regex = /\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/;
+  for (const rawLine of lrcText.split('\n')) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+    const match = regex.exec(trimmed);
+    if (match) {
+      const mins = parseInt(match[1] ?? '0', 10);
+      const secs = parseInt(match[2] ?? '0', 10);
+      const msPart = match[3] ?? '0';
+      const ms = msPart.length === 2 ? parseInt(msPart, 10) * 10 : parseInt(msPart, 10);
+      const totalMs = mins * 60_000 + secs * 1000 + ms;
+      const text = (match[4] ?? '').trim();
+      if (text.length > 0) {
+        lines.push({ startMs: totalMs, text });
+      }
+    }
+  }
+  return lines;
+}
+
+export async function fetchLyricsFromLrclib(opts: FetchLyricsOptions): Promise<LyricsDocumentT | null> {
+  const title = opts.title?.trim();
+  if (!title) return null;
+  const artist = opts.artist?.trim() ?? '';
+  const album = opts.album?.trim() ?? '';
+  const durationSecs = opts.durationMs ? Math.round(opts.durationMs / 1000) : 0;
+
+  try {
+    const params = new URLSearchParams({
+      track_name: title,
+      artist_name: artist,
+    });
+    if (album && album !== '—') {
+      params.set('album_name', album);
+    }
+    if (durationSecs > 0) {
+      params.set('duration', String(durationSecs));
+    }
+
+    const res = await fetch(`https://lrclib.net/api/get?${params.toString()}`, {
+      headers: { 'User-Agent': 'Spotoei-TUI/0.1.0' },
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!res.ok) {
+      // Fallback search
+      const q = `${title} ${artist}`.trim();
+      const searchRes = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(q)}`, {
+        headers: { 'User-Agent': 'Spotoei-TUI/0.1.0' },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (searchRes.ok) {
+        const hits = (await searchRes.json()) as Array<{ syncedLyrics?: string; plainLyrics?: string }>;
+        if (Array.isArray(hits) && hits.length > 0) {
+          const best = hits[0];
+          if (best?.syncedLyrics) {
+            const lines = parseLrc(best.syncedLyrics);
+            if (lines.length > 0) return { kind: 'synced', lines };
+          }
+          if (best?.plainLyrics) {
+            const raw = best.plainLyrics
+              .split('\n')
+              .map((s) => s.trim())
+              .filter(Boolean)
+              .map((text) => ({ text }));
+            if (raw.length > 0) return { kind: 'plain', lines: raw };
+          }
+        }
+      }
+      return null;
+    }
+
+    const data = (await res.json()) as { syncedLyrics?: string; plainLyrics?: string };
+    if (data?.syncedLyrics) {
+      const lines = parseLrc(data.syncedLyrics);
+      if (lines.length > 0) return { kind: 'synced', lines };
+    }
+    if (data?.plainLyrics) {
+      const raw = data.plainLyrics
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((text) => ({ text }));
+      if (raw.length > 0) return { kind: 'plain', lines: raw };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function createLyricsClient(options: LyricsClientOptions): LyricsClient {

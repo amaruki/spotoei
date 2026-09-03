@@ -20,6 +20,7 @@ export const Track = z.object({
   artists: z.array(z.string()),
   album: z.string().optional(),
   durationMs: z.number().int().nonnegative(),
+  genre: z.string().optional(),
 });
 export type TrackT = z.infer<typeof Track>;
 
@@ -48,6 +49,11 @@ export const PlaybackLoadData = z
     contextUri: z.string().optional(),
     trackUri: z.string().optional(),
     autoplay: z.boolean().optional(),
+    name: z.string().optional(),
+    artists: z.array(z.string()).optional(),
+    album: z.string().optional(),
+    durationMs: z.number().int().nonnegative().optional(),
+    genre: z.string().optional(),
   })
   .refine((data) => Boolean(data.contextUri || data.trackUri), {
     message: 'At least one of contextUri or trackUri must be provided',

@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'bun:test';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess } from 'node:child_process';
-import { LyricsClient } from '../src/lyrics';
+import { LyricsClient, parseLrc } from '../src/lyrics';
 import { PROTOCOL_VERSION, type LyricsDocumentT } from 'spotoei-protocol';
 
 const writeImpl = (_chunk: unknown, cb?: (err: null | Error) => void): boolean => {
@@ -162,7 +162,7 @@ describe('LyricsClient unit tests', () => {
 
     await new Promise((r) => setTimeout(r, 20));
     expect(docs.length).toBe(1);
-    expect(docs[0].kind).toBe('synced');
+    expect(docs[0]!.kind).toBe('synced');
     client.close();
   });
 
@@ -191,7 +191,7 @@ describe('LyricsClient unit tests', () => {
 
     await new Promise((r) => setTimeout(r, 20));
     expect(docs.length).toBe(1);
-    expect(docs[0].kind).toBe('plain');
+    expect(docs[0]!.kind).toBe('plain');
     client.close();
   });
 
@@ -228,5 +228,24 @@ describe('LyricsClient unit tests', () => {
     const promise = client.getLyrics('spotify:track:pending');
     client.close();
     await expect(promise).rejects.toThrow(/lyrics client closed/);
+  });
+
+  test('parseLrc parses standard LRC timestamped lines into TimedLyricLines', () => {
+    const lrc = `[00:01.50] Hello world\n[01:05.20] Second line\n[invalid] Skipped line`;
+    const parsed = parseLrc(lrc);
+    expect(parsed.length).toBe(2);
+    expect(parsed[0]).toEqual({ startMs: 1500, text: 'Hello world' });
+    expect(parsed[1]).toEqual({ startMs: 65200, text: 'Second line' });
+  });
+
+  test('loadLyrics falls back to getLyrics when external fetch yields no lyrics', async () => {
+    const { child, stdout } = makeMockChild();
+    interceptWriteAndRespond(child, stdout, syncedResponse);
+    const client = new LyricsClient({ child });
+    client.start();
+
+    const doc = await client.loadLyrics({ trackUri: 'spotify:track:123', title: '' });
+    expect(doc.kind).toBe('synced');
+    client.close();
   });
 });

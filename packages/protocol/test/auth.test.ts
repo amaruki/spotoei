@@ -10,6 +10,8 @@ import {
   makeAuthStatus,
   makeAuthBegin,
   makeAuthLogout,
+  makeAuthSetClientId,
+  AuthSetClientIdData,
 } from '../src/index';
 
 describe('auth protocol schemas', () => {
@@ -94,6 +96,11 @@ describe('auth protocol schemas', () => {
 
     const l = makeAuthLogout('req-3');
     expect(l.command).toBe('auth.logout');
+
+    const sc = makeAuthSetClientId('req-4', 'my-client-id');
+    expect(sc.command).toBe('auth.set_client_id');
+    expect(sc.data).toEqual({ clientId: 'my-client-id' });
+    expect(AuthSetClientIdData.safeParse(sc.data).success).toBe(true);
   });
 
   test('parses auth.changed event line', () => {

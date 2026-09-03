@@ -1,8 +1,10 @@
+import type { ChildProcess } from 'node:child_process';
 import {
   makeAuthStatus,
   makeAuthBegin,
   makeAuthLogout,
   makeAuthGetWebToken,
+  makeAuthSetClientId,
   newRequestId,
   AuthStatusData,
   AuthTokenData,
@@ -30,7 +32,9 @@ export interface AuthClient {
   status(): Promise<AuthStatusDataT>;
   begin(scopes?: string[]): Promise<AuthStatusDataT>;
   logout(): Promise<AuthStatusDataT>;
+  setClientId(clientId: string): Promise<void>;
   getWebToken(): Promise<string>;
+  clearToken(): void;
   onStatusChange(listener: (status: AuthStatusDataT) => void): () => void;
   close(): void;
 }
@@ -87,6 +91,13 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
       if (msg.event === 'auth.changed') {
         const res = AuthStatusData.safeParse(msg.data);
         if (res.success) {
+          if (
+            res.data.state === 'unauthenticated' ||
+            res.data.state === 'refresh-failed' ||
+            res.data.state === 'authenticating'
+          ) {
+            cachedToken = null;
+          }
           for (const l of statusListeners) {
             try {
               l(res.data);
@@ -95,6 +106,8 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
             }
           }
         }
+      } else if (msg.event === 'auth.failed') {
+        cachedToken = null;
       }
     }
   };
@@ -164,6 +177,13 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
       return res;
     },
 
+    async setClientId(clientId: string): Promise<void> {
+      const id = newRequestId();
+      const cmd = makeAuthSetClientId(id, clientId);
+      await sendCommand<unknown>(cmd, (data) => ({ ok: true, value: data }));
+      cachedToken = null;
+    },
+
     async getWebToken(): Promise<string> {
       const now = Date.now();
       // Proactive refresh at 80% TTL. If expires in 1hr, refresh at remaining 12min.
@@ -188,6 +208,10 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
       })();
 
       return refreshPromise;
+    },
+
+    clearToken(): void {
+      cachedToken = null;
     },
 
     onStatusChange(listener: (status: AuthStatusDataT) => void): () => void {

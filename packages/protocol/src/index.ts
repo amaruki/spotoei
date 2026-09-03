@@ -43,6 +43,7 @@ export const COMMAND_NAMES = [
   'auth.begin',
   'auth.logout',
   'auth.get_web_token',
+  'auth.set_client_id',
   'playback.load',
   'playback.play',
   'playback.pause',
@@ -77,6 +78,31 @@ export const EVENT_NAMES = [
   'visualizer.waveform',
 ] as const;
 
+// Per-event typed payloads. Discriminated by the event name so the
+// inbound parser can reject malformed/wrong-type event bodies instead
+// of silently accepting permissive `Record<string, unknown>` records.
+import { AuthChangedEventData, AuthCompletedEventData, AuthFailedEventData } from './auth';
+import {
+  PlaybackChangedData,
+  PlaybackPositionData,
+} from './playback';
+import { QueueSnapshot } from './catalog';
+import { LyricsDocument } from './lyrics';
+import { SpectrumFrame, WaveformFrame } from './visualizer';
+
+export const EventDataByEvent = {
+  'auth.changed': AuthChangedEventData,
+  'auth.completed': AuthCompletedEventData,
+  'auth.failed': AuthFailedEventData,
+  'playback.changed': PlaybackChangedData,
+  'playback.position': PlaybackPositionData,
+  'queue.changed': QueueSnapshot,
+  'lyrics.synced': LyricsDocument,
+  'lyrics.plain': LyricsDocument,
+  'visualizer.spectrum': SpectrumFrame,
+  'visualizer.waveform': WaveformFrame,
+} as const;
+export type EventDataByEventT = typeof EventDataByEvent;
 // Capabilities the player may advertise during hello. Empty array = none.
 // The TUI must gate every capability-gated feature on `caps.includes(...)`
 // and refuse to invoke the feature when absent.
@@ -166,18 +192,25 @@ export const HelloResponse = z
     message: 'hello response must be ok=true',
   });
 export type HelloResponseT = z.infer<typeof HelloResponse>;
-
-export const Event = z.object({
-  ...envelopeBase,
-  type: z.literal('event'),
-  event: z.enum(EVENT_NAMES),
-  seq: z.number().int().nonnegative(),
-  data: z.record(z.unknown()).default({}),
-});
+// Typed event envelope. Each event name maps to its own data schema; the
+// union is exhaustive over EVENT_NAMES so a new event without a schema
+// is a compile-time error.
+export const Event = z.discriminatedUnion('event', [
+  z.object({ ...envelopeBase, type: z.literal('event'), seq: z.number().int().nonnegative(), event: z.literal('auth.changed'), data: EventDataByEvent['auth.changed'] }),
+  z.object({ ...envelopeBase, type: z.literal('event'), seq: z.number().int().nonnegative(), event: z.literal('auth.completed'), data: EventDataByEvent['auth.completed'] }),
+  z.object({ ...envelopeBase, type: z.literal('event'), seq: z.number().int().nonnegative(), event: z.literal('auth.failed'), data: EventDataByEvent['auth.failed'] }),
+  z.object({ ...envelopeBase, type: z.literal('event'), seq: z.number().int().nonnegative(), event: z.literal('playback.changed'), data: EventDataByEvent['playback.changed'] }),
+  z.object({ ...envelopeBase, type: z.literal('event'), seq: z.number().int().nonnegative(), event: z.literal('playback.position'), data: EventDataByEvent['playback.position'] }),
+  z.object({ ...envelopeBase, type: z.literal('event'), seq: z.number().int().nonnegative(), event: z.literal('queue.changed'), data: EventDataByEvent['queue.changed'] }),
+  z.object({ ...envelopeBase, type: z.literal('event'), seq: z.number().int().nonnegative(), event: z.literal('lyrics.synced'), data: EventDataByEvent['lyrics.synced'] }),
+  z.object({ ...envelopeBase, type: z.literal('event'), seq: z.number().int().nonnegative(), event: z.literal('lyrics.plain'), data: EventDataByEvent['lyrics.plain'] }),
+  z.object({ ...envelopeBase, type: z.literal('event'), seq: z.number().int().nonnegative(), event: z.literal('visualizer.spectrum'), data: EventDataByEvent['visualizer.spectrum'] }),
+  z.object({ ...envelopeBase, type: z.literal('event'), seq: z.number().int().nonnegative(), event: z.literal('visualizer.waveform'), data: EventDataByEvent['visualizer.waveform'] }),
+]);
 export type EventT = z.infer<typeof Event>;
 
 // Any inbound line (response or event). Commands flow TS -> Rust only.
-export const Inbound = z.discriminatedUnion('type', [Response, Event]);
+export const Inbound = z.union([Response, Event]);
 export type InboundT = z.infer<typeof Inbound>;
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -248,6 +281,10 @@ export function makeAuthGetWebToken(id: string): CommandT {
   return makeCommand(id, 'auth.get_web_token', {});
 }
 
+export function makeAuthSetClientId(id: string, clientId: string): CommandT {
+  return makeCommand(id, 'auth.set_client_id', { clientId });
+}
+
 export * from './playback';
 
 export function makePlaybackPlay(id: string): CommandT {
@@ -292,12 +329,26 @@ export function makePlaybackSetAutoplay(id: string, autoplay: boolean): CommandT
 
 export function makePlaybackLoad(
   id: string,
-  opts: { contextUri?: string; trackUri?: string; autoplay?: boolean } = {},
+  opts: {
+    contextUri?: string;
+    trackUri?: string;
+    autoplay?: boolean;
+    name?: string;
+    artists?: string[];
+    album?: string;
+    durationMs?: number;
+    genre?: string;
+  } = {},
 ): CommandT {
   const data: Record<string, unknown> = {};
   if (opts.contextUri !== undefined) data.contextUri = opts.contextUri;
   if (opts.trackUri !== undefined) data.trackUri = opts.trackUri;
   if (opts.autoplay !== undefined) data.autoplay = opts.autoplay;
+  if (opts.name !== undefined) data.name = opts.name;
+  if (opts.artists !== undefined) data.artists = opts.artists;
+  if (opts.album !== undefined) data.album = opts.album;
+  if (opts.durationMs !== undefined) data.durationMs = opts.durationMs;
+  if (opts.genre !== undefined) data.genre = opts.genre;
   return makeCommand(id, 'playback.load', data);
 }
 

@@ -149,10 +149,23 @@ describe('Protocol Playback Schemas', () => {
       makePlaybackLoad(id, {
         trackUri: 'spotify:track:xyz',
         autoplay: true,
+        name: 'Track Title',
+        artists: ['Artist 1'],
+        album: 'Album Title',
+        durationMs: 384460,
+        genre: 'Pop',
       }),
     ).toMatchObject({
       command: 'playback.load',
-      data: { trackUri: 'spotify:track:xyz', autoplay: true },
+      data: {
+        trackUri: 'spotify:track:xyz',
+        autoplay: true,
+        name: 'Track Title',
+        artists: ['Artist 1'],
+        album: 'Album Title',
+        durationMs: 384460,
+        genre: 'Pop',
+      },
     });
     expect(makePlaybackStatus(id)).toMatchObject({
       command: 'player.status',

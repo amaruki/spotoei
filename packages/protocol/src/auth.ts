@@ -70,3 +70,9 @@ export type AuthFailedEventDataT = z.infer<typeof AuthFailedEventData>;
 // transition; the TUI treats it as the canonical auth state.
 export const AuthChangedEventData = AuthStatusData;
 export type AuthChangedEventDataT = AuthStatusDataT;
+
+// `auth.set_client_id` request payload.
+export const AuthSetClientIdData = z.object({
+  clientId: z.string().min(1),
+});
+export type AuthSetClientIdDataT = z.infer<typeof AuthSetClientIdData>;

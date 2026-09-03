@@ -24,7 +24,7 @@ tokio = { version = "1", features = [
   "net",
 ] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry"] }
 thiserror = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 keyring = { version = "3", features = [
@@ -40,6 +40,13 @@ hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 bytes = "1"
+librespot = { version = "0.8.0", default-features = false, features = [
+  "rodio-backend",
+  "rustls-tls-native-roots",
+] }
+uuid = { version = "1", features = ["v4"] }
+realfft = "3.4"
+crossbeam-channel = "0.5"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }

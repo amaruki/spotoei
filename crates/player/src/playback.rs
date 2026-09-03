@@ -10,6 +10,8 @@ use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, Mutex};
+use tracing::{info, warn};
+use librespot::playback::mixer::Mixer;
 
 use crate::event;
 
@@ -78,6 +80,8 @@ pub struct Track {
     pub album: Option<String>,
     #[serde(rename = "durationMs")]
     pub duration_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub genre: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +126,17 @@ pub trait PlaybackEngine: Send + Sync {
     fn context_tracks(&self, _context_uri: &str) -> Vec<Track> {
         Vec::new()
     }
+    fn play_track(&self, _uri: &str, _autoplay: bool, _position_ms: u32) {}
+    fn resume(&self) {}
+    fn pause(&self) {}
+    fn stop(&self) {}
+    fn seek(&self, _position_ms: u32) {}
+    fn set_volume(&self, _volume: f32) {}
+    fn next(&self) {}
+    fn previous(&self) {}
+    fn set_shuffle(&self, _shuffle: bool) {}
+    fn set_repeat(&self, _mode: RepeatMode) {}
+    fn remember_track_metadata(&self, _track: &Track) {}
 }
 
 /// Deterministic fake engine used for headless tests and UI development
@@ -147,35 +162,384 @@ impl PlaybackEngine for FakeEngine {
             artists: vec!["Test Artist".to_string()],
             album: Some("Test Album".to_string()),
             duration_ms: 240_000,
+            genre: None,
         })
     }
-    fn context_tracks(&self, context_uri: &str) -> Vec<Track> {
-        if !context_uri.starts_with("spotify:") {
-            return Vec::new();
+    fn context_tracks(&self, _context_uri: &str) -> Vec<Track> {
+        // Fake engine: real context URIs (album/playlist) require server
+        // resolution. Return an empty list so callers defer playback until
+        // a concrete track URI is supplied rather than fabricating
+        // `spotify:track:ctx-*` placeholders.
+        Vec::new()
+    }
+}
+
+/// Real audio playback engine driven by Librespot and native Rodio audio sink.
+#[derive(Clone)]
+pub struct LibrespotEngine {
+    auth: Arc<crate::auth::AuthManager>,
+    inner: Arc<Mutex<Option<LibrespotActive>>>,
+    track_metadata_cache: Arc<Mutex<std::collections::HashMap<String, Track>>>,
+    pcm_sender: crossbeam_channel::Sender<Vec<f32>>,
+    pcm_receiver: crossbeam_channel::Receiver<Vec<f32>>,
+}
+
+#[derive(Clone)]
+struct LibrespotActive {
+    _session: librespot::core::session::Session,
+    player: Arc<librespot::playback::player::Player>,
+    spirc: Arc<librespot::connect::Spirc>,
+    _device_id: String,
+}
+
+pub struct VisualizerSink {
+    inner: Box<dyn librespot::playback::audio_backend::Sink>,
+    pcm_sender: crossbeam_channel::Sender<Vec<f32>>,
+}
+
+impl librespot::playback::audio_backend::Sink for VisualizerSink {
+    fn start(&mut self) -> librespot::playback::audio_backend::SinkResult<()> {
+        self.inner.start()
+    }
+
+    fn stop(&mut self) -> librespot::playback::audio_backend::SinkResult<()> {
+        self.inner.stop()
+    }
+
+    fn write(
+        &mut self,
+        packet: librespot::playback::decoder::AudioPacket,
+        converter: &mut librespot::playback::convert::Converter,
+    ) -> librespot::playback::audio_backend::SinkResult<()> {
+        if let Ok(samples) = packet.samples() {
+            let mut mono = Vec::with_capacity(samples.len() / 2);
+            for chunk in samples.chunks_exact(2) {
+                mono.push(0.5 * (chunk[0] as f32 + chunk[1] as f32));
+            }
+            if !mono.is_empty() {
+                let _ = self.pcm_sender.try_send(mono);
+            }
         }
-        (1..=3)
-            .map(|i| Track {
-                uri: format!("spotify:track:ctx-{}-{}", context_uri, i),
-                name: format!("Context Track {i}"),
-                artists: vec!["Test Artist".to_string()],
-                album: Some("Test Album".to_string()),
-                duration_ms: 180_000,
+        self.inner.write(packet, converter)
+    }
+}
+
+impl LibrespotEngine {
+    pub fn new(auth: Arc<crate::auth::AuthManager>) -> Self {
+        let (pcm_sender, pcm_receiver) = crossbeam_channel::bounded(64);
+        Self {
+            auth,
+            inner: Arc::new(Mutex::new(None)),
+            track_metadata_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            pcm_sender,
+            pcm_receiver,
+        }
+    }
+
+    pub fn pcm_receiver(&self) -> crossbeam_channel::Receiver<Vec<f32>> {
+        self.pcm_receiver.clone()
+    }
+
+    async fn ensure_active(&self) -> Result<LibrespotActive, String> {
+        let mut guard = self.inner.lock().await;
+        if let Some(ref act) = *guard {
+            return Ok(act.clone());
+        }
+
+        let config_dir = std::env::var("XDG_CONFIG_HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::env::var("HOME")
+                    .map(|h| std::path::PathBuf::from(h).join(".config"))
+                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
             })
-            .collect()
+            .join("spotoei");
+        let cache_dir = config_dir.join("cache");
+        let _ = std::fs::create_dir_all(&cache_dir);
+
+        let device_id_path = config_dir.join("device_id");
+        let device_id = if let Ok(s) = std::fs::read_to_string(&device_id_path) {
+            let t = s.trim().to_string();
+            if !t.is_empty() {
+                t
+            } else {
+                let id = uuid::Uuid::new_v4().to_string();
+                let _ = std::fs::write(&device_id_path, &id);
+                id
+            }
+        } else {
+            let id = uuid::Uuid::new_v4().to_string();
+            let _ = std::fs::write(&device_id_path, &id);
+            id
+        };
+
+        let files_cache = cache_dir.join("files");
+        let cache = librespot::core::cache::Cache::new(
+            Some(&cache_dir),
+            Some(&cache_dir),
+            Some(&files_cache),
+            None,
+        ).map_err(|e| format!("Failed to create librespot cache: {:?}", e))?;
+
+        let credentials = if let Some(creds) = cache.credentials() {
+            creds
+        } else {
+            let (token, _) = self
+                .auth
+                .get_web_token()
+                .await
+                .map_err(|e| format!("Spotify authentication required: {:?}", e))?;
+            librespot::core::authentication::Credentials::with_access_token(token)
+        };
+
+        let session_config = librespot::core::config::SessionConfig {
+            device_id: device_id.clone(),
+            autoplay: Some(false),
+            ..Default::default()
+        };
+        // Uses default KEYMASTER_CLIENT_ID for full Spotify Connect streaming
+
+        let session = librespot::core::session::Session::new(session_config, Some(cache));
+
+        let sink_builder = librespot::playback::audio_backend::find(None)
+            .ok_or_else(|| "No audio sink backend found for current platform".to_string())?;
+
+        let mixer = Arc::new(
+            <librespot::playback::mixer::softmixer::SoftMixer as librespot::playback::mixer::Mixer>::open(
+                librespot::playback::mixer::MixerConfig::default(),
+            )
+            .map_err(|e| format!("Failed to open softmixer: {:?}", e))?,
+        );
+        let volume_getter = mixer.get_soft_volume();
+
+        let pcm_tx = self.pcm_sender.clone();
+        let player_config = librespot::playback::config::PlayerConfig::default();
+        let player = librespot::playback::player::Player::new(
+            player_config,
+            session.clone(),
+            volume_getter,
+            move || {
+                let actual = sink_builder(None, librespot::playback::config::AudioFormat::default());
+                Box::new(VisualizerSink {
+                    inner: actual,
+                    pcm_sender: pcm_tx.clone(),
+                })
+            },
+        );
+
+        let connect_config = librespot::connect::ConnectConfig {
+            name: "Spotoei".to_string(),
+            device_type: librespot::core::config::DeviceType::Computer,
+            initial_volume: 45875,
+            ..Default::default()
+        };
+
+        info!("Initializing Spotoei Spotify Connect receiver with device_id={}", device_id);
+
+        let (spirc, spirc_task) = librespot::connect::Spirc::new(
+            connect_config,
+            session.clone(),
+            credentials,
+            player.clone(),
+            mixer,
+        ).await.map_err(|e| format!("Failed to start Spirc Spotify Connect: {:?}", e))?;
+
+        tokio::spawn(spirc_task);
+        let _ = spirc.activate();
+
+        let active = LibrespotActive {
+            _session: session,
+            player: player.clone(),
+            spirc: Arc::new(spirc),
+            _device_id: device_id,
+        };
+
+        *guard = Some(active.clone());
+        info!("Spotoei integrated Spotify Connect player initialized and connected successfully");
+        Ok(active)
+    }
+
+    pub async fn ensure_player(&self) -> Result<Arc<librespot::playback::player::Player>, String> {
+        let act = self.ensure_active().await?;
+        Ok(act.player)
+    }
+}
+
+impl PlaybackEngine for LibrespotEngine {
+    fn remember_track_metadata(&self, track: &Track) {
+        if let Ok(mut cache) = self.track_metadata_cache.try_lock() {
+            cache.insert(track.uri.clone(), track.clone());
+        }
+    }
+
+    fn resolve_track(&self, uri: &str) -> Option<Track> {
+        if !uri.starts_with("spotify:track:") {
+            return None;
+        }
+        if let Ok(cache) = self.track_metadata_cache.try_lock() {
+            if let Some(t) = cache.get(uri) {
+                return Some(t.clone());
+            }
+        }
+        let id = uri.trim_start_matches("spotify:track:");
+        if id.is_empty() || id.len() > 64 {
+            return None;
+        }
+        Some(Track {
+            uri: uri.to_string(),
+            name: format!("Track {id}"),
+            artists: vec!["Unknown Artist".to_string()],
+            album: None,
+            duration_ms: 240_000,
+            genre: None,
+        })
+    }
+
+    fn context_tracks(&self, _context_uri: &str) -> Vec<Track> {
+        Vec::new()
+    }
+
+    fn play_track(&self, uri: &str, autoplay: bool, position_ms: u32) {
+        let self_clone = self.clone();
+        let uri_str = uri.to_string();
+        tokio::spawn(async move {
+            match self_clone.ensure_active().await {
+                Ok(act) => {
+                    info!("Spotoei playing track: {}", uri_str);
+                    let options = librespot::connect::LoadRequestOptions {
+                        start_playing: autoplay,
+                        seek_to: position_ms,
+                        ..Default::default()
+                    };
+                    let req = librespot::connect::LoadRequest::from_tracks(vec![uri_str.clone()], options);
+                    if let Err(e) = act.spirc.load(req) {
+                        warn!("Spirc load failed, fallback to direct player: {:?}", e);
+                        if let Ok(sp_uri) = librespot::core::spotify_uri::SpotifyUri::from_uri(&uri_str) {
+                            act.player.load(sp_uri, autoplay, position_ms);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Librespot playback unavailable: {}", e);
+                }
+            }
+        });
+    }
+
+    fn pause(&self) {
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            if let Some(ref act) = *inner.lock().await {
+                let _ = act.spirc.pause();
+            }
+        });
+    }
+
+    fn stop(&self) {
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            if let Some(ref act) = *inner.lock().await {
+                let _ = act.spirc.pause();
+                act.player.stop();
+            }
+        });
+    }
+
+    fn seek(&self, position_ms: u32) {
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            if let Some(ref act) = *inner.lock().await {
+                let _ = act.spirc.set_position_ms(position_ms);
+                act.player.seek(position_ms);
+            }
+        });
+    }
+
+    fn set_volume(&self, volume: f32) {
+        let inner = self.inner.clone();
+        let vol_u16 = (volume * 65535.0).clamp(0.0, 65535.0) as u16;
+        tokio::spawn(async move {
+            if let Some(ref act) = *inner.lock().await {
+                let _ = act.spirc.set_volume(vol_u16);
+                act.player.emit_volume_changed_event(vol_u16);
+            }
+        });
+    }
+
+    fn next(&self) {
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            if let Some(ref act) = *inner.lock().await {
+                let _ = act.spirc.next();
+            }
+        });
+    }
+
+    fn previous(&self) {
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            if let Some(ref act) = *inner.lock().await {
+                let _ = act.spirc.prev();
+            }
+        });
+    }
+
+    fn set_shuffle(&self, shuffle: bool) {
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            if let Some(ref act) = *inner.lock().await {
+                let _ = act.spirc.shuffle(shuffle);
+            }
+        });
+    }
+
+    fn set_repeat(&self, mode: RepeatMode) {
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            if let Some(ref act) = *inner.lock().await {
+                match mode {
+                    RepeatMode::Off => {
+                        let _ = act.spirc.repeat(false);
+                        let _ = act.spirc.repeat_track(false);
+                    }
+                    RepeatMode::Context => {
+                        let _ = act.spirc.repeat(true);
+                        let _ = act.spirc.repeat_track(false);
+                    }
+                    RepeatMode::Track => {
+                        let _ = act.spirc.repeat_track(true);
+                    }
+                }
+            }
+        });
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct PlaybackError;
 
-pub struct Playback<E: PlaybackEngine + 'static> {
-    engine: Arc<E>,
+/// Input for `Playback::load`. Bundled into a struct so the call site does
+/// not have to remember positional argument order, and so clippy does not
+/// flag the function for exceeding the 7-argument heuristic.
+#[derive(Debug, Default, Clone)]
+pub struct LoadRequest<'a> {
+    pub context_uri: Option<&'a str>,
+    pub track_uri: Option<&'a str>,
+    pub name: Option<&'a str>,
+    pub artists: Option<Vec<String>>,
+    pub album: Option<&'a str>,
+    pub duration_ms: Option<u64>,
+    pub genre: Option<&'a str>,
+}
+
+pub struct Playback {
+    engine: Arc<dyn PlaybackEngine>,
     inner: Arc<Mutex<PlaybackInner>>,
     seq: Arc<Mutex<u64>>,
     events: mpsc::Sender<String>,
 }
 
-impl<E: PlaybackEngine + 'static> Clone for Playback<E> {
+impl Clone for Playback {
     fn clone(&self) -> Self {
         Self {
             engine: Arc::clone(&self.engine),
@@ -204,8 +568,8 @@ pub struct PlaybackChangedPayload {
     pub observed_at_monotonic_ms: u64,
 }
 
-impl<E: PlaybackEngine + 'static> Playback<E> {
-    pub fn new(engine: E, events: mpsc::Sender<String>) -> Self {
+impl Playback {
+    pub fn new(engine: impl PlaybackEngine + 'static, events: mpsc::Sender<String>) -> Self {
         Self {
             engine: Arc::new(engine),
             inner: Arc::new(Mutex::new(PlaybackInner::new())),
@@ -234,15 +598,67 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
         }
     }
 
-    pub async fn load(
-        &self,
-        context_uri: Option<&str>,
-        track_uri: Option<&str>,
-    ) -> Result<PlaybackChangedPayload, PlaybackError> {
-        let track: Option<Track> = if let Some(tu) = track_uri {
-            self.engine.resolve_track(tu)
-        } else if let Some(cu) = context_uri {
-            self.engine.context_tracks(cu).into_iter().next()
+    pub async fn load(&self, req: LoadRequest<'_>) -> Result<PlaybackChangedPayload, PlaybackError> {
+        let track: Option<Track> = if let Some(tu) = req.track_uri {
+            let mut resolved = self.engine.resolve_track(tu);
+            if let Some(ref mut t) = resolved {
+                if let Some(n) = req.name {
+                    if !n.trim().is_empty() {
+                        t.name = n.trim().to_string();
+                    }
+                }
+                if let Some(a) = req.artists {
+                    if !a.is_empty() {
+                        t.artists = a;
+                    }
+                }
+                if let Some(alb) = req.album {
+                    if !alb.trim().is_empty() {
+                        t.album = Some(alb.trim().to_string());
+                    }
+                }
+                if let Some(d) = req.duration_ms {
+                    if d > 0 {
+                        t.duration_ms = d;
+                    }
+                }
+                if let Some(g) = req.genre {
+                    if !g.trim().is_empty() {
+                        t.genre = Some(g.trim().to_string());
+                    }
+                }
+            }
+            resolved
+        } else if let Some(cu) = req.context_uri {
+            let mut first = self.engine.context_tracks(cu).into_iter().next();
+            if let Some(ref mut t) = first {
+                if let Some(n) = req.name {
+                    if !n.trim().is_empty() {
+                        t.name = n.trim().to_string();
+                    }
+                }
+                if let Some(a) = req.artists {
+                    if !a.is_empty() {
+                        t.artists = a;
+                    }
+                }
+                if let Some(alb) = req.album {
+                    if !alb.trim().is_empty() {
+                        t.album = Some(alb.trim().to_string());
+                    }
+                }
+                if let Some(d) = req.duration_ms {
+                    if d > 0 {
+                        t.duration_ms = d;
+                    }
+                }
+                if let Some(g) = req.genre {
+                    if !g.trim().is_empty() {
+                        t.genre = Some(g.trim().to_string());
+                    }
+                }
+            }
+            first
         } else {
             return Err(PlaybackError);
         };
@@ -250,12 +666,13 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             Some(t) => t,
             None => return Err(PlaybackError),
         };
+        self.engine.remember_track_metadata(&track);
         let snap = {
             let mut inner = self.inner.lock().await;
             inner.revision = inner.revision.wrapping_add(1);
             inner.state = PlaybackState::Loading;
             inner.track = Some(track.clone());
-            inner.context_uri = context_uri.map(|s| s.to_string());
+            inner.context_uri = req.context_uri.map(|s| s.to_string());
             inner.position_ms = 0;
             inner.duration_ms = track.duration_ms;
             inner.last_change_at = Instant::now();
@@ -263,6 +680,7 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             self.snapshot_locked(&inner)
         };
         self.emit_changed(&snap).await;
+        self.engine.play_track(&track.uri, true, 0);
         Ok(snap)
     }
 
@@ -272,6 +690,10 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             if inner.track.is_none() {
                 return Err(PlaybackError);
             }
+            if inner.duration_ms > 0 && inner.position_ms >= inner.duration_ms {
+                inner.position_ms = 0;
+                inner.last_emitted_position_ms = 0;
+            }
             if inner.state != PlaybackState::Playing {
                 inner.revision = inner.revision.wrapping_add(1);
                 inner.state = PlaybackState::Playing;
@@ -279,6 +701,7 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             }
             self.snapshot_locked(&inner)
         };
+        self.engine.resume();
         self.emit_changed(&snap).await;
         Ok(snap)
     }
@@ -289,13 +712,14 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             if inner.track.is_none() {
                 return Err(PlaybackError);
             }
-            if inner.state == PlaybackState::Playing {
+            if inner.state == PlaybackState::Playing || inner.state == PlaybackState::Loading {
                 inner.revision = inner.revision.wrapping_add(1);
                 inner.state = PlaybackState::Paused;
                 inner.last_change_at = Instant::now();
             }
             self.snapshot_locked(&inner)
         };
+        self.engine.pause();
         self.emit_changed(&snap).await;
         Ok(snap)
     }
@@ -318,17 +742,23 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             }
             self.snapshot_locked(&inner)
         };
+        if snap.state == "playing" {
+            self.engine.resume();
+        } else {
+            self.engine.pause();
+        }
         self.emit_changed(&snap).await;
         Ok(snap)
     }
 
     pub async fn next(&self) -> Result<PlaybackChangedPayload, PlaybackError> {
-        let snap = {
+        let (snap, advanced_track) = {
             let mut inner = self.inner.lock().await;
             if inner.track.is_none() {
                 return Err(PlaybackError);
             }
             inner.revision = inner.revision.wrapping_add(1);
+            let mut advanced = None;
             if let Some(ctx) = inner.context_uri.as_deref() {
                 let current_uri = inner
                     .track
@@ -344,7 +774,9 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
                     };
                     if let Some(t) = tracks.get(next_pos) {
                         if let Some(resolved) = self.engine.resolve_track(&t.uri) {
-                            inner.track = Some(resolved);
+                            inner.duration_ms = resolved.duration_ms;
+                            inner.track = Some(resolved.clone());
+                            advanced = Some(resolved);
                         }
                     }
                 }
@@ -352,19 +784,25 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             inner.position_ms = 0;
             inner.last_change_at = Instant::now();
             inner.last_emitted_position_ms = 0;
-            self.snapshot_locked(&inner)
+            (self.snapshot_locked(&inner), advanced)
         };
+        if let Some(ref t) = advanced_track {
+            self.engine.play_track(&t.uri, snap.state == "playing", 0);
+        } else {
+            self.engine.next();
+        }
         self.emit_changed(&snap).await;
         Ok(snap)
     }
 
     pub async fn previous(&self) -> Result<PlaybackChangedPayload, PlaybackError> {
-        let snap = {
+        let (snap, advanced_track) = {
             let mut inner = self.inner.lock().await;
             if inner.track.is_none() {
                 return Err(PlaybackError);
             }
             inner.revision = inner.revision.wrapping_add(1);
+            let mut advanced = None;
             if let Some(ctx) = inner.context_uri.as_deref() {
                 let current_uri = inner
                     .track
@@ -381,7 +819,9 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
                     };
                     if let Some(t) = tracks.get(prev_pos) {
                         if let Some(resolved) = self.engine.resolve_track(&t.uri) {
-                            inner.track = Some(resolved);
+                            inner.duration_ms = resolved.duration_ms;
+                            inner.track = Some(resolved.clone());
+                            advanced = Some(resolved);
                         }
                     }
                 }
@@ -389,8 +829,13 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             inner.position_ms = 0;
             inner.last_change_at = Instant::now();
             inner.last_emitted_position_ms = 0;
-            self.snapshot_locked(&inner)
+            (self.snapshot_locked(&inner), advanced)
         };
+        if let Some(ref t) = advanced_track {
+            self.engine.play_track(&t.uri, snap.state == "playing", 0);
+        } else {
+            self.engine.previous();
+        }
         self.emit_changed(&snap).await;
         Ok(snap)
     }
@@ -407,6 +852,7 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             inner.last_emitted_position_ms = inner.position_ms;
             self.snapshot_locked(&inner)
         };
+        self.engine.seek(position_ms as u32);
         self.emit_changed(&snap).await;
         Ok(snap)
     }
@@ -417,11 +863,16 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
         }
         let snap = {
             let mut inner = self.inner.lock().await;
+            if inner.state == PlaybackState::Playing {
+                let elapsed = inner.last_change_at.elapsed().as_millis() as u64;
+                inner.position_ms = inner.position_ms.saturating_add(elapsed).min(inner.duration_ms);
+            }
             inner.revision = inner.revision.wrapping_add(1);
             inner.volume = volume;
             inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
+        self.engine.set_volume(volume);
         self.emit_changed(&snap).await;
         Ok(snap)
     }
@@ -432,11 +883,16 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
     ) -> Result<PlaybackChangedPayload, PlaybackError> {
         let snap = {
             let mut inner = self.inner.lock().await;
+            if inner.state == PlaybackState::Playing {
+                let elapsed = inner.last_change_at.elapsed().as_millis() as u64;
+                inner.position_ms = inner.position_ms.saturating_add(elapsed).min(inner.duration_ms);
+            }
             inner.revision = inner.revision.wrapping_add(1);
             inner.shuffle = shuffle;
             inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
+        self.engine.set_shuffle(shuffle);
         self.emit_changed(&snap).await;
         Ok(snap)
     }
@@ -448,11 +904,16 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
         };
         let snap = {
             let mut inner = self.inner.lock().await;
+            if inner.state == PlaybackState::Playing {
+                let elapsed = inner.last_change_at.elapsed().as_millis() as u64;
+                inner.position_ms = inner.position_ms.saturating_add(elapsed).min(inner.duration_ms);
+            }
             inner.revision = inner.revision.wrapping_add(1);
             inner.repeat = mode;
             inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
+        self.engine.set_repeat(mode);
         self.emit_changed(&snap).await;
         Ok(snap)
     }
@@ -463,6 +924,10 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
     ) -> Result<PlaybackChangedPayload, PlaybackError> {
         let snap = {
             let mut inner = self.inner.lock().await;
+            if inner.state == PlaybackState::Playing {
+                let elapsed = inner.last_change_at.elapsed().as_millis() as u64;
+                inner.position_ms = inner.position_ms.saturating_add(elapsed).min(inner.duration_ms);
+            }
             inner.revision = inner.revision.wrapping_add(1);
             inner.autoplay = autoplay;
             inner.last_change_at = Instant::now();
@@ -481,12 +946,14 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
         }
         let elapsed = inner.last_change_at.elapsed().as_millis() as u64;
         inner.last_change_at = Instant::now();
-        let new_pos = inner
-            .position_ms
-            .saturating_add(elapsed)
-            .min(inner.duration_ms);
-        inner.position_ms = new_pos;
-        let reached_end = inner.duration_ms > 0 && new_pos >= inner.duration_ms;
+        let new_pos = inner.position_ms.saturating_add(elapsed);
+        let clamped_pos = if inner.duration_ms > 0 {
+            new_pos.min(inner.duration_ms)
+        } else {
+            new_pos
+        };
+        inner.position_ms = clamped_pos;
+        let reached_end = inner.duration_ms > 0 && new_pos >= inner.duration_ms.saturating_add(1000);
         if reached_end {
             // Honor repeat modes and autoplay rules when track finishes.
             match inner.repeat {
@@ -627,7 +1094,15 @@ mod tests {
 
         // Load track.
         let load_snap = pb
-            .load(None, Some("spotify:track:test12345"))
+            .load(LoadRequest {
+                context_uri: None,
+                track_uri: Some("spotify:track:test12345"),
+                name: None,
+                artists: None,
+                album: None,
+                duration_ms: None,
+                genre: None,
+            })
             .await
             .expect("load should succeed");
         assert_eq!(load_snap.state, "loading");

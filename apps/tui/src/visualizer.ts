@@ -161,7 +161,7 @@ export class VisualizerController {
 
   async setMode(mode: VisualizerModeT): Promise<void> {
     this.mode = mode;
-    this.enabled = mode !== 'off';
+    this.enabled = true;
     await this.syncConfig();
   }
 
@@ -211,11 +211,11 @@ export class VisualizerController {
         this.syncConfig().catch(() => {});
       }
     } else if (this.currentFps === 30) {
-      // At 30 FPS target interval is ~33.3ms. Low-jitter frames (<=36ms) indicate recovery.
-      if (ms <= 36) {
+      // At 30 FPS target interval is ~33.3ms. Low-jitter frames (<=40ms) indicate recovery.
+      if (ms <= 40) {
         this.fastFrameCount++;
       } else {
-        this.fastFrameCount = 0;
+        this.fastFrameCount = Math.max(0, this.fastFrameCount - 2);
       }
 
       if (this.fastFrameCount >= 60) {

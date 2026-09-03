@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'node:child_process';
 import {
   PlaybackChangedData,
   PlaybackPositionData,

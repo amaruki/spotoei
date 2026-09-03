@@ -1,8 +1,20 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, beforeEach } from 'bun:test';
 import { locatePlayer, startPlayer, stopPlayer } from '../src/player';
 import { createAuthClient } from '../src/auth';
 
 describe('auth integration with player sidecar', () => {
+  beforeEach(async () => {
+    const bin = locatePlayer();
+    const handshake = await startPlayer(bin);
+    const auth = createAuthClient({ child: handshake.child });
+    try {
+      await auth.logout();
+    } finally {
+      auth.close();
+      await stopPlayer(handshake.child);
+    }
+  });
+
   test('fresh player reports unauthenticated state', async () => {
     const bin = locatePlayer();
     const handshake = await startPlayer(bin);
@@ -125,6 +137,24 @@ describe('auth integration with player sidecar', () => {
       // All 5 should resolve to the exact same token value.
       for (const t of tokens) {
         expect(t).toBe(tokens[0]);
+      }
+    } finally {
+      auth.close();
+      await stopPlayer(handshake.child);
+    }
+  });
+
+  test('setClientId dynamically updates client id in sidecar', async () => {
+    const bin = locatePlayer();
+    const handshake = await startPlayer(bin, { SPOTOEI_REDIRECT_PORT: '0' });
+    const auth = createAuthClient({ child: handshake.child });
+
+    try {
+      await auth.setClientId('dynamically-configured-client-id');
+      try {
+        await auth.begin();
+      } catch (err) {
+        expect(String(err)).not.toContain('missing SPOTOEI_CLIENT_ID');
       }
     } finally {
       auth.close();

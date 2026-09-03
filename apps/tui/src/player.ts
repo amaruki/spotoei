@@ -14,6 +14,7 @@ import {
   newRequestId,
   type InboundT,
 } from 'spotoei-protocol';
+import { getLogPath, logToFile, resolveRedirectPort } from './config';
 
 export interface HandshakeResult {
   protocol: number;
@@ -117,6 +118,18 @@ export async function startPlayer(
     LANG: process.env.LANG ?? 'C.UTF-8',
     TERM: process.env.TERM ?? 'xterm-256color',
     RUST_LOG: process.env.RUST_LOG ?? 'info',
+    SPOTOEI_CLIENT_ID: process.env.SPOTOEI_CLIENT_ID,
+    SPOTOEI_REDIRECT_PORT: process.env.SPOTOEI_REDIRECT_PORT ?? String(resolveRedirectPort()),
+    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+    XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
+    XDG_STATE_HOME: process.env.XDG_STATE_HOME,
+    XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
+    PULSE_SERVER: process.env.PULSE_SERVER,
+    PIPEWIRE_RUNTIME_DIR: process.env.PIPEWIRE_RUNTIME_DIR,
+    ALSA_CARD: process.env.ALSA_CARD,
+    ALSA_DEVICE: process.env.ALSA_DEVICE,
+    SPOTOEI_LOG_FILE: getLogPath(),
+    DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS,
   };
   for (const [k, v] of Object.entries(extraEnv)) {
     cleanEnv[k] = v;
@@ -133,7 +146,11 @@ export async function startPlayer(
   }
 
   const stderrListener = (chunk: Buffer) => {
-    process.stderr.write(`[player] ${sanitizeStderr(chunk)}`);
+    const text = sanitizeStderr(chunk);
+    if (!process.stdout.isTTY) {
+      process.stderr.write(`[player] ${text}`);
+    }
+    logToFile(`[player] ${text.trimEnd()}`);
   };
   child.stderr.on('data', stderrListener);
 
@@ -184,16 +201,17 @@ export async function startPlayer(
         }
       };
 
-      // Wait for the hello frame to be drained to the OS pipe before
-      // attaching the readline listener. Without this drain, a fast
-      // sidecar reply can race the read loop and be discarded, which
-      // is what causes handshake timeouts under Bun.
-      child.stdin!.write(JSON.stringify(hello) + '\n', (writeErr) => {
-        if (writeErr) {
-          settleReject(writeErr);
-          return;
+      // Attach the readline listener BEFORE the hello frame goes out
+      // over stdin. The player can reply with `hello` synchronously
+      // after parsing our frame; if the listener is attached later
+      // (post-write), the line arrives in the readline buffer before
+      // we subscribe and gets silently dropped.
+      rl.on('line', onLine);
+
+      child.stdin!.write(JSON.stringify(hello) + '\n', (e) => {
+        if (e) {
+          settleReject(e instanceof Error ? e : new Error(String(e)));
         }
-        rl.on('line', onLine);
       });
     });
 
@@ -255,8 +273,7 @@ export async function restartPlayer(
  * after the grace period expires, it is escalated to SIGKILL.
  */
 export async function stopPlayer(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null) return;
-
+  if (child.exitCode !== null || child.signalCode !== null) return;
   const id = newRequestId();
   const cmd = makeShutdown(id);
 

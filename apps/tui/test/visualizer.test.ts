@@ -55,8 +55,8 @@ describe('VisualizerController unit tests', () => {
     await new Promise((r) => setTimeout(r, 20));
 
     expect(frames.length).toBe(1);
-    expect(frames[0].mode).toBe('spectrum');
-    expect(frames[0].data).toEqual([0.1, 0.5, 0.9]);
+    expect(frames[0]!.mode).toBe('spectrum');
+    expect(frames[0]!.data).toEqual([0.1, 0.5, 0.9]);
 
     ctrl.stop();
   });
@@ -84,8 +84,8 @@ describe('VisualizerController unit tests', () => {
     await new Promise((r) => setTimeout(r, 20));
 
     expect(frames.length).toBe(1);
-    expect(frames[0].mode).toBe('oscilloscope');
-    expect(frames[0].data).toEqual([-0.5, 0.0, 0.5]);
+    expect(frames[0]!.mode).toBe('oscilloscope');
+    expect(frames[0]!.data).toEqual([-0.5, 0.0, 0.5]);
 
     ctrl.stop();
   });
@@ -218,7 +218,7 @@ describe('VisualizerController unit tests', () => {
         }) + '\n',
       );
       // eslint-disable-next-line no-await-in-loop
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise((r) => setTimeout(r, 10));
     }
     await new Promise((r) => setTimeout(r, 50));
     expect(ctrl.getCurrentFps()).toBe(60);
