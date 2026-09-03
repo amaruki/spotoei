@@ -21,11 +21,29 @@ import {
   type QueueSnapshotT,
   type SearchResponseT,
 } from 'spotoei-protocol';
+export async function followNextCursor<T>(
+  first: T,
+  fetchNext: (url: string) => Promise<T | null>,
+  getNextUrl: (page: T) => string | undefined | null,
+  combine: (accum: T, page: T) => T,
+  maxPages = 5,
+): Promise<T> {
+  let current = first;
+  let pages = 1;
+  let nextUrl = getNextUrl(current);
+  while (nextUrl && pages < maxPages) {
+    // eslint-disable-next-line no-await-in-loop
+    const nextPage = await fetchNext(nextUrl);
+    current = combine(current, nextPage);
+    nextUrl = getNextUrl(nextPage);
+    pages++;
+  }
+  return current;
+}
 
 export interface TokenProvider {
   getAccessToken(): Promise<string>;
 }
-
 export interface WebApiClientOptions {
   tokenProvider: TokenProvider;
   baseUrl?: string;
@@ -154,7 +172,14 @@ export class WebApiClient {
           throw new Error(`HTTP_${res.status}: ${res.statusText}`);
         }
 
-        return await res.json();
+        if (res.status === 204) {
+          return null;
+        }
+        const text = await res.text();
+        if (!text.trim()) {
+          return null;
+        }
+        return JSON.parse(text);
       } finally {
         if (method === 'GET') {
           this.inFlight.delete(cacheKey);
@@ -251,9 +276,7 @@ export class WebApiClient {
           id,
           uri: `spotify:track:${id}`,
           name: 'Unavailable track',
-          artists: [
-            { id: 'unknown', name: 'Unknown', uri: 'spotify:artist:unknown' },
-          ],
+          artists: [{ id: 'unknown', name: 'Unknown', uri: 'spotify:artist:unknown' }],
           durationMs: 0,
         },
         completeness: 'unavailable',
@@ -284,9 +307,7 @@ export class WebApiClient {
           id,
           uri: `spotify:album:${id}`,
           name: 'Unavailable album',
-          artists: [
-            { id: 'unknown', name: 'Unknown', uri: 'spotify:artist:unknown' },
-          ],
+          artists: [{ id: 'unknown', name: 'Unknown', uri: 'spotify:artist:unknown' }],
         },
         completeness: 'unavailable',
         reason: err instanceof Error ? err.message : String(err),
@@ -305,10 +326,8 @@ export class WebApiClient {
     const artistList = toArtistList(candidate.artists);
     const albumRef = toAlbumRef(candidate.album);
     const firstImg = toFirstImage(albumRef.images);
-    const durationMs =
-      typeof candidate.duration_ms === 'number' ? candidate.duration_ms : 0;
-    const isExplicit =
-      typeof candidate.explicit === 'boolean' ? candidate.explicit : undefined;
+    const durationMs = typeof candidate.duration_ms === 'number' ? candidate.duration_ms : 0;
+    const isExplicit = typeof candidate.explicit === 'boolean' ? candidate.explicit : undefined;
     const isPlayable =
       typeof candidate.is_playable === 'boolean' ? candidate.is_playable : undefined;
 
@@ -324,7 +343,8 @@ export class WebApiClient {
       isExplicit,
       isPlayable,
     };
-    return TrackSchema.parse(track);
+    const parsed = TrackSchema.safeParse(track);
+    return parsed.success ? parsed.data : null;
   }
 
   private mapAlbum(raw: unknown): CatalogAlbumT | null {
@@ -356,7 +376,8 @@ export class WebApiClient {
       totalTracks,
       albumType,
     };
-    return AlbumSchema.parse(album);
+    const parsed = AlbumSchema.safeParse(album);
+    return parsed.success ? parsed.data : null;
   }
 
   private mapArtist(raw: unknown): CatalogArtistT | null {
@@ -374,9 +395,7 @@ export class WebApiClient {
         ? (candidate.followers as { total?: unknown })
         : null;
     const followers =
-      followersObj && typeof followersObj.total === 'number'
-        ? followersObj.total
-        : undefined;
+      followersObj && typeof followersObj.total === 'number' ? followersObj.total : undefined;
 
     const artist = {
       id,
@@ -386,7 +405,8 @@ export class WebApiClient {
       genres,
       followers,
     };
-    return ArtistSchema.parse(artist);
+    const parsed = ArtistSchema.safeParse(artist);
+    return parsed.success ? parsed.data : null;
   }
 
   private mapPlaylist(raw: unknown): CatalogPlaylistT | null {
@@ -405,10 +425,7 @@ export class WebApiClient {
       ownerObj && typeof ownerObj.id === 'string'
         ? {
             id: ownerObj.id,
-            name:
-              typeof ownerObj.display_name === 'string'
-                ? ownerObj.display_name
-                : ownerObj.id,
+            name: typeof ownerObj.display_name === 'string' ? ownerObj.display_name : ownerObj.id,
           }
         : undefined;
 
@@ -419,26 +436,23 @@ export class WebApiClient {
     const trackCount =
       tracksObj && typeof tracksObj.total === 'number' ? tracksObj.total : undefined;
 
-    const isPublic =
-      typeof candidate.public === 'boolean' ? candidate.public : undefined;
+    const isPublic = typeof candidate.public === 'boolean' ? candidate.public : undefined;
     const isCollaborative =
-      typeof candidate.collaborative === 'boolean'
-        ? candidate.collaborative
-        : undefined;
+      typeof candidate.collaborative === 'boolean' ? candidate.collaborative : undefined;
 
     const playlist = {
       id,
       uri: typeof candidate.uri === 'string' ? candidate.uri : `spotify:playlist:${id}`,
       name: typeof candidate.name === 'string' ? candidate.name : 'Untitled Playlist',
-      description:
-        typeof candidate.description === 'string' ? candidate.description : undefined,
+      description: typeof candidate.description === 'string' ? candidate.description : undefined,
       owner,
       image: firstImg,
       trackCount,
       isPublic,
       isCollaborative,
     };
-    return PlaylistSchema.parse(playlist);
+    const parsed = PlaylistSchema.safeParse(playlist);
+    return parsed.success ? parsed.data : null;
   }
 
   // --- Library Views & Pagination ---
@@ -453,9 +467,7 @@ export class WebApiClient {
 
     try {
       if (collection === 'saved_tracks') {
-        const json = await this.request(
-          `/me/tracks?offset=${safeOffset}&limit=${safeLimit}`,
-        );
+        const json = await this.request(`/me/tracks?offset=${safeOffset}&limit=${safeLimit}`);
         const rawItems = toArray(pickObjectKey(json, 'items'));
         const tracks: CatalogTrackT[] = [];
         for (const item of rawItems) {
@@ -477,9 +489,7 @@ export class WebApiClient {
       }
 
       if (collection === 'saved_albums') {
-        const json = await this.request(
-          `/me/albums?offset=${safeOffset}&limit=${safeLimit}`,
-        );
+        const json = await this.request(`/me/albums?offset=${safeOffset}&limit=${safeLimit}`);
         const rawItems = toArray(pickObjectKey(json, 'items'));
         const albums: CatalogAlbumT[] = [];
         for (const item of rawItems) {
@@ -501,9 +511,7 @@ export class WebApiClient {
       }
 
       if (collection === 'followed_artists') {
-        const json = await this.request(
-          `/me/following?type=artist&limit=${safeLimit}`,
-        );
+        const json = await this.request(`/me/following?type=artist&limit=${safeLimit}`);
         const artistsObj =
           json !== null && typeof json === 'object' && 'artists' in json
             ? (json as { artists: unknown }).artists
@@ -535,9 +543,7 @@ export class WebApiClient {
       }
 
       if (collection === 'playlists') {
-        const json = await this.request(
-          `/me/playlists?offset=${safeOffset}&limit=${safeLimit}`,
-        );
+        const json = await this.request(`/me/playlists?offset=${safeOffset}&limit=${safeLimit}`);
         const rawItems = toArray(pickObjectKey(json, 'items'));
         const playlists: CatalogPlaylistT[] = [];
         for (const item of rawItems) {
@@ -614,11 +620,7 @@ export class WebApiClient {
 
   async addToQueue(uri: string): Promise<boolean> {
     try {
-      await this.request(
-        `/me/player/queue?uri=${encodeURIComponent(uri)}`,
-        {},
-        'POST',
-      );
+      await this.request(`/me/player/queue?uri=${encodeURIComponent(uri)}`, {}, 'POST');
       return true;
     } catch {
       return false;
@@ -653,7 +655,6 @@ export class WebApiClient {
       return null;
     }
   }
-
 }
 
 // --- Targeted, used-once shaping helpers ---
@@ -686,9 +687,7 @@ function toArtistList(value: unknown): CatalogTrackT['artists'] {
           ? a.uri
           : `spotify:artist:${typeof a.id === 'string' ? a.id : 'unknown'}`,
     }));
-  return out.length > 0
-    ? out
-    : [{ id: 'unknown', name: 'Unknown', uri: 'spotify:artist:unknown' }];
+  return out.length > 0 ? out : [{ id: 'unknown', name: 'Unknown', uri: 'spotify:artist:unknown' }];
 }
 
 function toAlbumRef(value: unknown): RawAlbumRef {
