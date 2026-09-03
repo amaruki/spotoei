@@ -56,8 +56,7 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
     // 1. Cache lookup
     const cached = opts.cache.getQuery<SearchResponseT>(opts.accountId, cacheKey);
     if (cached) {
-      const expired =
-        cached.expiresAt !== null && cached.expiresAt < Date.now();
+      const expired = cached.expiresAt !== null && cached.expiresAt < Date.now();
       if (!expired) {
         if (pq.id === activeQueryId) {
           pq.resolve(cached.payload);

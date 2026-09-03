@@ -14,6 +14,7 @@ export class QueueManager {
   private webApi: WebApiClient;
   private snapshot: QueueSnapshotT = { current: null, upcoming: [], revision: 0 };
   private listeners: Set<(snap: QueueSnapshotT) => void> = new Set();
+  private refreshSeq = 0;
 
   constructor(opts: QueueManagerOptions) {
     this.webApi = opts.webApi;
@@ -32,7 +33,12 @@ export class QueueManager {
   }
 
   async refresh(): Promise<QueueSnapshotT> {
+    const mySeq = ++this.refreshSeq;
     const fresh = await this.webApi.getQueueSnapshot();
+    if (mySeq !== this.refreshSeq) {
+      // A newer refresh started after this one; drop stale result.
+      return this.snapshot;
+    }
     if (fresh) {
       this.snapshot = {
         current: fresh.current,

@@ -3,10 +3,7 @@
 
 import { Cache } from './cache';
 import { WebApiClient } from './webApi';
-import type {
-  LibraryCollectionT,
-  LibraryPageResponseT,
-} from 'spotoei-protocol';
+import type { LibraryCollectionT, LibraryPageResponseT } from 'spotoei-protocol';
 
 export interface LibraryManagerOptions {
   webApi: WebApiClient;
@@ -45,13 +42,9 @@ export class LibraryManager {
     const key = this.makeKey(collection, offset, limit);
 
     if (!forceRefresh) {
-      const cached = this.cache.getQuery<LibraryPageResponseT>(
-        this.accountId,
-        key,
-      );
+      const cached = this.cache.getQuery<LibraryPageResponseT>(this.accountId, key);
       if (cached) {
-        const expired =
-          cached.expiresAt !== null && cached.expiresAt < Date.now();
+        const expired = cached.expiresAt !== null && cached.expiresAt < Date.now();
         if (!expired) {
           return cached.payload;
         }
@@ -68,8 +61,7 @@ export class LibraryManager {
   async save(type: 'track' | 'album', id: string): Promise<boolean> {
     const ok = await this.webApi.saveItem(type, id);
     if (ok) {
-      const collection: LibraryCollectionT =
-        type === 'track' ? 'saved_tracks' : 'saved_albums';
+      const collection: LibraryCollectionT = type === 'track' ? 'saved_tracks' : 'saved_albums';
       this.cache.invalidateQueryPrefix(this.accountId, this.makePrefix(collection));
     }
     return ok;
@@ -78,8 +70,7 @@ export class LibraryManager {
   async remove(type: 'track' | 'album', id: string): Promise<boolean> {
     const ok = await this.webApi.removeItem(type, id);
     if (ok) {
-      const collection: LibraryCollectionT =
-        type === 'track' ? 'saved_tracks' : 'saved_albums';
+      const collection: LibraryCollectionT = type === 'track' ? 'saved_tracks' : 'saved_albums';
       this.cache.invalidateQueryPrefix(this.accountId, this.makePrefix(collection));
     }
     return ok;

@@ -19,10 +19,7 @@ export interface BoxOptions {
   focused?: boolean;
 }
 
-export function drawBox(
-  lines: string[],
-  opts: BoxOptions,
-): string[] {
+export function drawBox(lines: string[], opts: BoxOptions): string[] {
   const width = Math.max(10, opts.width);
   const innerWidth = width - 2;
   const horizontalChar = opts.focused ? '═' : '─';
