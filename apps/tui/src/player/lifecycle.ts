@@ -19,24 +19,19 @@ export async function stopPlayer(child: ChildProcess): Promise<void> {
   const cmd = makeShutdown(id);
 
   await new Promise<void>((resolveStop) => {
-    let timer: NodeJS.Timeout | undefined;
-
-    const onSettled = () => {
+    const onSettled = (timer: NodeJS.Timeout) => {
       clearTimeout(timer);
       setImmediate(resolveStop);
     };
-    child.once('exit', onSettled);
-    child.once('close', onSettled);
-
-    // Arm the grace timer immediately so wedged/unresponsive stdin pipes
-    // still trigger SIGKILL escalation within SHUTDOWN_TIMEOUT_MS.
-    timer = setTimeout(() => {
+    const killTimer = setTimeout(() => {
       try {
         child.kill('SIGKILL');
       } catch {
         // Child may already have exited.
       }
     }, SHUTDOWN_TIMEOUT_MS);
+    child.once('exit', () => onSettled(killTimer));
+    child.once('close', () => onSettled(killTimer));
     try {
       child.stdin?.write(JSON.stringify(cmd) + '\n');
     } catch {
