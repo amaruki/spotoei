@@ -77,7 +77,10 @@ export function createKeyHandler(
     }
 
     if (key.name === 'escape') {
-      if (ui) ui.setRoute('home');
+      if (ui) {
+        const closed = ui.navigateBack();
+        if (!closed) ui.setFocus('sidebar');
+      }
       return;
     }
     if (key.name === 'tab') {
@@ -176,30 +179,16 @@ export function createKeyHandler(
       return;
     }
 
-    // Toggle Visualizer on/off with 'V' (Shift+V)
-    if (isUpperKey(key, 'v')) {
+    // Full-screen visualizer route with 'V' (Shift+V or v): toggle route
+    if (isUpperKey(key, 'v') || isLowerKey(key, 'v')) {
       if (ui) {
-        const visible = ui.toggleVisualizer();
-        ui.setStatus(
-          visible
-            ? `Visualizer enabled (${state.currentInfo.visualizer.mode})`
-            : 'Visualizer hidden',
-        );
-      }
-      return;
-    }
-
-    // Visualizer mode cycle with 'v' (lowercase)
-    if (isLowerKey(key, 'v')) {
-      if (ui && !ui.isVisualizerVisible()) {
-        ui.setVisualizerVisible(true);
-        ui.setStatus(`Visualizer enabled (${state.currentInfo.visualizer.mode})`);
-      } else {
-        const next = clients.visualizer.cycleMode();
-        state.currentInfo.visualizer = { mode: next, fps: clients.visualizer.getCurrentFps() };
-        if (ui) {
-          ui.setVisualizerFrame(null);
-          ui.setStatus(`Visualizer mode: ${next}`);
+        const cur = ui.getRoute();
+        if (routeKind(cur) === 'visualizer') {
+          ui.navigateBack();
+          ui.setStatus('Exited visualizer');
+        } else {
+          ui.setRoute({ kind: 'visualizer' });
+          ui.setStatus(`Visualizer (${state.currentInfo.visualizer.mode}) — V: close, m: mode`);
         }
       }
       return;

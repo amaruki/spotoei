@@ -1,8 +1,9 @@
 import { bold, fg, t } from '@opentui/core';
-import { cap, formatArtists, renderProgressBarStyled } from '../formatters';
-import { COLOR_ACCENT, COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
+import { formatArtists } from '../formatters';
+import { COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
 import { getHomeContent } from '../views/home';
 import { getSettingsContent } from '../views/settings';
+import { buildPlaybackBarContent } from '../playbackBarView';
 import { routeKind } from './navigationStack';
 import type { UiCoreContext } from './types';
 // Build the live status / progress / footer / header surface. Each
@@ -50,41 +51,46 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
   const renderPlaybackBar = (): void => {
     const pb = state.playback;
     const track = pb?.track;
-    const isPlaying = pb?.state === 'playing';
-    const isPaused = pb?.state === 'paused';
-    const stateIcon = isPlaying
-      ? fg(COLOR_SUCCESS)(bold('▶ PLAYING'))
-      : isPaused
-        ? fg(COLOR_WARN)(bold('⏸ PAUSED'))
-        : fg(COLOR_DIM)('■ IDLE');
+    const pbState =
+      pb?.state === 'playing' ? 'playing' : pb?.state === 'paused' ? 'paused' : 'idle';
 
     const authIndicator =
       state.auth.state === 'authenticated'
         ? fg(COLOR_SUCCESS)('● Online')
         : fg(COLOR_WARN)('○ Offline / Login Required');
 
-    built.playbackBar.title = `Playback [${pb?.state ? pb.state.toUpperCase() : 'IDLE'}]  •  Spotoei ${authIndicator}`;
+    built.playbackBar.title = `Playback [${pbState.toUpperCase()}]  •  Spotoei ${authIndicator}`;
 
     if (!track) {
+      const stateIcon =
+        pbState === 'playing'
+          ? fg(COLOR_SUCCESS)(bold('▶ PLAYING'))
+          : pbState === 'paused'
+            ? fg(COLOR_WARN)(bold('⏸ PAUSED'))
+            : fg(COLOR_DIM)('■ IDLE');
       built.playbackTrackText.content = t`${stateIcon}  ${fg(COLOR_DIM)('No track playing — select a song from Library [r] or Search [/]')}`;
       built.playbackProgressText.content = t`${fg(COLOR_DIM)('0:00  ────────────────────────────────────────────────────────────  0:00 (0%)')}`;
       return;
     }
 
-    const title = track.name || 'Untitled';
-    const artists = formatArtists(track.artists);
-    const album = track.album ?? '—';
-    const genre = track.genre ?? '—';
-
-    const vol = Math.round((pb?.volume ?? 1) * 100);
-    const shuffle = pb?.shuffle ? 'on' : 'off';
-    const repeat = pb?.repeat ?? 'off';
-
-    built.playbackTrackText.content = t`${stateIcon}  ${fg(COLOR_ACCENT)(bold(cap(title, 28)))}  ${fg(COLOR_DIM)('by')} ${fg(COLOR_TEXT)(cap(artists, 24))}  ${fg(COLOR_DIM)('•')}  ${fg(COLOR_DIM)('Album:')} ${fg(COLOR_TEXT)(cap(album, 20))}  ${fg(COLOR_DIM)('•')}  ${fg(COLOR_DIM)('Genre:')} ${fg(COLOR_SUCCESS)(cap(genre, 16))}  ${fg(COLOR_DIM)(`[Vol: ${vol}% | Shuf: ${shuffle} | Rep: ${repeat}]`)}`;
-
+    const width = process.stdout.columns ?? 120;
     const posMs = pb?.positionMs ?? 0;
     const durMs = pb?.durationMs && pb.durationMs > 0 ? pb.durationMs : (track.durationMs ?? 0);
-    built.playbackProgressText.content = renderProgressBarStyled(posMs, durMs, 64);
+    const content = buildPlaybackBarContent({
+      state: pbState,
+      title: track.name || 'Untitled',
+      artist: formatArtists(track.artists),
+      album: track.album,
+      positionMs: posMs,
+      durationMs: durMs,
+      shuffle: pb?.shuffle ?? false,
+      repeat: pb?.repeat ?? 'off',
+      queueCount: state.queue.upcoming.length,
+      volume: Math.round((pb?.volume ?? 1) * 100),
+      width,
+    });
+    built.playbackTrackText.content = t`${fg(COLOR_TEXT)(content.line1)}`;
+    built.playbackProgressText.content = t`${fg(COLOR_DIM)(content.line2)}`;
   };
 
   const setHeader = (): void => {
