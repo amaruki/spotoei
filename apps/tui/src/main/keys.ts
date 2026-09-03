@@ -1,0 +1,230 @@
+import { resolveClientId } from '../config';
+import type { KeyDispatch } from '../ui';
+import type { AppContext } from './types';
+import { isLowerKey, isUpperKey } from './utils';
+
+export function createKeyHandler(
+  ctx: AppContext,
+  actions: {
+    triggerAuth: () => Promise<void>;
+    loadLibrary: (force?: boolean) => Promise<void>;
+    loadCurrentLyrics: (force?: boolean) => Promise<void>;
+    updateQueueView: () => Promise<void>;
+    ensureAutoplayTracks: () => Promise<void>;
+    playTrackOrContext: (opts: {
+      trackUri?: string;
+      contextUri?: string;
+      title: string;
+    }) => Promise<void>;
+    nextTrack: () => Promise<void>;
+    previousTrack: () => Promise<void>;
+    toggleShuffle: () => Promise<void>;
+    toggleRepeat: () => Promise<void>;
+    toggleAutoplay: () => Promise<void>;
+    seekRelative: (deltaMs: number) => Promise<void>;
+    changeVolume: (delta: number) => Promise<void>;
+  },
+): KeyDispatch {
+  const { clients, state, getUi, quit } = ctx;
+
+  return (key) => {
+    const ui = getUi();
+    if (key.ctrl && key.name === 'c') {
+      void quit();
+      return;
+    }
+    if (key.name === 'q' || key.name === 'Q') {
+      void quit();
+      return;
+    }
+    if (key.name === '?' || key.sequence === '?' || key.name === ':') {
+      if (ui) ui.openPalette();
+      return;
+    }
+
+    // If unauthenticated, gate player actions and offer direct login
+    if (state.currentInfo.auth?.state !== 'authenticated') {
+      if (isLowerKey(key, 'a') || key.name === 'return') {
+        void actions.triggerAuth();
+        return;
+      }
+      if (
+        ['space', 'k', 'n', 'p', '/', 'r', 'u', 'l', 'v', 's'].includes(
+          (key.name ?? '').toLowerCase(),
+        ) ||
+        isUpperKey(key, 's') ||
+        isUpperKey(key, 'r') ||
+        isUpperKey(key, 'a') ||
+        isUpperKey(key, 'v')
+      ) {
+        if (ui) {
+          const cRes = resolveClientId();
+          if (!cRes.clientId) {
+            ui.setStatus('Setup required: Please enter Spotify Client ID first (press c to edit)', true);
+          } else {
+            ui.setStatus('Authentication required: Please log in with Spotify (press a or Enter to log in)', true);
+          }
+        }
+        return;
+      }
+    }
+
+    if (key.name === 'escape') {
+      if (ui) ui.setRoute('home');
+      return;
+    }
+    if (key.name === 'tab') {
+      state.activeFocus = state.activeFocus === 'sidebar' ? 'main' : 'sidebar';
+      if (ui) ui.setFocus(state.activeFocus);
+      return;
+    }
+    if (key.name === 'space' || key.name === 'k' || key.name === 'K') {
+      const pbState = state.currentInfo.playback?.state ?? 'idle';
+      void (async () => {
+        try {
+          if (pbState === 'playing') {
+            await clients.webApi.pause().catch(() => {});
+            await clients.playback.pause();
+          } else {
+            await clients.webApi.play({}).catch(() => {});
+            await clients.playback.play();
+          }
+        } catch (e) {
+          if (ui) ui.setStatus(`playback: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      })();
+      return;
+    }
+    if (key.name === 'n' || key.name === 'N') {
+      void actions.nextTrack();
+      return;
+    }
+    if (key.name === 'p' || key.name === 'P') {
+      void actions.previousTrack();
+      return;
+    }
+    if (key.sequence === '>' || key.sequence === '.' || (key.ctrl && key.name === 'right')) {
+      void actions.seekRelative(5000);
+      return;
+    }
+    if (key.sequence === '<' || key.sequence === ',' || (key.ctrl && key.name === 'left')) {
+      void actions.seekRelative(-5000);
+      return;
+    }
+    if (key.sequence === '+' || key.sequence === '=') {
+      void actions.changeVolume(0.05);
+      return;
+    }
+    if (key.sequence === '-' || key.sequence === '_') {
+      void actions.changeVolume(-0.05);
+      return;
+    }
+
+    // Toggle Shuffle with 'S' (Shift+S)
+    if (isUpperKey(key, 's')) {
+      void actions.toggleShuffle();
+      return;
+    }
+
+    // Settings route with 's' (lowercase)
+    if (isLowerKey(key, 's')) {
+      if (ui) ui.setRoute('settings');
+      return;
+    }
+
+    // Toggle Repeat Mode with 'R' (Shift+R)
+    if (isUpperKey(key, 'r')) {
+      void actions.toggleRepeat();
+      return;
+    }
+
+    // Library route & refresh with 'r' (lowercase)
+    if (isLowerKey(key, 'r')) {
+      if (ui) {
+        ui.setRoute('library');
+        void actions.loadLibrary(true);
+      }
+      return;
+    }
+
+    // Toggle Autoplay with 'A' (Shift+A)
+    if (isUpperKey(key, 'a')) {
+      void actions.toggleAutoplay();
+      return;
+    }
+
+    // Authenticate with 'a' (lowercase)
+    if (isLowerKey(key, 'a')) {
+      void actions.triggerAuth();
+      return;
+    }
+
+    // Queue route with 'u' or 'U'
+    if ((key.name ?? '').toLowerCase() === 'u' || (key.sequence ?? '').toLowerCase() === 'u') {
+      if (ui) {
+        ui.setRoute('queue');
+        void actions.updateQueueView();
+        void actions.ensureAutoplayTracks();
+      }
+      return;
+    }
+
+    // Toggle Visualizer on/off with 'V' (Shift+V)
+    if (isUpperKey(key, 'v')) {
+      if (ui) {
+        const visible = ui.toggleVisualizer();
+        ui.setStatus(
+          visible
+            ? `Visualizer enabled (${state.currentInfo.visualizer.mode})`
+            : 'Visualizer hidden',
+        );
+      }
+      return;
+    }
+
+    // Visualizer mode cycle with 'v' (lowercase)
+    if (isLowerKey(key, 'v')) {
+      if (ui && !ui.isVisualizerVisible()) {
+        ui.setVisualizerVisible(true);
+        ui.setStatus(`Visualizer enabled (${state.currentInfo.visualizer.mode})`);
+      } else {
+        const next = clients.visualizer.cycleMode();
+        state.currentInfo.visualizer = { mode: next, fps: clients.visualizer.getCurrentFps() };
+        if (ui) {
+          ui.setVisualizerFrame(null);
+          ui.setStatus(`Visualizer mode: ${next}`);
+        }
+      }
+      return;
+    }
+
+    if (isLowerKey(key, 'l')) {
+      if (ui) {
+        const curRoute = ui.getRoute();
+        if (curRoute === 'lyrics') {
+          ui.setRoute(state.lastRouteBeforeLyrics);
+          ui.setStatus(`Exited lyrics → ${state.lastRouteBeforeLyrics}`);
+        } else {
+          state.lastRouteBeforeLyrics = curRoute;
+          ui.setRoute('lyrics');
+          void actions.loadCurrentLyrics();
+        }
+      }
+      return;
+    }
+    if (isUpperKey(key, 'l')) {
+      if (ui) {
+        if (ui.getRoute() !== 'lyrics') {
+          state.lastRouteBeforeLyrics = ui.getRoute();
+          ui.setRoute('lyrics');
+        }
+        void actions.loadCurrentLyrics(true);
+      }
+      return;
+    }
+    if (key.name === '/') {
+      if (ui) ui.setRoute('search');
+      return;
+    }
+  };
+}

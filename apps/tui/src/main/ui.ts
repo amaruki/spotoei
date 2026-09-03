@@ -1,0 +1,286 @@
+import type { CatalogTrackT } from 'spotoei-protocol';
+
+import { createUi, type Ui } from '../ui';
+import type { AppContext } from './types';
+
+export async function initUi(
+  ctx: AppContext,
+  actions: {
+    triggerAuth: () => Promise<void>;
+    handleSaveClientId: (id: string) => Promise<void>;
+    loadLibrary: (force?: boolean) => Promise<void>;
+    loadCurrentLyrics: (force?: boolean) => Promise<void>;
+    updateQueueView: () => Promise<void>;
+    ensureAutoplayTracks: () => Promise<void>;
+    playTrackOrContext: (opts: {
+      trackUri?: string;
+      contextUri?: string;
+      title: string;
+    }) => Promise<void>;
+    nextTrack: () => Promise<void>;
+    previousTrack: () => Promise<void>;
+    toggleShuffle: () => Promise<void>;
+    toggleRepeat: () => Promise<void>;
+    toggleAutoplay: () => Promise<void>;
+    seekRelative: (deltaMs: number) => Promise<void>;
+    changeVolume: (delta: number) => Promise<void>;
+    handleKey: (key: Parameters<Parameters<typeof createUi>[1]['onKey']>[0]) => void;
+  },
+): Promise<Ui> {
+  const { clients, state, getUi, quit } = ctx;
+
+  const ui = await createUi(state.currentInfo, {
+    onKey: actions.handleKey,
+    onSearchSubmit: (q) => {
+      const query = q.trim();
+      if (!query) return;
+      const currentUi = getUi();
+      if (currentUi) {
+        currentUi.setSearchLoading(true);
+        currentUi.setStatus(`Searching Spotify for "${query}"…`);
+      }
+      const seq = ++state.searchSequence;
+      clients.searchClient
+        .search(query)
+        .then((res) => {
+          if (seq === state.searchSequence) {
+            const u = getUi();
+            if (u) {
+              u.setSearchLoading(false);
+              u.setSearchResults(query, res);
+              state.currentSearchHits = res.hits;
+              const count = res.hits.length;
+              u.setStatus(
+                count > 0
+                  ? `Found ${count} result${count === 1 ? '' : 's'} for "${query}". Press Enter to play.`
+                  : `No results found for "${query}".`,
+              );
+            }
+          }
+        })
+        .catch((e: unknown) => {
+          if (seq === state.searchSequence) {
+            const u = getUi();
+            if (u) {
+              u.setSearchLoading(false);
+              const msg = e instanceof Error ? e.message : String(e);
+              u.setStatus(`Search error: ${msg}`, true);
+              u.setSearchResults(query, {
+                query,
+                hits: [],
+                error: { code: 'SEARCH_ERROR', message: msg },
+              });
+            }
+          }
+        });
+    },
+    onSelectSearchHit: (hit) => {
+      if (hit.type === 'track') {
+        if (state.currentSearchHits.length > 0) {
+          state.activePlaylistTracks = state.currentSearchHits
+            .filter((h): h is { type: 'track'; track: CatalogTrackT } => h.type === 'track')
+            .map((h) => h.track);
+        }
+        void actions.playTrackOrContext({
+          trackUri: hit.track.uri,
+          title: hit.track.name,
+        });
+        void actions.updateQueueView();
+        void actions.ensureAutoplayTracks();
+      } else if (hit.type === 'album') {
+        void actions.playTrackOrContext({ contextUri: hit.album.uri, title: hit.album.name });
+      } else if (hit.type === 'playlist') {
+        void actions.playTrackOrContext({ contextUri: hit.playlist.uri, title: hit.playlist.name });
+      } else if (hit.type === 'artist') {
+        void actions.playTrackOrContext({ contextUri: hit.artist.uri, title: hit.artist.name });
+      }
+    },
+    onSelectLibraryItem: (item) => {
+      if ('durationMs' in item) {
+        state.activePlaylistTracks = state.libraryItems.filter(
+          (libItem): libItem is CatalogTrackT => 'durationMs' in libItem,
+        );
+        void actions.playTrackOrContext({
+          trackUri: item.uri,
+          title: item.name,
+        });
+        void actions.updateQueueView();
+        void actions.ensureAutoplayTracks();
+      } else {
+        void actions.playTrackOrContext({ contextUri: item.uri, title: item.name });
+      }
+    },
+    onSelectLibrary: (_idx) => {
+      // Playback is handled by onSelectLibraryItem
+    },
+    onSelectQueue: (idx) => {
+      const snap = clients.queueManager.getSnapshot();
+      const hasCurrent = Boolean(snap.current);
+      const item = hasCurrent
+        ? idx === 0 && snap.current
+          ? { track: snap.current }
+          : snap.upcoming[idx - 1]
+        : snap.upcoming[idx];
+      if (item) {
+        void actions.playTrackOrContext({
+          trackUri: item.track.uri,
+          title: item.track.name,
+        });
+        void actions.updateQueueView();
+        void actions.ensureAutoplayTracks();
+      }
+    },
+    onRouteChange: (route) => {
+      if (route === 'library' && state.libraryItems.length === 0) {
+        void actions.loadLibrary();
+      }
+      if (route === 'queue') {
+        void actions.updateQueueView();
+        void actions.ensureAutoplayTracks();
+      }
+      if (route === 'lyrics') {
+        void actions.loadCurrentLyrics();
+      }
+    },
+    onSaveClientId: actions.handleSaveClientId,
+    onAuthenticate: actions.triggerAuth,
+  });
+
+  // Palette command list
+  ui.setPaletteCommands([
+    { name: 'Home View', description: 'Esc', action: () => getUi()?.setRoute('home') },
+    { name: 'Search', description: '/', action: () => getUi()?.setRoute('search') },
+    { name: 'Library', description: 'r', action: () => getUi()?.setRoute('library') },
+    { name: 'Queue', description: 'u', action: () => getUi()?.setRoute('queue') },
+    {
+      name: 'Toggle Lyrics View',
+      description: 'l',
+      action: () => {
+        const u = getUi();
+        if (u) {
+          const curRoute = u.getRoute();
+          if (curRoute === 'lyrics') {
+            u.setRoute(state.lastRouteBeforeLyrics);
+          } else {
+            state.lastRouteBeforeLyrics = curRoute;
+            u.setRoute('lyrics');
+            void actions.loadCurrentLyrics();
+          }
+        }
+      },
+    },
+    { name: 'Settings', description: 's', action: () => getUi()?.setRoute('settings') },
+    {
+      name: 'Configure Spotify Client ID',
+      description: 'Set/update Spotify Client ID',
+      action: () => {
+        const u = getUi();
+        if (u) {
+          u.focusClientIdInput();
+          u.setStatus('Paste Spotify Client ID and press Enter to save', true);
+        }
+      },
+    },
+    {
+      name: 'Toggle Play/Pause',
+      description: 'Space / k',
+      action: async () => {
+        const pbState = state.currentInfo.playback?.state ?? 'idle';
+        if (pbState === 'playing') await clients.playback.pause();
+        else await clients.playback.play();
+      },
+    },
+    {
+      name: 'Next Track',
+      description: 'n',
+      action: () => void actions.nextTrack(),
+    },
+    {
+      name: 'Previous Track',
+      description: 'p',
+      action: () => void actions.previousTrack(),
+    },
+    {
+      name: 'Seek Forward 5s',
+      description: '> / .',
+      action: () => void actions.seekRelative(5000),
+    },
+    {
+      name: 'Seek Backward 5s',
+      description: '< / ,',
+      action: () => void actions.seekRelative(-5000),
+    },
+    {
+      name: 'Volume Up (+5%)',
+      description: '+ / =',
+      action: () => void actions.changeVolume(0.05),
+    },
+    {
+      name: 'Volume Down (-5%)',
+      description: '- / _',
+      action: () => void actions.changeVolume(-0.05),
+    },
+    {
+      name: 'Toggle Shuffle',
+      description: 'S',
+      action: () => void actions.toggleShuffle(),
+    },
+    {
+      name: 'Toggle Repeat Mode',
+      description: 'R',
+      action: () => void actions.toggleRepeat(),
+    },
+    {
+      name: 'Toggle Autoplay',
+      description: 'A',
+      action: () => void actions.toggleAutoplay(),
+    },
+    {
+      name: 'Toggle Visualizer Display',
+      description: 'V',
+      action: () => {
+        const u = getUi();
+        if (u) {
+          const visible = u.toggleVisualizer();
+          u.setStatus(
+            visible
+              ? `Visualizer enabled (${state.currentInfo.visualizer.mode})`
+              : 'Visualizer hidden',
+          );
+        }
+      },
+    },
+    {
+      name: 'Cycle Visualizer Mode',
+      description: 'v',
+      action: () => {
+        const u = getUi();
+        if (u && !u.isVisualizerVisible()) {
+          u.setVisualizerVisible(true);
+        } else {
+          const next = clients.visualizer.cycleMode();
+          state.currentInfo.visualizer = { mode: next, fps: clients.visualizer.getCurrentFps() };
+          if (u) {
+            u.setVisualizerFrame(null);
+            u.setStatus(`Visualizer mode: ${next}`);
+          }
+        }
+      },
+    },
+    {
+      name: 'Reload Lyrics',
+      description: 'L',
+      action: () => {
+        void actions.loadCurrentLyrics(true);
+      },
+    },
+    {
+      name: 'Authenticate with Spotify',
+      description: 'OAuth (press A in settings)',
+      action: actions.triggerAuth,
+    },
+    { name: 'Quit Spotoei', description: 'q / Ctrl-C', action: () => void quit() },
+  ]);
+
+  return ui;
+}
