@@ -4,10 +4,6 @@ import {
   PlaybackChangedData,
   PlaybackLoadData,
   PlaybackPositionData,
-  PlaybackSeekData,
-  PlaybackSetAutoplayData,
-  PlaybackSetRepeatData,
-  PlaybackSetShuffleData,
   PlaybackSetVolumeData,
   PlaybackState,
   RepeatMode,
@@ -95,12 +91,8 @@ describe('Protocol Playback Schemas', () => {
 
   it('validates PlaybackLoadData requires at least one URI', () => {
     expect(() => PlaybackLoadData.parse({})).toThrow();
-    expect(
-      PlaybackLoadData.parse({ contextUri: 'spotify:album:abc' }),
-    ).toBeDefined();
-    expect(
-      PlaybackLoadData.parse({ trackUri: 'spotify:track:abc' }),
-    ).toBeDefined();
+    expect(PlaybackLoadData.parse({ contextUri: 'spotify:album:abc' })).toBeDefined();
+    expect(PlaybackLoadData.parse({ trackUri: 'spotify:track:abc' })).toBeDefined();
   });
 
   it('validates volume boundaries', () => {

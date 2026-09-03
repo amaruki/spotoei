@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-import { PROTOCOL_VERSION } from './version';
-
 export const PlaybackState = z.enum([
   'idle',
   'loading',
@@ -45,14 +43,15 @@ export const PlaybackPositionData = z.object({
 });
 export type PlaybackPositionDataT = z.infer<typeof PlaybackPositionData>;
 
-export const PlaybackLoadData = z.object({
-  contextUri: z.string().optional(),
-  trackUri: z.string().optional(),
-  autoplay: z.boolean().optional(),
-}).refine(
-  (data) => Boolean(data.contextUri || data.trackUri),
-  { message: 'At least one of contextUri or trackUri must be provided' },
-);
+export const PlaybackLoadData = z
+  .object({
+    contextUri: z.string().optional(),
+    trackUri: z.string().optional(),
+    autoplay: z.boolean().optional(),
+  })
+  .refine((data) => Boolean(data.contextUri || data.trackUri), {
+    message: 'At least one of contextUri or trackUri must be provided',
+  });
 export type PlaybackLoadDataT = z.infer<typeof PlaybackLoadData>;
 
 export const PlaybackSeekData = z.object({

@@ -96,9 +96,7 @@ export type TopItemsRangeT = z.infer<typeof TopItemsRange>;
 
 // Shared error detail shape. `code` is sourced from the ErrorCode const above
 // so the set cannot drift between the const and the schema.
-const ErrorCodeSchema = z.enum(
-  Object.values(ErrorCode) as [ErrorCodeT, ...ErrorCodeT[]],
-);
+const ErrorCodeSchema = z.enum(Object.values(ErrorCode) as [ErrorCodeT, ...ErrorCodeT[]]);
 
 export const ErrorDetail = z.object({
   code: ErrorCodeSchema,
@@ -182,9 +180,7 @@ export type EventT = z.infer<typeof Event>;
 export const Inbound = z.discriminatedUnion('type', [Response, Event]);
 export type InboundT = z.infer<typeof Inbound>;
 
-export type ParseResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string };
+export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 // Parse a single NDJSON line. Empty lines and malformed JSON are tagged errors
 // with no thrown exceptions so the caller can route them through normal flow.
@@ -231,11 +227,9 @@ export function makeHello(id: string, uiVersion: string): CommandT {
 export function makeShutdown(id: string): CommandT {
   return makeCommand(id, 'shutdown', {});
 }
-
 export function newRequestId(): string {
-  return crypto.randomUUID();
+  return (globalThis as unknown as { crypto: { randomUUID(): string } }).crypto.randomUUID();
 }
-
 export * from './auth';
 
 export function makeAuthStatus(id: string): CommandT {
@@ -284,10 +278,7 @@ export function makePlaybackSetVolume(id: string, volume: number): CommandT {
   return makeCommand(id, 'playback.set_volume', { volume });
 }
 
-export function makePlaybackSetShuffle(
-  id: string,
-  shuffle: boolean,
-): CommandT {
+export function makePlaybackSetShuffle(id: string, shuffle: boolean): CommandT {
   return makeCommand(id, 'playback.set_shuffle', { shuffle });
 }
 
@@ -295,10 +286,7 @@ export function makePlaybackSetRepeat(id: string, repeat: string): CommandT {
   return makeCommand(id, 'playback.set_repeat', { repeat });
 }
 
-export function makePlaybackSetAutoplay(
-  id: string,
-  autoplay: boolean,
-): CommandT {
+export function makePlaybackSetAutoplay(id: string, autoplay: boolean): CommandT {
   return makeCommand(id, 'playback.set_autoplay', { autoplay });
 }
 
