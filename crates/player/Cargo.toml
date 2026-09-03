@@ -27,7 +27,11 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 thiserror = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
-keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
+keyring = { version = "3", features = [
+  "apple-native",
+  "windows-native",
+  "linux-native-sync-persistent",
+] }
 rand = "0.8"
 sha2 = "0.10"
 base64 = "0.22"

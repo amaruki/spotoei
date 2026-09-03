@@ -63,7 +63,10 @@ impl ErrorCode {
     }
 
     pub const fn is_retryable(self) -> bool {
-        matches!(self, Self::Timeout | Self::ApiUnavailable | Self::PlayerUnavailable)
+        matches!(
+            self,
+            Self::Timeout | Self::ApiUnavailable | Self::PlayerUnavailable
+        )
     }
 }
 
@@ -229,11 +232,15 @@ async fn handle(
             ok(&cmd.id, serde_json::to_value(&st).unwrap_or(Value::Null))
         }
         "auth.begin" => {
-            let scopes = cmd.data.get("scopes").and_then(|v| v.as_array()).map(|arr| {
-                arr.iter()
-                    .filter_map(|s| s.as_str().map(String::from))
-                    .collect()
-            });
+            let scopes = cmd
+                .data
+                .get("scopes")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|s| s.as_str().map(String::from))
+                        .collect()
+                });
             match auth.begin(scopes).await {
                 Ok(st) => ok(&cmd.id, serde_json::to_value(&st).unwrap_or(Value::Null)),
                 Err(auth::AuthError::MissingClientId) => err(
@@ -295,7 +302,10 @@ async fn handle(
                     } else {
                         snap
                     };
-                    ok(&cmd.id, serde_json::to_value(&final_snap).unwrap_or(Value::Null))
+                    ok(
+                        &cmd.id,
+                        serde_json::to_value(&final_snap).unwrap_or(Value::Null),
+                    )
                 }
                 Err(PlaybackError) => err(
                     &cmd.id,
@@ -339,62 +349,96 @@ async fn handle(
             ),
         },
         "playback.seek" => {
-            let pos = cmd
-                .data
-                .get("positionMs")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            match playback.seek(pos).await {
-                Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
-                Err(PlaybackError) => err(
-                    &cmd.id,
-                    ErrorBody::new(ErrorCode::PlaybackFailed, "seek failed; no track loaded"),
-                ),
+            let pos_result: Result<u64, ErrorBody> = match cmd.data.get("positionMs") {
+                Some(v) => v.as_u64().ok_or_else(|| {
+                    ErrorBody::new(ErrorCode::InvalidRequest, "positionMs must be an integer")
+                }),
+                None => Err(ErrorBody::new(
+                    ErrorCode::InvalidRequest,
+                    "missing required positionMs",
+                )),
+            };
+            match pos_result {
+                Ok(pos) => match playback.seek(pos).await {
+                    Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+                    Err(PlaybackError) => err(
+                        &cmd.id,
+                        ErrorBody::new(ErrorCode::PlaybackFailed, "seek failed; no track loaded"),
+                    ),
+                },
+                Err(e) => err(&cmd.id, e),
             }
         }
         "playback.set_volume" => {
-            let vol = cmd
-                .data
-                .get("volume")
-                .and_then(|v| v.as_f64())
-                .map(|v| v as f32)
-                .unwrap_or(0.8);
-            match playback.set_volume(vol).await {
-                Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
-                Err(PlaybackError) => err(
-                    &cmd.id,
-                    ErrorBody::new(ErrorCode::InvalidRequest, "volume must be between 0.0 and 1.0"),
-                ),
+            let vol_result: Result<f32, ErrorBody> = match cmd.data.get("volume") {
+                Some(v) => v.as_f64().map(|f| f as f32).ok_or_else(|| {
+                    ErrorBody::new(ErrorCode::InvalidRequest, "volume must be a float")
+                }),
+                None => Err(ErrorBody::new(
+                    ErrorCode::InvalidRequest,
+                    "missing required volume",
+                )),
+            };
+            match vol_result {
+                Ok(vol) => match playback.set_volume(vol).await {
+                    Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+                    Err(PlaybackError) => err(
+                        &cmd.id,
+                        ErrorBody::new(
+                            ErrorCode::InvalidRequest,
+                            "volume must be between 0.0 and 1.0",
+                        ),
+                    ),
+                },
+                Err(e) => err(&cmd.id, e),
             }
         }
         "playback.set_shuffle" => {
-            let shuffle = cmd
-                .data
-                .get("shuffle")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            match playback.set_shuffle(shuffle).await {
-                Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
-                Err(PlaybackError) => err(
-                    &cmd.id,
-                    ErrorBody::new(ErrorCode::PlaybackFailed, "set_shuffle failed"),
-                ),
+            let shuffle_result: Result<bool, ErrorBody> = match cmd.data.get("shuffle") {
+                Some(v) => v.as_bool().ok_or_else(|| {
+                    ErrorBody::new(ErrorCode::InvalidRequest, "shuffle must be a boolean")
+                }),
+                None => Err(ErrorBody::new(
+                    ErrorCode::InvalidRequest,
+                    "missing required shuffle",
+                )),
+            };
+            match shuffle_result {
+                Ok(shuffle) => match playback.set_shuffle(shuffle).await {
+                    Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+                    Err(PlaybackError) => err(
+                        &cmd.id,
+                        ErrorBody::new(ErrorCode::PlaybackFailed, "set_shuffle failed"),
+                    ),
+                },
+                Err(e) => err(&cmd.id, e),
             }
         }
         "playback.set_repeat" => {
-            let repeat = cmd
-                .data
-                .get("repeat")
-                .and_then(|v| v.as_str())
-                .unwrap_or("off");
-            match playback.set_repeat(repeat).await {
-                Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
-                Err(PlaybackError) => err(
-                    &cmd.id,
-                    ErrorBody::new(ErrorCode::InvalidRequest, "repeat mode must be off|context|track"),
-                ),
+            let repeat_result: Result<&str, ErrorBody> = match cmd.data.get("repeat") {
+                Some(v) => v.as_str().ok_or_else(|| {
+                    ErrorBody::new(ErrorCode::InvalidRequest, "repeat must be a string")
+                }),
+                None => Err(ErrorBody::new(
+                    ErrorCode::InvalidRequest,
+                    "missing required repeat",
+                )),
+            };
+            match repeat_result {
+                Ok(repeat) => match playback.set_repeat(repeat).await {
+                    Ok(snap) => ok(&cmd.id, serde_json::to_value(&snap).unwrap_or(Value::Null)),
+                    Err(PlaybackError) => err(
+                        &cmd.id,
+                        ErrorBody::new(
+                            ErrorCode::InvalidRequest,
+                            "repeat mode must be off|context|track",
+                        ),
+                    ),
+                },
+                Err(e) => err(&cmd.id, e),
             }
         }
+
         "playback.set_autoplay" => {
             let autoplay = cmd
                 .data
@@ -410,8 +454,16 @@ async fn handle(
             }
         }
         "visualizer.configure" => {
-            let enabled = cmd.data.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
-            let mode_str = cmd.data.get("mode").and_then(|v| v.as_str()).unwrap_or("spectrum");
+            let enabled = cmd
+                .data
+                .get("enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            let mode_str = cmd
+                .data
+                .get("mode")
+                .and_then(|v| v.as_str())
+                .unwrap_or("spectrum");
             let mode = match mode_str {
                 "winamp" => visualizer::VisualizerMode::Winamp,
                 "oscilloscope" => visualizer::VisualizerMode::Oscilloscope,
@@ -419,7 +471,11 @@ async fn handle(
             };
             let fps = cmd.data.get("fps").and_then(|v| v.as_u64()).unwrap_or(60) as u32;
             let bands = cmd.data.get("bands").and_then(|v| v.as_u64()).unwrap_or(64) as usize;
-            let waveform_samples = cmd.data.get("waveformSamples").and_then(|v| v.as_u64()).unwrap_or(120) as usize;
+            let waveform_samples = cmd
+                .data
+                .get("waveformSamples")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(120) as usize;
 
             let mut cfg = visualizer_cfg.write().await;
             cfg.enabled = enabled;
@@ -428,16 +484,23 @@ async fn handle(
             cfg.bands = bands.clamp(8, 256);
             cfg.waveform_samples = waveform_samples.clamp(16, 512);
 
-            ok(&cmd.id, serde_json::json!({
-                "enabled": cfg.enabled,
-                "mode": mode_str,
-                "fps": cfg.fps,
-                "bands": cfg.bands,
-                "waveformSamples": cfg.waveform_samples,
-            }))
+            ok(
+                &cmd.id,
+                serde_json::json!({
+                    "enabled": cfg.enabled,
+                    "mode": mode_str,
+                    "fps": cfg.fps,
+                    "bands": cfg.bands,
+                    "waveformSamples": cfg.waveform_samples,
+                }),
+            )
         }
         "lyrics.get" => {
-            let track_uri = cmd.data.get("trackUri").and_then(|v| v.as_str()).unwrap_or("");
+            let track_uri = cmd
+                .data
+                .get("trackUri")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             match lyrics.get(track_uri) {
                 Ok(doc) => ok(&cmd.id, serde_json::to_value(&doc).unwrap_or(Value::Null)),
                 Err(lyrics::LyricsError::Unavailable) => err(
@@ -455,7 +518,10 @@ async fn handle(
         }
         other => err(
             &cmd.id,
-            ErrorBody::new(ErrorCode::InvalidRequest, format!("unknown command: {other}")),
+            ErrorBody::new(
+                ErrorCode::InvalidRequest,
+                format!("unknown command: {other}"),
+            ),
         ),
     };
     (reply, is_shutdown)
@@ -469,10 +535,6 @@ async fn main() -> ExitCode {
     if args.len() >= 2 && args[1] == "doctor" {
         return run_doctor(&args[2..]).await;
     }
-    let client_id = std::env::var("SPOTOEI_CLIENT_ID").unwrap_or_default();
-    let auth = Arc::new(AuthManager::new(client_id));
-    let _initial_status = auth.hydrate().await;
-
     // Single multiplexed stdout channel so responses and events never
     // interleave or collide.
     let (stdout_tx, mut stdout_rx) = mpsc::channel::<String>(256);
@@ -486,10 +548,15 @@ async fn main() -> ExitCode {
         }
     });
 
+    let client_id = std::env::var("SPOTOEI_CLIENT_ID").unwrap_or_default();
+    let auth = Arc::new(AuthManager::new(client_id, stdout_tx.clone()));
+    let _initial_status = auth.hydrate().await;
+
     let lyrics = lyrics::LyricsService::new(Arc::new(lyrics::MockLyricsProvider::new()));
     let playback = Playback::new(FakeEngine, stdout_tx.clone());
-    let visualizer_cfg = Arc::new(tokio::sync::RwLock::new(visualizer::VisualizerConfig::default()));
-
+    let visualizer_cfg = Arc::new(tokio::sync::RwLock::new(
+        visualizer::VisualizerConfig::default(),
+    ));
     // Visualizer publisher: emits spectrum/waveform events at the
     // configured FPS. Synthesizes audio samples from a 440Hz + 1320Hz
     // harmonic while playing; emits zero-band frames while paused or
@@ -501,7 +568,6 @@ async fn main() -> ExitCode {
     let viz_stdout = stdout_tx.clone();
     let viz_handle = tokio::spawn(async move {
         let mut analyzer = visualizer::Analyzer::new(64);
-        let mut seq: u64 = 1;
         let mut phase: f32 = 0.0;
         let sample_rate = 44100.0_f32;
         let mut last_tick = std::time::Instant::now();
@@ -529,7 +595,7 @@ async fn main() -> ExitCode {
                 for i in 0..n {
                     let t = phase + (i as f32) / sample_rate + elapsed;
                     let s = 0.6 * (2.0 * std::f32::consts::PI * 440.0 * t).sin()
-                          + 0.3 * (2.0 * std::f32::consts::PI * 1320.0 * t).sin();
+                        + 0.3 * (2.0 * std::f32::consts::PI * 1320.0 * t).sin();
                     samples.push(s);
                 }
                 phase = (phase + elapsed) % 1.0;
@@ -538,9 +604,11 @@ async fn main() -> ExitCode {
                 vec![0.0; 1024]
             };
 
+            let seq = visualizer_publisher.next_seq().await;
             let line = match mode {
                 visualizer::VisualizerMode::Oscilloscope => {
-                    let downsampled = visualizer::Analyzer::compute_waveform(&samples, waveform_samples);
+                    let downsampled =
+                        visualizer::Analyzer::compute_waveform(&samples, waveform_samples);
                     let payload = serde_json::json!({ "samples": downsampled });
                     event("visualizer.waveform", seq, payload)
                 }
@@ -550,7 +618,6 @@ async fn main() -> ExitCode {
                     event("visualizer.spectrum", seq, payload)
                 }
             };
-            seq = seq.wrapping_add(1);
             let _ = viz_stdout.try_send(line);
         }
     });
@@ -572,7 +639,8 @@ async fn main() -> ExitCode {
     info!(version = PLAYER_VERSION, "spotoei-player starting");
 
     // First valid command must be `hello` within HANDSHAKE_TIMEOUT.
-    let hello_line: String = match tokio::time::timeout(HANDSHAKE_TIMEOUT, lines.next_line()).await {
+    let hello_line: String = match tokio::time::timeout(HANDSHAKE_TIMEOUT, lines.next_line()).await
+    {
         Ok(Ok(Some(l))) => l,
         Ok(Ok(None)) => {
             error!("stdin closed before hello");
@@ -593,7 +661,10 @@ async fn main() -> ExitCode {
         Ok(c) => {
             error!(command = %c.command, "expected hello as first command");
             let _ = stdout_tx
-                .send(err(&c.id, ErrorBody::new(ErrorCode::InvalidRequest, "expected hello first")))
+                .send(err(
+                    &c.id,
+                    ErrorBody::new(ErrorCode::InvalidRequest, "expected hello first"),
+                ))
                 .await;
             return ExitCode::from(2);
         }
@@ -660,11 +731,16 @@ async fn main() -> ExitCode {
     }
     ticker_handle.abort();
     viz_handle.abort();
+    drop(auth);
     drop(playback);
     drop(stdout_tx);
     let _ = writer_handle.await;
-    exit_code
+    match exit_code {
+        ExitCode::SUCCESS => std::process::exit(0),
+        _ => std::process::exit(2),
+    }
 }
+
 async fn run_doctor(args: &[String]) -> ExitCode {
     let sub = args.first().map(|s| s.as_str()).unwrap_or("all");
     let mut problems = 0u32;
@@ -681,7 +757,10 @@ async fn run_doctor(args: &[String]) -> ExitCode {
 
     if sub == "all" || sub == "sidecar" {
         // We are the sidecar; confirm we can emit a hello response.
-        println!("[ok] player sidecar present (protocol={})", PROTOCOL_VERSION);
+        println!(
+            "[ok] player sidecar present (protocol={})",
+            PROTOCOL_VERSION
+        );
     }
 
     if sub == "all" || sub == "config" {
@@ -700,14 +779,31 @@ async fn run_doctor(args: &[String]) -> ExitCode {
 
     if sub == "all" || sub == "auth" {
         let client_id = std::env::var("SPOTOEI_CLIENT_ID").unwrap_or_default();
-        let auth = AuthManager::new(client_id.clone());
+        let (tx, _rx) = mpsc::channel::<String>(8);
+        let auth = AuthManager::new(client_id.clone(), tx);
         let status: AuthStatus = auth.hydrate().await;
-        println!("=== SPOTOEI Doctor: Auth & Keyring ===");
-        println!("Client ID: {}", if client_id.is_empty() { "<not set: SPOTOEI_CLIENT_ID>" } else { "<set>" });
+        println!(
+            "Client ID: {}",
+            if client_id.is_empty() {
+                "<not set: SPOTOEI_CLIENT_ID>"
+            } else {
+                "<set>"
+            }
+        );
         println!("Auth State: {:?}", status.state);
         println!("Storage Tier: {:?}", status.storage);
-        println!("Account ID: {}", status.account_id.as_deref().unwrap_or("<none>"));
-        println!("Scopes: {}", if status.scopes.is_empty() { "<none>".to_string() } else { status.scopes.join(", ") });
+        println!(
+            "Account ID: {}",
+            status.account_id.as_deref().unwrap_or("<none>")
+        );
+        println!(
+            "Scopes: {}",
+            if status.scopes.is_empty() {
+                "<none>".to_string()
+            } else {
+                status.scopes.join(", ")
+            }
+        );
     }
 
     if sub == "all" || sub == "cache" {
@@ -747,10 +843,13 @@ async fn run_doctor(args: &[String]) -> ExitCode {
         } else {
             &["xdg-open", "sensible-browser", "wslview"]
         };
-        let found = candidates
-            .iter()
-            .find(|c| std::process::Command::new(c).arg("--version").output().is_ok()
-                || std::process::Command::new(c).arg("").output().is_ok());
+        let found = candidates.iter().find(|c| {
+            std::process::Command::new(c)
+                .arg("--version")
+                .output()
+                .is_ok()
+                || std::process::Command::new(c).arg("").output().is_ok()
+        });
         match found {
             Some(cmd) => println!("[ok] browser launch mechanism available: {}", cmd),
             None => {

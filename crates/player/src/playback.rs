@@ -85,6 +85,7 @@ struct PlaybackInner {
     revision: u64,
     state: PlaybackState,
     track: Option<Track>,
+    context_uri: Option<String>,
     position_ms: u64,
     duration_ms: u64,
     volume: f32,
@@ -101,6 +102,7 @@ impl PlaybackInner {
             revision: 0,
             state: PlaybackState::Idle,
             track: None,
+            context_uri: None,
             position_ms: 0,
             duration_ms: 0,
             volume: 0.8,
@@ -132,7 +134,13 @@ impl PlaybackEngine for FakeEngine {
         if !uri.starts_with("spotify:track:") {
             return None;
         }
+        if uri.len() > 256 {
+            return None;
+        }
         let id = uri.trim_start_matches("spotify:track:");
+        if id.is_empty() || id.len() > 64 {
+            return None;
+        }
         Some(Track {
             uri: uri.to_string(),
             name: format!("Track {id}"),
@@ -141,7 +149,6 @@ impl PlaybackEngine for FakeEngine {
             duration_ms: 240_000,
         })
     }
-
     fn context_tracks(&self, context_uri: &str) -> Vec<Track> {
         if !context_uri.starts_with("spotify:") {
             return Vec::new();
@@ -248,6 +255,7 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
             inner.revision = inner.revision.wrapping_add(1);
             inner.state = PlaybackState::Loading;
             inner.track = Some(track.clone());
+            inner.context_uri = context_uri.map(|s| s.to_string());
             inner.position_ms = 0;
             inner.duration_ms = track.duration_ms;
             inner.last_change_at = Instant::now();
@@ -257,6 +265,7 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
         self.emit_changed(&snap).await;
         Ok(snap)
     }
+
     pub async fn play(&self) -> Result<PlaybackChangedPayload, PlaybackError> {
         let snap = {
             let mut inner = self.inner.lock().await;
@@ -342,10 +351,7 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
         Ok(snap)
     }
 
-    pub async fn seek(
-        &self,
-        position_ms: u64,
-    ) -> Result<PlaybackChangedPayload, PlaybackError> {
+    pub async fn seek(&self, position_ms: u64) -> Result<PlaybackChangedPayload, PlaybackError> {
         let snap = {
             let mut inner = self.inner.lock().await;
             if inner.track.is_none() {
@@ -361,10 +367,7 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
         Ok(snap)
     }
 
-    pub async fn set_volume(
-        &self,
-        volume: f32,
-    ) -> Result<PlaybackChangedPayload, PlaybackError> {
+    pub async fn set_volume(&self, volume: f32) -> Result<PlaybackChangedPayload, PlaybackError> {
         if !(0.0..=1.0).contains(&volume) {
             return Err(PlaybackError);
         }
@@ -394,10 +397,7 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
         Ok(snap)
     }
 
-    pub async fn set_repeat(
-        &self,
-        repeat: &str,
-    ) -> Result<PlaybackChangedPayload, PlaybackError> {
+    pub async fn set_repeat(&self, repeat: &str) -> Result<PlaybackChangedPayload, PlaybackError> {
         let mode = match RepeatMode::from_str(repeat) {
             Some(m) => m,
             None => return Err(PlaybackError),
@@ -431,31 +431,62 @@ impl<E: PlaybackEngine + 'static> Playback<E> {
     /// `playback.position` event at ~5 Hz when the position changed enough
     /// since the last emitted position.
     pub async fn tick(&self) {
-        let (revision, snapshot_pos, should_emit_position) = {
-            let mut inner = self.inner.lock().await;
-            if inner.state != PlaybackState::Playing {
-                return;
+        let mut inner = self.inner.lock().await;
+        if inner.state != PlaybackState::Playing {
+            return;
+        }
+        let elapsed = inner.last_change_at.elapsed().as_millis() as u64;
+        inner.last_change_at = Instant::now();
+        let new_pos = inner
+            .position_ms
+            .saturating_add(elapsed)
+            .min(inner.duration_ms);
+        inner.position_ms = new_pos;
+        let reached_end = inner.duration_ms > 0 && new_pos >= inner.duration_ms;
+        if reached_end {
+            // Track finished: roll to idle and advance to the next track in
+            // the active context, if any.
+            inner.state = PlaybackState::Idle;
+            inner.position_ms = inner.duration_ms;
+            let current_uri = inner
+                .track
+                .as_ref()
+                .map(|t| t.uri.clone())
+                .unwrap_or_default();
+            let next_track = inner.context_uri.as_deref().and_then(|ctx| {
+                self.engine
+                    .context_tracks(ctx)
+                    .into_iter()
+                    .find(|t| t.uri != current_uri)
+            });
+            if let Some(t) = next_track {
+                if let Some(resolved) = self.engine.resolve_track(&t.uri) {
+                    inner.track = Some(resolved);
+                    inner.position_ms = 0;
+                }
             }
-            let elapsed = inner.last_change_at.elapsed().as_millis() as u64;
-            inner.last_change_at = Instant::now();
-            let new_pos = inner
-                .position_ms
-                .saturating_add(elapsed)
-                .min(inner.duration_ms);
-            inner.position_ms = new_pos;
-            let should_emit_position =
-                inner.position_ms.saturating_sub(inner.last_emitted_position_ms) >= POSITION_EVENT_PERIOD_MS;
-            if should_emit_position {
-                inner.last_emitted_position_ms = inner.position_ms;
-            }
-            (inner.revision, inner.position_ms, should_emit_position)
-        };
+            inner.revision = inner.revision.wrapping_add(1);
+            let snap = self.snapshot_locked(&inner);
+            drop(inner);
+            self.emit_changed(&snap).await;
+            return;
+        }
+        let should_emit_position = inner
+            .position_ms
+            .saturating_sub(inner.last_emitted_position_ms)
+            >= POSITION_EVENT_PERIOD_MS;
+        let revision = inner.revision;
+        let snapshot_pos = inner.position_ms;
+        if should_emit_position {
+            inner.last_emitted_position_ms = inner.position_ms;
+        }
+        drop(inner);
         if should_emit_position {
             self.emit_position(revision, snapshot_pos).await;
         }
     }
 
-    async fn next_seq(&self) -> u64 {
+    pub async fn next_seq(&self) -> u64 {
         let mut s = self.seq.lock().await;
         let v = *s;
         *s = s.wrapping_add(1);
@@ -548,5 +579,5 @@ mod tests {
         assert!(rep_snap.revision == 7, "set_repeat should bump revision");
         let _ = rx.recv().await.expect("set_repeat changed event");
         assert!(pb.set_repeat("invalid_mode").await.is_err());
-}
+    }
 }

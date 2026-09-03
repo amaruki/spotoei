@@ -167,7 +167,9 @@ mod tests {
     #[test]
     fn test_mock_lyrics_unavailable() {
         let provider = MockLyricsProvider::new();
-        let err = provider.get_lyrics("spotify:track:test_unavailable").unwrap_err();
+        let err = provider
+            .get_lyrics("spotify:track:test_unavailable")
+            .unwrap_err();
         assert_eq!(err, LyricsError::Unavailable);
     }
 

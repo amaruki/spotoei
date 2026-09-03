@@ -170,7 +170,11 @@ mod tests {
             .unwrap();
 
         // 1kHz in a 30Hz - 16kHz log-scale over 32 bands is around band index 17-20
-        assert!(max_idx >= 15 && max_idx <= 22, "Max band index was {}", max_idx);
+        assert!(
+            max_idx >= 15 && max_idx <= 22,
+            "Max band index was {}",
+            max_idx
+        );
     }
 
     #[test]

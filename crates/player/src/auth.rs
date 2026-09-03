@@ -7,26 +7,22 @@
 //! Secret material (verifier, code, access token, refresh token) MUST NOT
 //! appear in stderr logs or in any response sent over the IPC envelope.
 //! The `auth.*` data shapes only carry opaque metadata.
-
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::event;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, oneshot, Mutex};
 use tracing::warn;
-
 const KEYRING_SERVICE: &str = "spotoei";
 const SPOTIFY_ACCOUNTS: &str = "https://accounts.spotify.com";
 const REDIRECT_PATH: &str = "/callback";
-const DEFAULT_SCOPES: &[&str] = &[
-    "user-read-playback-state",
-    "user-modify-playback-state",
-    "playlist-read-private",
-    "user-library-read",
-];
+const DEFAULT_SCOPES: &[&str] = &["playlist-read-private", "user-library-read"];
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
@@ -103,6 +99,12 @@ pub struct AuthManager {
     state: Mutex<InnerState>,
     /// In-flight single-flight refresh lock.
     refresh_lock: Mutex<()>,
+    /// Monotonic event sequence shared across subsystems.
+    seq: AtomicU64,
+    /// Sink for outgoing protocol events.
+    events: mpsc::Sender<String>,
+    /// Cancellation for the in-flight loopback callback server, if any.
+    cancel: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 struct InnerState {
@@ -115,7 +117,8 @@ struct InnerState {
 
 impl AuthManager {
     /// Build a new auth manager. `client_id` MUST be supplied via config.
-    pub fn new(client_id: String) -> Self {
+    /// `events` receives protocol-formatted `auth.*` event lines.
+    pub fn new(client_id: String, events: mpsc::Sender<String>) -> Self {
         Self {
             client_id,
             scopes: DEFAULT_SCOPES.iter().map(|s| s.to_string()).collect(),
@@ -127,9 +130,29 @@ impl AuthManager {
                 last_auth_url: None,
             }),
             refresh_lock: Mutex::new(()),
+            seq: AtomicU64::new(0),
+            events,
+            cancel: Mutex::new(None),
         }
     }
 
+    /// Reserve and return the next monotonic event sequence number.
+    pub fn next_seq(&self) -> u64 {
+        self.seq.fetch_add(1, Ordering::Relaxed).wrapping_add(1)
+    }
+
+    async fn emit(&self, name: &str, data: Value) {
+        let seq = self.next_seq();
+        let line = event(name, seq, data);
+        let _ = self.events.send(line).await;
+    }
+
+    /// Cancel any in-flight loopback callback server.
+    pub async fn cancel_in_flight(&self) {
+        if let Some(tx) = self.cancel.lock().await.take() {
+            let _ = tx.send(());
+        }
+    }
     /// Determine storage tier and load any persisted refresh material.
     /// Returns the active status snapshot after hydration.
     pub async fn hydrate(&self) -> AuthStatus {
@@ -142,7 +165,7 @@ impl AuthManager {
         // criterion "remain authenticated when keyring is available".
         let (storage, current) = match self.load_from_keyring("default").await {
             Ok(Some(at)) => (Storage::Keyring, Some(at)),
-            Ok(None) => (Storage::Unavailable, None),
+            Ok(None) => (Storage::Keyring, None),
             Err(e) => {
                 warn!(error = %e, "keyring unavailable; auth will be in-memory only");
                 (Storage::Memory, None)
@@ -156,18 +179,27 @@ impl AuthManager {
         } else {
             s.state = AuthState::Unauthenticated;
         }
-        self.snapshot_locked(&s, None)
+        let snap = self.snapshot_locked(&s, None);
+        if let Ok(value) = serde_json::to_value(&snap) {
+            self.emit("auth.changed", value).await;
+        }
+        snap
     }
 
-    /// Begin a PKCE auth flow. Returns the auth URL the user must open.
-    /// The loopback callback server is bound here and listens for one hit.
-    pub async fn begin(self: &Arc<Self>, scopes: Option<Vec<String>>) -> Result<AuthStatus, AuthError> {
+    pub async fn begin(
+        self: &Arc<Self>,
+        scopes: Option<Vec<String>>,
+    ) -> Result<AuthStatus, AuthError> {
         if std::env::var("SPOTOEI_MOCK_AUTH").is_ok() {
             return self.begin_mock().await;
         }
         if self.client_id.is_empty() {
             return Err(AuthError::MissingClientId);
         }
+        self.cancel_in_flight().await;
+        let (cancel_tx, cancel_rx) = oneshot::channel();
+        *self.cancel.lock().await = Some(cancel_tx);
+
         let mut s = self.state.lock().await;
         let verifier = generate_verifier();
         let challenge = s256_challenge(&verifier);
@@ -189,9 +221,7 @@ impl AuthManager {
             .port();
         let redirect_uri = format!("http://127.0.0.1:{bound_port}{REDIRECT_PATH}");
 
-        let scope_str = scopes
-            .unwrap_or_else(|| self.scopes.clone())
-            .join(" ");
+        let scope_str = scopes.unwrap_or_else(|| self.scopes.clone()).join(" ");
         let url = format!(
             "{SPOTIFY_ACCOUNTS}/authorize?client_id={cid}&response_type=code&redirect_uri={ru}&code_challenge_method=S256&code_challenge={cc}&state={st}&scope={sc}",
             cid = urlencoding::encode(&self.client_id),
@@ -202,15 +232,20 @@ impl AuthManager {
         );
         s.last_auth_url = Some(url.clone());
 
+        let snap = self.snapshot_locked(&s, Some(url));
+        if let Ok(value) = serde_json::to_value(&snap) {
+            self.emit("auth.changed", value).await;
+        }
+
         // Spawn a server task that waits for the callback and validates state.
         let this = Arc::clone(self);
         tokio::spawn(async move {
-            if let Err(e) = this.serve_callback(listener, bound_port).await {
+            if let Err(e) = this.serve_callback(listener, bound_port, cancel_rx).await {
                 warn!(error = %e, "auth callback server failed");
             }
         });
 
-        Ok(self.snapshot_locked(&s, Some(url)))
+        Ok(snap)
     }
 
     /// Mock auth flow for tests: synthesizes a valid session without a browser.
@@ -221,8 +256,8 @@ impl AuthManager {
         let refresh = std::env::var("SPOTOEI_MOCK_REFRESH_TOKEN")
             .unwrap_or_else(|_| format!("mock-refresh-{}", now_ms()));
         let access = format!("mock-access-{}", now_ms());
-        let account = std::env::var("SPOTOEI_MOCK_ACCOUNT_ID")
-            .unwrap_or_else(|_| "mock-account".into());
+        let account =
+            std::env::var("SPOTOEI_MOCK_ACCOUNT_ID").unwrap_or_else(|_| "mock-account".into());
         let at = AccessToken {
             access_token: access,
             refresh_token: refresh.clone(),
@@ -231,25 +266,28 @@ impl AuthManager {
             scopes: self.scopes.clone(),
         };
         // Persist to keyring when available.
-        match self.save_to_keyring(&at).await {
+        let snap = match self.save_to_keyring(&at).await {
             Ok(()) => {
                 let mut s = self.state.lock().await;
                 s.storage = Storage::Keyring;
                 s.current = Some(at);
                 s.state = AuthState::Authenticated;
-                Ok(self.snapshot_locked(&s, None))
+                self.snapshot_locked(&s, None)
             }
             Err(e) => {
-                let mut s = self.state.lock().await;
                 warn!(error = %e, "mock auth: keyring save failed; staying in-memory");
+                let mut s = self.state.lock().await;
                 s.storage = Storage::Memory;
                 s.current = Some(at);
                 s.state = AuthState::Authenticated;
-                Ok(self.snapshot_locked(&s, None))
+                self.snapshot_locked(&s, None)
             }
+        };
+        if let Ok(value) = serde_json::to_value(&snap) {
+            self.emit("auth.completed", value).await;
         }
+        Ok(snap)
     }
-
     /// Logout: erase from keyring (when present) and clear memory.
     pub async fn logout(&self) -> Result<AuthStatus, AuthError> {
         let mut s = self.state.lock().await;
@@ -264,7 +302,11 @@ impl AuthManager {
         s.pkce = None;
         s.last_auth_url = None;
         s.state = AuthState::Unauthenticated;
-        Ok(self.snapshot_locked(&s, None))
+        let snap = self.snapshot_locked(&s, None);
+        if let Ok(value) = serde_json::to_value(&snap) {
+            self.emit("auth.changed", value).await;
+        }
+        Ok(snap)
     }
     /// Return a usable access token, refreshing when expired. The token value
     /// is returned only to the in-process call; it is never written to logs.
@@ -325,7 +367,11 @@ impl AuthManager {
             v: 1,
             state: s.state,
             account_id: s.current.as_ref().map(|a| a.account_id.clone()),
-            scopes: s.current.as_ref().map(|a| a.scopes.clone()).unwrap_or_default(),
+            scopes: s
+                .current
+                .as_ref()
+                .map(|a| a.scopes.clone())
+                .unwrap_or_default(),
             storage: s.storage,
             access_token_expires_at: s.current.as_ref().map(|a| a.expires_at),
             auth_url,
@@ -338,11 +384,12 @@ impl AuthManager {
         self: Arc<Self>,
         listener: tokio::net::TcpListener,
         port: u16,
+        mut cancel_rx: oneshot::Receiver<()>,
     ) -> Result<(), AuthError> {
-        use hyper::server::conn::http1;
-        use hyper::service::service_fn;
         use http_body_util::Empty;
         use hyper::body::Bytes;
+        use hyper::server::conn::http1;
+        use hyper::service::service_fn;
         use hyper::Response;
         use std::convert::Infallible;
 
@@ -350,6 +397,10 @@ impl AuthManager {
         let result = loop {
             tokio::select! {
                 biased;
+                _ = &mut cancel_rx => {
+                    // Flow was superseded or explicitly cancelled.
+                    return Ok(());
+                }
                 msg = rx.recv() => break msg,
                 accept = listener.accept() => {
                     let (stream, _addr) = match accept {
@@ -358,8 +409,13 @@ impl AuthManager {
                     };
                     let tx = tx.clone();
                     let io = hyper_util::rt::TokioIo::new(stream);
+                    let expected_state = {
+                        let s = self.state.lock().await;
+                        s.pkce.as_ref().map(|p| p.state.clone())
+                    };
                     let svc = service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
                         let tx = tx.clone();
+                        let expected_state = expected_state.clone();
                         async move {
                             if req.uri().path() != REDIRECT_PATH {
                                 let body = Empty::<Bytes>::new();
@@ -376,6 +432,14 @@ impl AuthManager {
                             }
                             let code = params.get("code").cloned().unwrap_or_default();
                             let state = params.get("state").cloned().unwrap_or_default();
+                            if Some(&state) != expected_state.as_ref() {
+                                let _ = tx
+                                    .send(Err(AuthError::OAuth("state mismatch".into())))
+                                    .await;
+                                let body = Empty::<Bytes>::new();
+                                let resp = Response::builder().status(400).body(body).unwrap();
+                                return Ok::<_, Infallible>(resp);
+                            }
                             let _ = tx.send(Ok(format!("{code}|{state}"))).await;
                             let body = Empty::<Bytes>::new();
                             let resp = Response::builder().status(200).body(body).unwrap();
@@ -388,9 +452,6 @@ impl AuthManager {
                 }
             }
         };
-        // Process the captured callback. We deliberately do NOT drain the
-        // channel again after the loop: `rx.recv()` inside the select is
-        // the single point of truth for the message.
         match result {
             Some(Ok(payload)) => {
                 let mut parts = payload.splitn(2, '|');
@@ -398,12 +459,17 @@ impl AuthManager {
                 let state = parts.next().unwrap_or_default().to_string();
                 if let Err(e) = self.complete_flow(&code, &state, port).await {
                     warn!(error = %e, "auth complete flow failed");
+                    self.emit("auth.failed", json!({ "error": e.to_string() }))
+                        .await;
                 }
             }
             Some(Err(e)) => {
                 warn!(error = %e, "auth callback received error");
                 let mut s = self.state.lock().await;
                 s.state = AuthState::Unauthenticated;
+                drop(s);
+                self.emit("auth.failed", json!({ "error": e.to_string() }))
+                    .await;
             }
             None => {}
         }
@@ -432,9 +498,12 @@ impl AuthManager {
                 warn!(error = %e, "keyring save on complete failed");
             }
         }
+        let snap = self.snapshot_locked(&s, None);
         drop(s);
-        // Emit an auth.completed event with the new account id.
-        let _ = account_id; // already inside current
+        if let Ok(value) = serde_json::to_value(&snap) {
+            self.emit("auth.completed", value).await;
+        }
+        let _ = account_id;
         Ok(())
     }
 
@@ -481,7 +550,10 @@ impl AuthManager {
             refresh_token: parsed.refresh_token.unwrap_or_default(),
             expires_at: now_ms() + parsed.expires_in * 1000,
             account_id: account_id.clone(),
-            scopes: parsed.scope.map(|s| s.split(' ').map(String::from).collect()).unwrap_or_default(),
+            scopes: parsed
+                .scope
+                .map(|s| s.split(' ').map(String::from).collect())
+                .unwrap_or_default(),
         };
         Ok((at, account_id))
     }
@@ -512,7 +584,9 @@ impl AuthManager {
         Ok(RefreshedToken {
             access_token: parsed.access_token,
             expires_at: now_ms() + parsed.expires_in * 1000,
-            refresh_token: parsed.refresh_token.unwrap_or_else(|| refresh_token.to_string()),
+            refresh_token: parsed
+                .refresh_token
+                .unwrap_or_else(|| refresh_token.to_string()),
         })
     }
 
@@ -601,7 +675,10 @@ fn url_decode(q: &str) -> std::collections::HashMap<String, String> {
             let mut it = kv.splitn(2, '=');
             let k = it.next()?.to_string();
             let v = it.next().unwrap_or("").to_string();
-            Some((urlencoding::decode(&k).ok()?.into_owned(), urlencoding::decode(&v).ok()?.into_owned()))
+            Some((
+                urlencoding::decode(&k).ok()?.into_owned(),
+                urlencoding::decode(&v).ok()?.into_owned(),
+            ))
         })
         .collect()
 }
