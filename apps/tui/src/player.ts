@@ -137,10 +137,9 @@ export async function startPlayer(
   };
   child.stderr.on('data', stderrListener);
 
-  const rl = createInterface({ input: child.stdout });
+  const rl = getSharedReadline(child);
   const helloId = newRequestId();
   const hello = makeHello(helloId, UI_VERSION);
-
   let timer: NodeJS.Timeout | undefined;
 
   try {
@@ -219,7 +218,6 @@ export async function startPlayer(
     };
   } finally {
     clearTimeout(timer);
-    rl.close();
   }
 }
 

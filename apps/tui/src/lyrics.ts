@@ -151,3 +151,7 @@ export class LyricsClient {
     return promise;
   }
 }
+
+export function createLyricsClient(options: LyricsClientOptions): LyricsClient {
+  return new LyricsClient(options);
+}

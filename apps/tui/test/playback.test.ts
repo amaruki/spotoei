@@ -119,7 +119,8 @@ describe('playback integration with player sidecar', () => {
 
     try {
       await playback.load({
-        trackUri: 'spotify:track:baseTrack',
+        trackUri: 'spotify:track:ctx-spotify:album:nav-1',
+        contextUri: 'spotify:album:nav',
         autoplay: false,
       });
 
@@ -127,11 +128,11 @@ describe('playback integration with player sidecar', () => {
       expect(seekSnap.positionMs).toBe(45000);
 
       const nextSnap = await playback.next();
-      expect(nextSnap.track?.uri).toContain('#next');
+      expect(nextSnap.track?.uri).toBe('spotify:track:ctx-spotify:album:nav-2');
       expect(nextSnap.positionMs).toBe(0);
 
       const prevSnap = await playback.previous();
-      expect(prevSnap.track?.uri).toContain('#prev');
+      expect(prevSnap.track?.uri).toBe('spotify:track:ctx-spotify:album:nav-1');
       expect(prevSnap.positionMs).toBe(0);
     } finally {
       playback.close();
