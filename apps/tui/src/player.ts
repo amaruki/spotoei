@@ -22,24 +22,18 @@ export interface HandshakeResult {
   capabilities: string[];
   child: ChildProcess;
 }
-
 const UI_VERSION = 'spotoei-tui/0.0.0';
-// Strip terminal control characters, ANSI escapes, and OSC sequences
-// to prevent terminal title rewrites, clear-screens, or cursor moves.
+const sharedReadlines = new Map<ChildProcess, ReturnType<typeof createInterface>>();
 const ANSI_REGEX =
   // eslint-disable-next-line no-control-regex
   /(?:\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><])/g;
 
-
 function sanitizeStderr(chunk: Buffer): string {
-  return chunk
-    .toString('utf8')
-    .replace(ANSI_REGEX, '')
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  // eslint-disable-next-line no-control-regex
+  const controlChars = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
+  return chunk.toString('utf8').replace(ANSI_REGEX, '').replace(controlChars, '');
 }
-
 /**
- * Locate the player binary.
  *
  * Search order:
  *   1. `SPOTOEI_PLAYER_BIN` env var (canonicalized via realpath).
@@ -181,9 +175,7 @@ export async function startPlayer(
     const { data } = parsed.data;
     if (data.protocol !== PROTOCOL_VERSION) {
       child.kill('SIGKILL');
-      throw new Error(
-        `protocol mismatch: client=${PROTOCOL_VERSION} player=${data.protocol}`,
-      );
+      throw new Error(`protocol mismatch: client=${PROTOCOL_VERSION} player=${data.protocol}`);
     }
 
     return {
@@ -214,9 +206,7 @@ export async function restartPlayer(
   const MAX_RESTARTS = 3;
   const BASE_BACKOFF_MS = 250;
   if (restarts >= MAX_RESTARTS) {
-    throw new Error(
-      `player restart budget exhausted after ${restarts} attempts`,
-    );
+    throw new Error(`player restart budget exhausted after ${restarts} attempts`);
   }
   try {
     await stopPlayer(child);
@@ -224,7 +214,7 @@ export async function restartPlayer(
     // Best-effort: ignore shutdown error on a crashed sidecar
   }
   const backoffMs = BASE_BACKOFF_MS * 2 ** restarts;
-  await new Promise<void>((resolve) => setTimeout(resolve, backoffMs));
+  await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, backoffMs));
   return startPlayer(playerBin, extraEnv);
 }
 /**
@@ -242,12 +232,12 @@ export async function stopPlayer(child: ChildProcess): Promise<void> {
   await new Promise<void>((resolveStop) => {
     let timer: NodeJS.Timeout | undefined;
 
-    const onExit = () => {
+    const onSettled = () => {
       clearTimeout(timer);
-      resolveStop();
+      setImmediate(resolveStop);
     };
-
-    child.once('exit', onExit);
+    child.once('exit', onSettled);
+    child.once('close', onSettled);
 
     // Arm the grace timer immediately so wedged/unresponsive stdin pipes
     // still trigger SIGKILL escalation within SHUTDOWN_TIMEOUT_MS.
@@ -257,15 +247,14 @@ export async function stopPlayer(child: ChildProcess): Promise<void> {
       } catch {
         // Child may already have exited.
       }
-      resolveStop();
     }, SHUTDOWN_TIMEOUT_MS);
-
     try {
       child.stdin?.write(JSON.stringify(cmd) + '\n');
     } catch {
       // If stdin was already closed, the exit handler will resolve the promise.
     }
   });
+  closeSharedReadline(child);
 }
 
 /**
@@ -273,17 +262,28 @@ export async function stopPlayer(child: ChildProcess): Promise<void> {
  * the player's NDJSON stdout stream. Multiple clients can attach `line`
  * listeners to the same instance via `getSharedReadline(child)`.
  */
-export function getSharedReadline(
-  child: ChildProcess,
-): ReturnType<typeof createInterface> {
-  const holder = child as unknown as {
-    __spotoei_rl?: ReturnType<typeof createInterface>;
-  };
-  if (!holder.__spotoei_rl) {
+export function getSharedReadline(child: ChildProcess): ReturnType<typeof createInterface> {
+  const existing = sharedReadlines.get(child);
+  const isClosed = (existing as unknown as { closed?: boolean } | undefined)?.closed;
+  if (!existing || isClosed) {
     if (!child.stdout) {
       throw new Error('child.stdout is required for readline');
     }
-    holder.__spotoei_rl = createInterface({ input: child.stdout });
+    const rl = createInterface({ input: child.stdout });
+    sharedReadlines.set(child, rl);
+    return rl;
   }
-  return holder.__spotoei_rl;
+  return existing;
+}
+
+export function closeSharedReadline(child: ChildProcess): void {
+  const rl = sharedReadlines.get(child);
+  if (rl) {
+    try {
+      rl.close();
+    } catch {
+      // ignore
+    }
+    sharedReadlines.delete(child);
+  }
 }
