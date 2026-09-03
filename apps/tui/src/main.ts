@@ -146,10 +146,15 @@ function getTerminalWidth(): number {
   if (typeof cols === 'number' && cols >= 20) return cols;
   return 80;
 }
+function getTerminalHeight(): number {
+  const rows = process.stdout.rows;
+  if (typeof rows === 'number' && rows >= 10) return rows;
+  return 24;
+}
+
 let ttyEntered = false;
 function enterTty(): void {
   if (ttyEntered) return;
-  // Enter alternate screen, hide cursor, clear.
   process.stdout.write('\u001b[?1049h\u001b[?25l\u001b[2J\u001b[H');
   ttyEntered = true;
 }
@@ -309,19 +314,25 @@ function renderResponsive(
     const matches = palette.matches();
     const filter = palette.getFilter();
     const sel = palette.getSelectedIndex();
+    const maxPaletteRows = Math.max(4, getTerminalHeight() - 14);
+    const visible = matches.slice(0, maxPaletteRows);
     const paletteLines: string[] = [
       ` filter: ${filter || '(type to filter)'}`,
       ' ─────────────────────',
     ];
-    const visible = matches.slice(0, 6);
     if (visible.length === 0) {
       paletteLines.push(' (no matches)');
     } else {
+      const total = matches.length;
+      const overflow = total - visible.length;
       for (let i = 0; i < visible.length; i++) {
         const cmd = visible[i]!;
         const marker = i === sel ? '▶' : ' ';
         const shortcut = cmd.shortcut ? ` [${cmd.shortcut}]` : '';
         paletteLines.push(`${marker} ${cmd.label}${shortcut}`);
+      }
+      if (overflow > 0) {
+        paletteLines.push(` …${overflow} more (keep typing to filter)`);
       }
     }
     paletteLines.push(' ─────────────────────');
@@ -921,8 +932,16 @@ async function main(): Promise<number> {
             refreshUi();
             return;
           }
-          if (chunk.length === 1 && chunk >= ' ' && chunk <= '~') {
-            uiState.searchBuffer += chunk;
+          let append = '';
+          for (const ch of chunk) {
+            const cp = ch.codePointAt(0) ?? 0;
+            // Accept printable ASCII + non-control non-C1 unicode (CJK, accents).
+            if (cp >= 0x20 && cp !== 0x7f && (cp < 0x80 || cp > 0x9f)) {
+              append += ch;
+            }
+          }
+          if (append.length > 0) {
+            uiState.searchBuffer += append;
             refreshUi();
             return;
           }
@@ -952,6 +971,18 @@ async function main(): Promise<number> {
           } else {
             setFocus(order[0]!);
           }
+          return;
+        }
+        if (chunk === ' ' || chunk === 'k' || chunk === 'K') {
+          const state = currentInfo.playback?.state ?? 'idle';
+          void (async () => {
+            try {
+              if (state === 'playing') await playback.pause();
+              else await playback.play();
+            } catch (e) {
+              setStatus(`playback: ${e instanceof Error ? e.message : String(e)}`);
+            }
+          })();
           return;
         }
         if (chunk === 'v' || chunk === 'V') {

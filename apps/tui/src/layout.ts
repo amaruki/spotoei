@@ -1,8 +1,4 @@
-// Terminal layout helpers and responsive breakpoint classification.
-//
-// Wide (>=120): Sidebar + Main Content + Context Panel
-// Medium (80-119): Sidebar + Main Content (Context as overlay/modal)
-// Narrow (<80): Single primary panel at a time
+import { displayWidth } from './text';
 
 export type LayoutTier = 'wide' | 'medium' | 'narrow';
 
@@ -13,29 +9,48 @@ export function getLayoutTier(columns: number): LayoutTier {
 }
 
 export interface BoxOptions {
-  width: number;
+  width?: number;
   height?: number;
   title?: string;
   focused?: boolean;
 }
 
+function displaySlice(s: string, maxWidth: number): string {
+  let w = 0;
+  let out = '';
+  for (const ch of s) {
+    const cw = displayWidth(ch);
+    if (w + cw > maxWidth) break;
+    out += ch;
+    w += cw;
+  }
+  return out;
+}
+
+function displayPad(s: string, targetWidth: number): string {
+  const w = displayWidth(s);
+  return w >= targetWidth ? s : s + ' '.repeat(targetWidth - w);
+}
+
 export function drawBox(lines: string[], opts: BoxOptions): string[] {
-  const width = Math.max(10, opts.width);
+  const width = Math.max(10, opts.width ?? 40);
   const innerWidth = width - 2;
+
   const horizontalChar = opts.focused ? '═' : '─';
+  const verticalChar = opts.focused ? '║' : '│';
   const topLeft = opts.focused ? '╔' : '┌';
   const topRight = opts.focused ? '╗' : '┐';
   const bottomLeft = opts.focused ? '╚' : '└';
   const bottomRight = opts.focused ? '╝' : '┘';
-  const verticalChar = opts.focused ? '║' : '│';
 
   let topBorder: string;
   if (opts.title) {
-    // Truncate title if it would exceed inner width; reserve at least 2 chars
-    // for the side padding to keep the corners readable.
     const maxTitle = Math.max(0, innerWidth - 2);
-    const titleText = ` ${opts.title.length > maxTitle ? opts.title.slice(0, maxTitle) : opts.title} `;
-    const remaining = Math.max(0, innerWidth - titleText.length);
+    const titleFull = ` ${opts.title} `;
+    const titleText =
+      displayWidth(titleFull) > maxTitle ? displaySlice(titleFull, maxTitle) : titleFull;
+    const titleWidth = displayWidth(titleText);
+    const remaining = Math.max(0, innerWidth - titleWidth);
     const leftPad = Math.floor(remaining / 2);
     const rightPad = remaining - leftPad;
     topBorder = `${topLeft}${horizontalChar.repeat(leftPad)}${titleText}${horizontalChar.repeat(rightPad)}${topRight}`;
@@ -50,8 +65,8 @@ export function drawBox(lines: string[], opts: BoxOptions): string[] {
 
   for (let i = 0; i < maxLines; i++) {
     const raw = lines[i] ?? '';
-    const truncated = raw.length > innerWidth ? raw.slice(0, innerWidth) : raw;
-    content.push(`${verticalChar}${truncated.padEnd(innerWidth, ' ')}${verticalChar}`);
+    const truncated = displayWidth(raw) > innerWidth ? displaySlice(raw, innerWidth) : raw;
+    content.push(`${verticalChar}${displayPad(truncated, innerWidth)}${verticalChar}`);
   }
 
   content.push(bottomBorder);
@@ -69,13 +84,15 @@ export function renderStatusBar(opts: {
   const left = ` [${opts.route.toUpperCase()}] ${opts.playbackState ?? 'IDLE'}${opts.trackName ? ` - ${opts.trackName}` : ''}`;
   const right = `${opts.hint ?? '?: help | Space: play | q: quit'} `;
 
-  // Assemble: left + padding + right, clamped to exactly `width` chars.
-  if (left.length + right.length >= width) {
-    // Both can't fit — keep right, truncate left.
-    const keepRight = right.slice(Math.max(0, right.length - (width - 1)));
-    const leftSpace = Math.max(0, width - keepRight.length);
-    return left.slice(0, leftSpace) + keepRight;
+  const leftW = displayWidth(left);
+  const rightW = displayWidth(right);
+
+  if (leftW + rightW >= width) {
+    const keepRight = displaySlice(right, Math.max(0, width - 1));
+    const keepRightW = displayWidth(keepRight);
+    const leftSpace = Math.max(0, width - keepRightW);
+    return displaySlice(left, leftSpace) + keepRight;
   }
-  const availableSpace = width - left.length - right.length;
+  const availableSpace = width - leftW - rightW;
   return left + ' '.repeat(availableSpace) + right;
 }
