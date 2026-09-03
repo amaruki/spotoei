@@ -1,7 +1,10 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-
+import type { BrowseConfigT } from 'spotoei-protocol';
+import { DEFAULT_BROWSE_CONFIG } from './browse';
+import { isValidBrowse } from './browseConfigValidator';
+import { resolveClientId } from './configClient';
 export interface AppConfig {
   version?: number;
   spotify?: {
@@ -12,7 +15,10 @@ export interface AppConfig {
     volume?: number;
     autoplay?: boolean;
   };
+  browse?: BrowseConfigT;
 }
+
+export const DEFAULT_BROWSE: BrowseConfigT = DEFAULT_BROWSE_CONFIG;
 
 export const KEYMASTER_CLIENT_ID = '65b708073fc0480ea92a077233ca87bd';
 export const KEYMASTER_REDIRECT_PORT = 8898;
@@ -104,7 +110,6 @@ export function getLogPath(): string {
 }
 
 // Hand-rolled validator for `config.json`. Reject malformed configs and fall
-// back to defaults. Adding a runtime dep just for this is overkill.
 function isValidConfig(value: unknown): value is AppConfig {
   if (value === null || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
@@ -128,7 +133,12 @@ function isValidConfig(value: unknown): value is AppConfig {
       return false;
     if ('autoplay' in pr && typeof pr.autoplay !== 'boolean') return false;
   }
+  if ('browse' in v && !isValidBrowse(v.browse)) return false;
   return true;
+}
+
+export function getBrowseConfig(config: AppConfig = readValidConfig()): BrowseConfigT {
+  return config.browse ?? DEFAULT_BROWSE_CONFIG;
 }
 
 export function readValidConfig(path: string = getConfigPath()): AppConfig {
@@ -141,146 +151,9 @@ export function readValidConfig(path: string = getConfigPath()): AppConfig {
     return {};
   }
 }
-function parseEnvFile(content: string): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eqIdx = trimmed.indexOf('=');
-    if (eqIdx <= 0) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    let val = trimmed.slice(eqIdx + 1).trim();
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    env[key] = val;
-  }
-  return env;
-}
 
-export interface ClientIdResolution {
-  clientId?: string;
-  source: 'env' | 'dotenv' | 'config' | 'default' | 'none';
-  configPath: string;
-}
-
-export function resolveClientId(allowDefault = false): ClientIdResolution {
-  const configPath = getConfigPath();
-
-  // 1. Explicit environment variable
-  if (process.env.SPOTOEI_CLIENT_ID && process.env.SPOTOEI_CLIENT_ID.trim().length > 0) {
-    return {
-      clientId: process.env.SPOTOEI_CLIENT_ID.trim(),
-      source: 'env',
-      configPath,
-    };
-  }
-
-  // 2. .env or .env.local in cwd
-  for (const dotenvFile of ['.env.local', '.env']) {
-    try {
-      const dotenvPath = join(process.cwd(), dotenvFile);
-      if (existsSync(dotenvPath)) {
-        const parsed = parseEnvFile(readFileSync(dotenvPath, 'utf8'));
-        if (parsed.SPOTOEI_CLIENT_ID && parsed.SPOTOEI_CLIENT_ID.trim().length > 0) {
-          const id = parsed.SPOTOEI_CLIENT_ID.trim();
-          process.env.SPOTOEI_CLIENT_ID = id;
-          return { clientId: id, source: 'dotenv', configPath };
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // 3. User config.json
-  try {
-    if (existsSync(configPath)) {
-      const content = readFileSync(configPath, 'utf8');
-      const json = JSON.parse(content) as AppConfig;
-      const id = json.spotify?.clientId?.trim();
-      if (id && id.length > 0) {
-        process.env.SPOTOEI_CLIENT_ID = id;
-        return { clientId: id, source: 'config', configPath };
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  if (allowDefault) {
-    return { clientId: KEYMASTER_CLIENT_ID, source: 'default', configPath };
-  }
-
-  return { source: 'none', configPath };
-}
-
-export function saveClientId(rawId: string): ClientIdResolution {
-  const clientId = rawId.trim();
-  const dir = getConfigDir();
-  const configPath = getConfigPath();
-
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-
-  let config: AppConfig = { version: 1 };
-  if (existsSync(configPath)) {
-    try {
-      config = JSON.parse(readFileSync(configPath, 'utf8')) as AppConfig;
-    } catch {
-      config = { version: 1 };
-    }
-  }
-
-  config.version = config.version ?? 1;
-  config.spotify = {
-    ...config.spotify,
-    clientId,
-  };
-
-  writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
-  process.env.SPOTOEI_CLIENT_ID = clientId;
-
-  return {
-    clientId,
-    source: 'config',
-    configPath,
-  };
-}
-
-export function saveRedirectPort(port: number): { port: number; configPath: string } {
-  const dir = getConfigDir();
-  const configPath = getConfigPath();
-
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-
-  let config: AppConfig = { version: 1 };
-  if (existsSync(configPath)) {
-    try {
-      config = JSON.parse(readFileSync(configPath, 'utf8')) as AppConfig;
-    } catch {
-      config = { version: 1 };
-    }
-  }
-
-  config.version = config.version ?? 1;
-  config.spotify = {
-    ...config.spotify,
-    redirectPort: port,
-  };
-
-  writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
-  process.env.SPOTOEI_REDIRECT_PORT = String(port);
-
-  return {
-    port,
-    configPath,
-  };
-}
-
+export { resolveClientId, saveClientId, saveRedirectPort } from './configClient';
+export type { ClientIdResolution } from './configClient';
 export function logToFile(message: string): void {
   try {
     const logPath = getLogPath();
