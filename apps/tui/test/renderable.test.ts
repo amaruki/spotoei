@@ -402,7 +402,7 @@ describe('OpenTUI renderables integration', () => {
     });
 
     const routeChanges: string[] = [];
-    const selectedItems: any[] = [];
+    const selectedItems: LibraryItemT[] = [];
     const selectedIndices: number[] = [];
 
     const ui = createUiCore(renderer, dummyState, {
@@ -466,8 +466,8 @@ describe('OpenTUI renderables integration', () => {
     sendKey('return', '\r');
     expect(selectedIndices).toEqual([0]);
     expect(selectedItems.length).toBe(1);
-    expect(selectedItems[0].name).toBe('Creep');
-    expect(selectedItems[0].uri).toBe('spotify:track:track-1');
+    expect(selectedItems[0]?.name).toBe('Creep');
+    expect(selectedItems[0]?.uri).toBe('spotify:track:track-1');
 
     await ui.shutdown();
   });
