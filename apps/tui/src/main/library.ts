@@ -1,22 +1,27 @@
+import type { LibraryCollectionT } from 'spotoei-protocol';
 import type { LibraryItemT } from '../ui';
 import type { AppContext } from './types';
 
 export function createLibraryActions(ctx: AppContext) {
   const { clients, state, getUi } = ctx;
 
-  const loadLibrary = async (force = false): Promise<void> => {
+  const loadLibrary = async (
+    force = false,
+    collection: LibraryCollectionT = 'saved_tracks',
+  ): Promise<void> => {
     const ui = getUi();
     if (!ui) return;
-    ui.setLibraryLoading(true);
-    ui.setStatus('Loading saved library tracks…');
+    const hadItems = state.libraryItems.length > 0;
+    if (!hadItems) ui.setLibraryLoading(true);
+    ui.setStatus(`Loading ${collection}…`);
     try {
       if (force) {
-        await clients.libraryManager.refresh('saved_tracks');
+        await clients.libraryManager.refresh(collection);
       }
-      const page = await clients.libraryManager.getPage('saved_tracks', 0, 50, force);
+      const page = await clients.libraryManager.getPage(collection, 0, 50, force);
       if (page.error) {
-        ui.setLibraryItems([], page.error);
-        ui.setStatus(`Library error: ${page.error.message}`, true);
+        if (!hadItems) ui.setLibraryItems([], page.error);
+        ui.setStatus(`Library error (${collection}): ${page.error.message}`, true);
         return;
       }
       state.libraryItems = page.items as LibraryItemT[];
@@ -24,13 +29,13 @@ export function createLibraryActions(ctx: AppContext) {
       const count = state.libraryItems.length;
       ui.setStatus(
         count > 0
-          ? `Loaded ${count} saved track${count === 1 ? '' : 's'}. Press Enter to play.`
-          : 'Your Spotify library has no saved tracks.',
+          ? `Loaded ${count} item${count === 1 ? '' : 's'} from ${collection}.`
+          : `No items in ${collection}.`,
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      ui.setLibraryItems([], { code: 'LOAD_ERROR', message: msg });
-      ui.setStatus(`Failed to load library: ${msg}`, true);
+      if (!hadItems) ui.setLibraryItems([], { code: 'LOAD_ERROR', message: msg });
+      ui.setStatus(`Failed to load ${collection}: ${msg}`, true);
     }
   };
 
