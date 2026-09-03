@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 
 import {
@@ -52,13 +51,39 @@ export function locatePlayer(): string {
     return realpathSync(override);
   }
 
-  const here = dirname(fileURLToPath(import.meta.url));
-  const repoRoot = resolve(here, '..', '..', '..');
-  const candidates = [
+  // In development and test runs (invoked through `bun test` or `bun run`),
+  // `import.meta.url` points to the real source file path. In standalone
+  // compiled binaries, Bun embeds code at `$bunfs/...`, so we must inspect
+  // both `process.execPath` and the module URL's directory.
+  const fileDir = (() => {
+    try {
+      const u = new URL(import.meta.url);
+      if (u.protocol === 'file:') return dirname(u.pathname);
+    } catch {
+      // ignore
+    }
+    return dirname(realpathSync(process.execPath));
+  })();
+  const execDir = dirname(realpathSync(process.execPath));
+
+  const packagedCandidates = [
+    join(execDir, 'spotoei-player'),
+    join(execDir, 'libexec', 'spotoei-player'),
+    join(execDir, '..', 'libexec', 'spotoei-player'),
+    join(execDir, '..', 'spotoei-player'),
+  ];
+  for (const c of packagedCandidates) {
+    if (existsSync(c)) {
+      return realpathSync(c);
+    }
+  }
+
+  const repoRoot = resolve(fileDir, '..', '..', '..');
+  const devCandidates = [
     join(repoRoot, 'target', 'debug', 'spotoei-player'),
     join(repoRoot, 'target', 'release', 'spotoei-player'),
   ];
-  for (const c of candidates) {
+  for (const c of devCandidates) {
     if (existsSync(c)) {
       return realpathSync(c);
     }
@@ -122,47 +147,55 @@ export async function startPlayer(
     const handshakeMsg = await new Promise<InboundT>((resolveH, rejectH) => {
       let settled = false;
 
+      const settleReject = (err: Error): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        child.kill('SIGKILL');
+        rejectH(err);
+      };
+      const settleResolve = (msg: InboundT): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolveH(msg);
+      };
+
       timer = setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          child.kill('SIGKILL');
-          rejectH(new Error(`handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms`));
-        }
+        settleReject(new Error(`handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms`));
       }, HANDSHAKE_TIMEOUT_MS);
 
-      const onLine = (line: string) => {
-        if (settled) return;
+      child.once('error', (err) => {
+        settleReject(err instanceof Error ? err : new Error(String(err)));
+      });
+
+      child.once('exit', (code) => {
+        settleReject(new Error(`player exited before handshake (code=${code})`));
+      });
+
+      const onLine = (line: string): void => {
         const r = parseInbound(line);
         if (!r.ok) {
-          settled = true;
-          child.kill('SIGKILL');
-          rejectH(new Error(`invalid protocol line: ${r.error}`));
+          settleReject(new Error(`invalid protocol line: ${r.error}`));
           return;
         }
         const msg = r.value;
         if (msg.type === 'response' && msg.id === helloId) {
-          settled = true;
-          resolveH(msg);
+          settleResolve(msg);
         }
       };
 
-      rl.on('line', onLine);
-
-      child.once('error', (err) => {
-        if (!settled) {
-          settled = true;
-          rejectH(err);
+      // Wait for the hello frame to be drained to the OS pipe before
+      // attaching the readline listener. Without this drain, a fast
+      // sidecar reply can race the read loop and be discarded, which
+      // is what causes handshake timeouts under Bun.
+      child.stdin!.write(JSON.stringify(hello) + '\n', (writeErr) => {
+        if (writeErr) {
+          settleReject(writeErr);
+          return;
         }
+        rl.on('line', onLine);
       });
-
-      child.once('exit', (code) => {
-        if (!settled) {
-          settled = true;
-          rejectH(new Error(`player exited before handshake (code=${code})`));
-        }
-      });
-
-      child.stdin!.write(JSON.stringify(hello) + '\n');
     });
 
     // Validate the handshake response with the strict HelloResponse schema.
