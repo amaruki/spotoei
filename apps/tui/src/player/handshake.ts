@@ -38,6 +38,8 @@ function buildCleanEnv(extra: Record<string, string>): Record<string, string | u
     ALSA_DEVICE: process.env.ALSA_DEVICE,
     SPOTOEI_LOG_FILE: getLogPath(),
     DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS,
+    SPOTOEI_MOCK_PLAYER: process.env.SPOTOEI_MOCK_PLAYER,
+    SPOTOEI_MOCK_AUTH: process.env.SPOTOEI_MOCK_AUTH,
   };
   for (const [k, v] of Object.entries(extra)) {
     clean[k] = v;
