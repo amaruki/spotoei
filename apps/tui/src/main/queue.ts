@@ -105,8 +105,9 @@ export function createQueueActions(ctx: AppContext) {
 
       // 3. Fallback: Saved Library Tracks
       if (newTracks.length === 0) {
-        const trackPool: CatalogTrackT[] = state.libraryItems.filter(
-          (libItem): libItem is CatalogTrackT => 'durationMs' in libItem,
+        const trackPool = state.libraryItems.filter(
+          (libItem): libItem is CatalogTrackT =>
+            'durationMs' in libItem && typeof (libItem as CatalogTrackT).albumName === 'string',
         );
         if (trackPool.length > 0) {
           const existingUris = new Set(pool.map((t) => t.uri));

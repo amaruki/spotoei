@@ -173,7 +173,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
       currentSearchHits: [],
       artistGenreCache: new Map(),
       currentLyricsTrackUri: undefined,
-      lastRouteBeforeLyrics: 'home',
+      lastRouteBeforeLyrics: { kind: 'home', tab: 'for_you' },
       searchSequence: 0,
       isFetchingAutoplay: false,
       isAdvancingAutoplay: false,

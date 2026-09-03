@@ -3,10 +3,9 @@ import type {
   PlaybackChangedDataT,
   PlaybackPositionDataT,
 } from 'spotoei-protocol';
-
-import type { AppContext } from './types';
+import { routeKind } from '../ui/core/navigationStack';
 import type { createEnrichment } from './enrich';
-
+import type { AppContext } from './types';
 export function wireSubscriptions(
   ctx: AppContext,
   actions: {
@@ -53,7 +52,7 @@ export function wireSubscriptions(
     if (ui) ui.setPlayback(view);
     void actions.updateQueueView();
     void actions.ensureAutoplayTracks();
-    if (ui?.getRoute() === 'lyrics') {
+    if (ui && routeKind(ui.getRoute()) === 'lyrics') {
       void actions.loadCurrentLyrics();
     }
 

@@ -1,8 +1,8 @@
 import type { CatalogTrackT } from 'spotoei-protocol';
 
 import { createUi, type Ui } from '../ui';
+import { routeKind } from '../ui/core/navigationStack';
 import type { AppContext } from './types';
-
 export async function initUi(
   ctx: AppContext,
   actions: {
@@ -96,10 +96,11 @@ export async function initUi(
       }
     },
     onSelectLibraryItem: (item) => {
-      if ('durationMs' in item) {
+      const isTrackLike = 'durationMs' in item;
+      if (isTrackLike) {
         state.activePlaylistTracks = state.libraryItems.filter(
-          (libItem): libItem is CatalogTrackT => 'durationMs' in libItem,
-        );
+          (libItem) => 'durationMs' in libItem,
+        ) as unknown as CatalogTrackT[];
         void actions.playTrackOrContext({
           trackUri: item.uri,
           title: item.name,
@@ -131,14 +132,15 @@ export async function initUi(
       }
     },
     onRouteChange: (route) => {
-      if (route === 'library' && state.libraryItems.length === 0) {
+      const curKind = routeKind(route);
+      if (curKind === 'library' && state.libraryItems.length === 0) {
         void actions.loadLibrary();
       }
-      if (route === 'queue') {
+      if (curKind === 'queue') {
         void actions.updateQueueView();
         void actions.ensureAutoplayTracks();
       }
-      if (route === 'lyrics') {
+      if (curKind === 'lyrics') {
         void actions.loadCurrentLyrics();
       }
     },
@@ -159,7 +161,7 @@ export async function initUi(
         const u = getUi();
         if (u) {
           const curRoute = u.getRoute();
-          if (curRoute === 'lyrics') {
+          if (routeKind(curRoute) === 'lyrics') {
             u.setRoute(state.lastRouteBeforeLyrics);
           } else {
             state.lastRouteBeforeLyrics = curRoute;

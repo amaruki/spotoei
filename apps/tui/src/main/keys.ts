@@ -1,7 +1,8 @@
 import { resolveClientId } from '../config';
 import type { KeyDispatch } from '../ui';
-import type { AppContext } from './types';
+import { routeKind } from '../ui/core/navigationStack';
 import { isLowerKey, isUpperKey } from './utils';
+import type { AppContext } from './types';
 
 export function createKeyHandler(
   ctx: AppContext,
@@ -207,9 +208,9 @@ export function createKeyHandler(
     if (isLowerKey(key, 'l')) {
       if (ui) {
         const curRoute = ui.getRoute();
-        if (curRoute === 'lyrics') {
+        if (routeKind(curRoute) === 'lyrics') {
           ui.setRoute(state.lastRouteBeforeLyrics);
-          ui.setStatus(`Exited lyrics → ${state.lastRouteBeforeLyrics}`);
+          ui.setStatus(`Exited lyrics`);
         } else {
           state.lastRouteBeforeLyrics = curRoute;
           ui.setRoute('lyrics');
@@ -220,7 +221,7 @@ export function createKeyHandler(
     }
     if (isUpperKey(key, 'l')) {
       if (ui) {
-        if (ui.getRoute() !== 'lyrics') {
+        if (routeKind(ui.getRoute()) !== 'lyrics') {
           state.lastRouteBeforeLyrics = ui.getRoute();
           ui.setRoute('lyrics');
         }

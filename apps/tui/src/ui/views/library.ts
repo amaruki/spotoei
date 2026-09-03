@@ -1,9 +1,21 @@
-import type { CatalogAlbumT, CatalogArtistT, CatalogPlaylistT } from 'spotoei-protocol';
+import type {
+  CatalogAlbumT,
+  CatalogArtistT,
+  CatalogPlaylistT,
+  CatalogTrackT,
+} from 'spotoei-protocol';
 import { formatArtists } from '../formatters';
 import type { LibraryItemT } from '../types';
 
+type AnyLibraryItem =
+  | LibraryItemT
+  | CatalogTrackT
+  | CatalogAlbumT
+  | CatalogArtistT
+  | CatalogPlaylistT;
+
 export function libraryItemOptions(
-  items: LibraryItemT[],
+  items: AnyLibraryItem[],
   error?: { code: string; message: string },
 ): { name: string; description: string }[] {
   if (error) {
