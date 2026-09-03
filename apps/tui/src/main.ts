@@ -11,44 +11,8 @@ import { createVisualizerController } from './visualizer';
 import { createLyricsClient } from './lyrics';
 import { getLayoutTier, drawBox, renderStatusBar, type LayoutTier } from './layout';
 import { CommandPalette } from './palette';
+import { sanitize, displayWidth } from './text';
 import type { AuthStatusDataT, PlaybackChangedDataT, SearchResponseT } from 'spotoei-protocol';
-// eslint-disable-next-line no-control-regex
-export function sanitize(s: string): string {
-  // eslint-disable-next-line no-control-regex
-  return s.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '').replace(/[\r\n]/g, ' ');
-}
-
-// Compute the visual column width of a string for terminal layout.
-// CJK / full-width / emoji codepoints occupy two columns; everything
-// else is a single column. Stays inline to avoid a new dependency.
-export function displayWidth(s: string): number {
-  let w = 0;
-  for (const ch of s) {
-    const cp = ch.codePointAt(0) ?? 0;
-    w += isWide(cp) ? 2 : 1;
-  }
-  return w;
-}
-
-function isWide(cp: number): boolean {
-  return (
-    (cp >= 0x1100 && cp <= 0x115f) ||
-    cp === 0x2329 ||
-    cp === 0x232a ||
-    (cp >= 0x2e80 && cp <= 0x303e) ||
-    (cp >= 0x3041 && cp <= 0x33ff) ||
-    (cp >= 0x3400 && cp <= 0x4dbf) ||
-    (cp >= 0x4e00 && cp <= 0x9fff) ||
-    (cp >= 0xa000 && cp <= 0xa4cf) ||
-    (cp >= 0xac00 && cp <= 0xd7a3) ||
-    (cp >= 0xf900 && cp <= 0xfaff) ||
-    (cp >= 0xfe30 && cp <= 0xfe4f) ||
-    (cp >= 0xff00 && cp <= 0xff60) ||
-    (cp >= 0xffe0 && cp <= 0xffe6) ||
-    (cp >= 0x20000 && cp <= 0x2fffd) ||
-    (cp >= 0x30000 && cp <= 0x3fffd)
-  );
-}
 
 function padBox(content: string, innerWidth = 40): string {
   // eslint-disable-next-line no-control-regex
@@ -249,7 +213,7 @@ function renderResponsive(
       route === 'search'
         ? [
             ` route:    search`,
-            ` query:    ${info.search?.query ? sanitize(info.search.query.slice(0, 28)) : '(empty)'}`,
+            ` query:    ${uiState.route === 'search' && uiState.searchBuffer.length > 0 ? sanitize(uiState.searchBuffer.slice(0, 28)) + '_' : info.search?.query ? sanitize(info.search.query.slice(0, 28)) : '(empty)'}`,
             ` hits:     ${info.search?.hitCount ?? 0}`,
             ` top:      ${info.search?.firstHit ? sanitize(info.search.firstHit.slice(0, 28)) : '(none)'}`,
             ` player:   ${info.playerVersion}`,
@@ -291,7 +255,7 @@ function renderResponsive(
       route === 'search'
         ? [
             ` route:    search`,
-            ` query:    ${info.search?.query ? sanitize(info.search.query.slice(0, 24)) : '(empty)'}`,
+            ` query:    ${uiState.route === 'search' && uiState.searchBuffer.length > 0 ? sanitize(uiState.searchBuffer.slice(0, 24)) + '_' : info.search?.query ? sanitize(info.search.query.slice(0, 24)) : '(empty)'}`,
             ` hits:     ${info.search?.hitCount ?? 0}`,
             ` player:   ${info.playerVersion}`,
             ` auth:     ${info.auth?.state ?? 'pending'}`,
@@ -312,7 +276,7 @@ function renderResponsive(
       route === 'search'
         ? [
             ` route:    search`,
-            ` query:    ${info.search?.query ? sanitize(info.search.query.slice(0, 20)) : '(empty)'}`,
+            ` query:    ${uiState.route === 'search' && uiState.searchBuffer.length > 0 ? sanitize(uiState.searchBuffer.slice(0, 20)) + '_' : info.search?.query ? sanitize(info.search.query.slice(0, 20)) : '(empty)'}`,
             ` hits:     ${info.search?.hitCount ?? 0}`,
             ` top:      ${info.search?.firstHit ? sanitize(info.search.firstHit.slice(0, 20)) : '(none)'}`,
           ]
@@ -547,6 +511,20 @@ async function main(): Promise<number> {
   process.on('SIGHUP', () => {
     void quit();
   });
+  process.on('uncaughtException', (err) => {
+    cleanupTty();
+    process.stderr.write(
+      `[spotoei:fatal] uncaught exception: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+    );
+    if (child) {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // ignore
+      }
+    }
+    process.exit(1);
+  });
   process.on('exit', cleanupTty);
 
   try {
@@ -733,6 +711,19 @@ async function main(): Promise<number> {
             setStatus(`lyrics: ${e instanceof Error ? e.message : String(e)}`);
           }
         },
+        login: async () => {
+          try {
+            setStatus('Opening browser for Spotify authentication...');
+            const result = await auth.begin();
+            if (result.authUrl) {
+              setStatus(`Auth URL: ${result.authUrl}`);
+            } else {
+              setStatus('Authentication already in progress');
+            }
+          } catch (e) {
+            setStatus(`login: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        },
         quit: () => {
           requestQuit.trigger();
         },
@@ -891,33 +882,34 @@ async function main(): Promise<number> {
           return;
         }
         if (uiState.route === 'search') {
+          if (chunk === '\u0003') {
+            requestQuit.trigger();
+            return;
+          }
           if (chunk === '\u001b' || chunk === '\r' || chunk === '\n') {
-            if (chunk === '\r' || chunk === '\n') {
-              const q = uiState.searchBuffer;
-              if (q.length > 0) {
-                searchClient
-                  .search(q)
-                  .then((res: SearchResponseT) => {
-                    const first = res.hits[0];
-                    let firstLabel = '(none)';
-                    if (first) {
-                      if (first.type === 'track') firstLabel = sanitize(first.track.name);
-                      else if (first.type === 'album') firstLabel = sanitize(first.album.name);
-                      else if (first.type === 'artist') firstLabel = sanitize(first.artist.name);
-                      else if (first.type === 'playlist')
-                        firstLabel = sanitize(first.playlist.name);
-                    }
-                    currentInfo.search = {
-                      query: sanitize(q),
-                      hitCount: res.hits.length,
-                      firstHit: firstLabel,
-                    };
-                    refreshUi();
-                  })
-                  .catch((e: unknown) => {
-                    setStatus(e instanceof Error ? e.message : String(e));
-                  });
-              }
+            const q = uiState.searchBuffer;
+            if (q.length > 0) {
+              searchClient
+                .search(q)
+                .then((res: SearchResponseT) => {
+                  const first = res.hits[0];
+                  let firstLabel = '(none)';
+                  if (first) {
+                    if (first.type === 'track') firstLabel = sanitize(first.track.name);
+                    else if (first.type === 'album') firstLabel = sanitize(first.album.name);
+                    else if (first.type === 'artist') firstLabel = sanitize(first.artist.name);
+                    else if (first.type === 'playlist') firstLabel = sanitize(first.playlist.name);
+                  }
+                  currentInfo.search = {
+                    query: sanitize(q),
+                    hitCount: res.hits.length,
+                    firstHit: firstLabel,
+                  };
+                  refreshUi();
+                })
+                .catch((e: unknown) => {
+                  setStatus(e instanceof Error ? e.message : String(e));
+                });
             }
             if (chunk === '\u001b') {
               setRoute('home');

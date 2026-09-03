@@ -153,5 +153,7 @@ export class LyricsClient {
 }
 
 export function createLyricsClient(options: LyricsClientOptions): LyricsClient {
-  return new LyricsClient(options);
+  const client = new LyricsClient(options);
+  client.start();
+  return client;
 }
