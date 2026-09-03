@@ -2,6 +2,7 @@ import type { CatalogTrackT } from 'spotoei-protocol';
 
 import { createUi, type Ui } from '../ui';
 import { routeKind } from '../ui/core/navigationStack';
+import { contextActionCommands } from './paletteContextActions';
 import type { AppContext } from './types';
 export async function initUi(
   ctx: AppContext,
@@ -172,6 +173,7 @@ export async function initUi(
       },
     },
     { name: 'Settings', description: 's', action: () => getUi()?.setRoute('settings') },
+    ...contextActionCommands(),
     {
       name: 'Configure Spotify Client ID',
       description: 'Set/update Spotify Client ID',

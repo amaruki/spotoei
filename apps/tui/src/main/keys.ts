@@ -222,5 +222,9 @@ export function createKeyHandler(
       if (ui) ui.setRoute('search');
       return;
     }
+    if (key.name === 'x' || key.name === 'X') {
+      if (ui) ui.openPalette();
+      return;
+    }
   };
 }
