@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "bun run src/main.ts",
     "build": "bun build ./src/main.ts --compile --target=bun --outfile=dist/spotoei",
-    "start": "bun run src/main.ts"
+    "start": "bun run src/main.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.check.json"
   },
   "dependencies": {
     "spotoei-protocol": "workspace:*"
