@@ -27,25 +27,31 @@ Every message includes protocol version and type.
 ### Command
 
 ```json
-{"v":1,"type":"command","id":"01J...","command":"play","data":{}}
+{ "v": 1, "type": "command", "id": "01J...", "command": "play", "data": {} }
 ```
 
 ### Response
 
 ```json
-{"v":1,"type":"response","id":"01J...","ok":true,"data":{}}
+{ "v": 1, "type": "response", "id": "01J...", "ok": true, "data": {} }
 ```
 
 ### Error Response
 
 ```json
-{"v":1,"type":"response","id":"01J...","ok":false,"error":{"code":"PLAYBACK_FAILED","message":"Unable to start playback","retryable":true}}
+{
+  "v": 1,
+  "type": "response",
+  "id": "01J...",
+  "ok": false,
+  "error": { "code": "PLAYBACK_FAILED", "message": "Unable to start playback", "retryable": true }
+}
 ```
 
 ### Event
 
 ```json
-{"v":1,"type":"event","event":"playback.changed","seq":42,"data":{}}
+{ "v": 1, "type": "event", "event": "playback.changed", "seq": 42, "data": {} }
 ```
 
 ## 4. Versioning
@@ -127,14 +133,14 @@ Only implement queue mutations proven reliable by the selected librespot integra
 
 ```json
 {
-  "v":1,
-  "type":"command",
-  "id":"...",
-  "command":"playback.load",
-  "data":{
-    "contextUri":"spotify:album:...",
-    "trackUri":"spotify:track:...",
-    "autoplay":true
+  "v": 1,
+  "type": "command",
+  "id": "...",
+  "command": "playback.load",
+  "data": {
+    "contextUri": "spotify:album:...",
+    "trackUri": "spotify:track:...",
+    "autoplay": true
   }
 }
 ```
@@ -149,21 +155,21 @@ Do not let the UI pass arbitrary librespot-specific load options.
 
 ```json
 {
-  "v":1,
-  "type":"event",
-  "event":"playback.changed",
-  "seq":120,
-  "data":{
-    "revision":31,
-    "state":"playing",
-    "track":{"uri":"spotify:track:...","name":"...","artists":["..."]},
-    "positionMs":92531,
-    "durationMs":238000,
-    "volume":0.8,
-    "shuffle":false,
-    "repeat":"off",
-    "autoplay":true,
-    "observedAtMonotonicMs":5549201
+  "v": 1,
+  "type": "event",
+  "event": "playback.changed",
+  "seq": 120,
+  "data": {
+    "revision": 31,
+    "state": "playing",
+    "track": { "uri": "spotify:track:...", "name": "...", "artists": ["..."] },
+    "positionMs": 92531,
+    "durationMs": 238000,
+    "volume": 0.8,
+    "shuffle": false,
+    "repeat": "off",
+    "autoplay": true,
+    "observedAtMonotonicMs": 5549201
   }
 }
 ```
@@ -175,7 +181,13 @@ Domain fields may evolve additively.
 Optional lightweight event for periodic reconciliation:
 
 ```json
-{"v":1,"type":"event","event":"playback.position","seq":121,"data":{"positionMs":93420,"revision":31}}
+{
+  "v": 1,
+  "type": "event",
+  "event": "playback.position",
+  "seq": 121,
+  "data": { "positionMs": 93420, "revision": 31 }
+}
 ```
 
 Target approximately 4-5 Hz, not 60 Hz.
@@ -184,15 +196,15 @@ Target approximately 4-5 Hz, not 60 Hz.
 
 ```json
 {
-  "v":1,
-  "type":"event",
-  "event":"queue.changed",
-  "seq":130,
-  "data":{
-    "revision":17,
-    "current":{"uri":"spotify:track:...","name":"..."},
-    "previous":[],
-    "next":[]
+  "v": 1,
+  "type": "event",
+  "event": "queue.changed",
+  "seq": 130,
+  "data": {
+    "revision": 17,
+    "current": { "uri": "spotify:track:...", "name": "..." },
+    "previous": [],
+    "next": []
   }
 }
 ```
@@ -205,11 +217,11 @@ Response/event payload:
 
 ```json
 {
-  "kind":"synced",
-  "language":"en",
-  "lines":[
-    {"startMs":1230,"text":"..."},
-    {"startMs":4870,"text":"..."}
+  "kind": "synced",
+  "language": "en",
+  "lines": [
+    { "startMs": 1230, "text": "..." },
+    { "startMs": 4870, "text": "..." }
   ]
 }
 ```
@@ -220,16 +232,16 @@ Plain lyrics omit `startMs` and use `kind:"plain"`.
 
 ```json
 {
-  "v":1,
-  "type":"command",
-  "id":"...",
-  "command":"visualizer.configure",
-  "data":{
-    "enabled":true,
-    "mode":"spectrum",
-    "fps":60,
-    "bands":64,
-    "waveformSamples":120
+  "v": 1,
+  "type": "command",
+  "id": "...",
+  "command": "visualizer.configure",
+  "data": {
+    "enabled": true,
+    "mode": "spectrum",
+    "fps": 60,
+    "bands": 64,
+    "waveformSamples": 120
   }
 }
 ```
@@ -243,13 +255,25 @@ High-frequency messages MUST be minimal.
 Spectrum:
 
 ```json
-{"v":1,"type":"event","event":"visualizer.spectrum","seq":5001,"data":{"bands":[0.1,0.2,0.8,0.4]}}
+{
+  "v": 1,
+  "type": "event",
+  "event": "visualizer.spectrum",
+  "seq": 5001,
+  "data": { "bands": [0.1, 0.2, 0.8, 0.4] }
+}
 ```
 
 Waveform:
 
 ```json
-{"v":1,"type":"event","event":"visualizer.waveform","seq":5002,"data":{"samples":[-0.2,0.1,0.7,-0.4]}}
+{
+  "v": 1,
+  "type": "event",
+  "event": "visualizer.waveform",
+  "seq": 5002,
+  "data": { "samples": [-0.2, 0.1, 0.7, -0.4] }
+}
 ```
 
 No timestamps are necessary if each payload is render-now/latest-value data. `seq` allows detection of drops; dropped visualizer sequences are normal.
@@ -259,7 +283,7 @@ No timestamps are necessary if each payload is render-now/latest-value data. `se
 If TypeScript requires a Web API access token:
 
 ```json
-{"v":1,"type":"command","id":"...","command":"auth.get_web_token","data":{}}
+{ "v": 1, "type": "command", "id": "...", "command": "auth.get_web_token", "data": {} }
 ```
 
 Response:

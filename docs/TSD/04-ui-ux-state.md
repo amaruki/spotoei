@@ -103,10 +103,10 @@ IPC → PlayerAdapter → PlaybackProjectionService → Jotai atoms → UI
 Examples of projected atoms:
 
 ```ts
-playbackAtom
-queueAtom
-currentTrackAtom
-playerAvailabilityAtom
+playbackAtom;
+queueAtom;
+currentTrackAtom;
+playerAvailabilityAtom;
 ```
 
 The projection service may interpolate position for display, but it must retain the last authoritative player timestamp/revision.
@@ -119,15 +119,15 @@ Conceptual model:
 
 ```ts
 type Route =
-  | { kind: "home" }
-  | { kind: "search"; query?: string }
-  | { kind: "library"; section?: string }
-  | { kind: "playlist"; id: string }
-  | { kind: "album"; id: string }
-  | { kind: "artist"; id: string }
-  | { kind: "now-playing" }
-  | { kind: "lyrics" }
-  | { kind: "settings" };
+  | { kind: 'home' }
+  | { kind: 'search'; query?: string }
+  | { kind: 'library'; section?: string }
+  | { kind: 'playlist'; id: string }
+  | { kind: 'album'; id: string }
+  | { kind: 'artist'; id: string }
+  | { kind: 'now-playing' }
+  | { kind: 'lyrics' }
+  | { kind: 'settings' };
 ```
 
 `Esc` behavior:
@@ -158,9 +158,9 @@ Implement layout capability rather than duplicating full screens for each width.
 Suggested mode calculation:
 
 ```ts
-if (cols >= 120) return "wide";
-if (cols >= 80) return "medium";
-return "narrow";
+if (cols >= 120) return 'wide';
+if (cols >= 80) return 'medium';
+return 'narrow';
 ```
 
 Thresholds SHOULD be configurable constants and tested with representative terminal dimensions.
@@ -252,8 +252,8 @@ It SHOULD not re-render all metadata at 60 FPS. Visualizer drawing must be isola
 
 ```ts
 type LyricsDocument =
-  | { kind: "synced"; lines: TimedLyricLine[]; language?: string }
-  | { kind: "plain"; lines: PlainLyricLine[]; language?: string };
+  | { kind: 'synced'; lines: TimedLyricLine[]; language?: string }
+  | { kind: 'plain'; lines: PlainLyricLine[]; language?: string };
 ```
 
 ### 14.2 Synced Selection
@@ -305,15 +305,15 @@ No unbounded array of past frames is retained.
 
 Map `AppError` categories to presentation modes:
 
-| Category | Presentation |
-|---|---|
-| transient network | status/banner |
-| API quota | status/banner with explanation |
-| lyrics unavailable | inline empty state |
-| player recovering | persistent compact status |
-| auth required | blocking onboarding/account screen |
-| unrecoverable config | blocking actionable screen |
-| internal unexpected | compact error + diagnostic ID/log location |
+| Category             | Presentation                               |
+| -------------------- | ------------------------------------------ |
+| transient network    | status/banner                              |
+| API quota            | status/banner with explanation             |
+| lyrics unavailable   | inline empty state                         |
+| player recovering    | persistent compact status                  |
+| auth required        | blocking onboarding/account screen         |
+| unrecoverable config | blocking actionable screen                 |
+| internal unexpected  | compact error + diagnostic ID/log location |
 
 Avoid modal dialogs for recoverable background errors.
 

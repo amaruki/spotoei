@@ -63,15 +63,15 @@ Requirements:
 
 Initial recommended priority:
 
-| Priority | Target |
-|---|---|
-| P0 | Linux x86_64 glibc |
-| P0 | macOS arm64 |
-| P0 | Windows x86_64 |
-| P1 | Linux arm64 glibc |
-| P1 | macOS x86_64 |
-| P1 | Linux x86_64 musl if audio/keyring compatibility is validated |
-| P2 | Windows arm64 |
+| Priority | Target                                                        |
+| -------- | ------------------------------------------------------------- |
+| P0       | Linux x86_64 glibc                                            |
+| P0       | macOS arm64                                                   |
+| P0       | Windows x86_64                                                |
+| P1       | Linux arm64 glibc                                             |
+| P1       | macOS x86_64                                                  |
+| P1       | Linux x86_64 musl if audio/keyring compatibility is validated |
+| P2       | Windows arm64                                                 |
 
 Do not advertise a target until audio output, keyring, OAuth browser flow, and OpenTUI rendering are tested on it.
 

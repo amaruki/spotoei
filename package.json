@@ -3,11 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "description": "SPOTOEI — keyboard-first, terminal-native Spotify client.",
-  "type": "module",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
+  "type": "module",
   "scripts": {
     "dev": "bun run --filter spotoei-tui dev",
     "build": "bun run --filter spotoei-protocol build && bun run --filter spotoei-tui build",
@@ -18,10 +18,10 @@
     "package": "bun run scripts/package.ts"
   },
   "devDependencies": {
-    "oxlint": "*",
+    "@types/bun": "*",
     "oxfmt": "*",
-    "typescript": "*",
-    "@types/bun": "*"
+    "oxlint": "*",
+    "typescript": "*"
   },
   "engines": {
     "bun": ">=1.3.0"

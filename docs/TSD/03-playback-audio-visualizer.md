@@ -192,13 +192,25 @@ Prefer compact normalized payloads.
 Spectrum example:
 
 ```json
-{"v":1,"type":"event","event":"visualizer.spectrum","seq":8112,"bands":[0.05,0.12,0.48,0.91]}
+{
+  "v": 1,
+  "type": "event",
+  "event": "visualizer.spectrum",
+  "seq": 8112,
+  "bands": [0.05, 0.12, 0.48, 0.91]
+}
 ```
 
 Waveform example:
 
 ```json
-{"v":1,"type":"event","event":"visualizer.waveform","seq":8113,"samples":[-0.1,0.2,0.7,0.1,-0.4]}
+{
+  "v": 1,
+  "type": "event",
+  "event": "visualizer.waveform",
+  "seq": 8113,
+  "samples": [-0.1, 0.2, 0.7, 0.1, -0.4]
+}
 ```
 
 Do not include track metadata in every visualizer frame.

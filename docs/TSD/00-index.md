@@ -35,19 +35,19 @@ The following decisions are baseline constraints:
 
 ## 3. TSD Map
 
-| File | Responsibility |
-|---|---|
-| `01-system-architecture.md` | Component/process/layer architecture and dependency rules |
-| `02-auth-spotify-api.md` | PKCE, token lifecycle, credential vault, API client, quota behavior |
-| `03-playback-audio-visualizer.md` | librespot integration, audio pipeline, queue, autoplay, FFT, adaptive FPS |
-| `04-ui-ux-state.md` | OpenTUI/React composition, navigation, Jotai/XState boundaries, Lyrics |
-| `05-data-cache-config.md` | SQLite cache, configuration, filesystem paths, migrations |
-| `06-ipc-contract.md` | Versioned NDJSON command/event protocol |
-| `07-testing-observability.md` | Test strategy, fault injection, logging, metrics/benchmarks |
-| `08-packaging-release.md` | Build matrix, installer/package strategy, checksums, `doctor` |
-| `09-coding-standards.md` | Clean Code, Clean Architecture, KISS, DRY, TypeScript/Rust conventions |
-| `10-implementation-plan.md` | Delivery slices, gates, Definition of Done |
-| `11-analytical-insights-view.md` | Compliance-constrained Insights view using Spotify-provided Top Items and Recently Played data |
+| File                              | Responsibility                                                                                 |
+| --------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `01-system-architecture.md`       | Component/process/layer architecture and dependency rules                                      |
+| `02-auth-spotify-api.md`          | PKCE, token lifecycle, credential vault, API client, quota behavior                            |
+| `03-playback-audio-visualizer.md` | librespot integration, audio pipeline, queue, autoplay, FFT, adaptive FPS                      |
+| `04-ui-ux-state.md`               | OpenTUI/React composition, navigation, Jotai/XState boundaries, Lyrics                         |
+| `05-data-cache-config.md`         | SQLite cache, configuration, filesystem paths, migrations                                      |
+| `06-ipc-contract.md`              | Versioned NDJSON command/event protocol                                                        |
+| `07-testing-observability.md`     | Test strategy, fault injection, logging, metrics/benchmarks                                    |
+| `08-packaging-release.md`         | Build matrix, installer/package strategy, checksums, `doctor`                                  |
+| `09-coding-standards.md`          | Clean Code, Clean Architecture, KISS, DRY, TypeScript/Rust conventions                         |
+| `10-implementation-plan.md`       | Delivery slices, gates, Definition of Done                                                     |
+| `11-analytical-insights-view.md`  | Compliance-constrained Insights view using Spotify-provided Top Items and Recently Played data |
 
 ## 4. Dependency Baseline
 

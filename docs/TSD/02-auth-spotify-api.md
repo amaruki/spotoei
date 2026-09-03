@@ -137,10 +137,10 @@ Responsibilities:
 - validate important response shapes at adapter boundaries;
 - map Spotify types to SPOTOEI domain types;
 - implement pagination;
- - detect 401/403/429 and 5xx (`500`/`502`/`503`) for contract coverage (`TSD 11 §18.2`);
- - honor `Retry-After` when supplied;
- - classify quota-exceeded response reason separately when available;
- - deduplicate safe concurrent identical GETs.
+- detect 401/403/429 and 5xx (`500`/`502`/`503`) for contract coverage (`TSD 11 §18.2`);
+- honor `Retry-After` when supplied;
+- classify quota-exceeded response reason separately when available;
+- deduplicate safe concurrent identical GETs.
 
 ## 10. Request Policy
 
@@ -166,15 +166,15 @@ Player-core events are authoritative.
 
 Suggested defaults, subject to tuning:
 
-| Data | Suggested TTL/Strategy |
-|---|---|
-| immutable-ish track/album metadata | 24 h to 7 d |
-| artist metadata | 24 h |
-| search query results | 5-15 min |
-| saved/library pages | 1-5 min with stale-while-revalidate |
-| playlist metadata | 1-5 min |
-| recently played | 1-5 min |
-| top items | 1 h |
+| Data                               | Suggested TTL/Strategy              |
+| ---------------------------------- | ----------------------------------- |
+| immutable-ish track/album metadata | 24 h to 7 d                         |
+| artist metadata                    | 24 h                                |
+| search query results               | 5-15 min                            |
+| saved/library pages                | 1-5 min with stale-while-revalidate |
+| playlist metadata                  | 1-5 min                             |
+| recently played                    | 1-5 min                             |
+| top items                          | 1 h                                 |
 
 TTL is a performance policy, not correctness authority. User mutations MUST update/invalidate relevant cache entries immediately.
 
@@ -213,8 +213,8 @@ Example:
 interface PlaylistDetailsResult {
   playlist: Playlist;
   tracks: Track[];
-  completeness: "complete" | "partial" | "unavailable";
-  reason?: "spotify-policy" | "permission" | "network";
+  completeness: 'complete' | 'partial' | 'unavailable';
+  reason?: 'spotify-policy' | 'permission' | 'network';
 }
 ```
 
