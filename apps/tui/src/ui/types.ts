@@ -4,23 +4,32 @@
 
 import type {
   AuthStatusDataT,
-  CatalogAlbumT,
-  CatalogArtistT,
-  CatalogPlaylistT,
-  CatalogTrackT,
   LyricsDocumentT,
   PlaybackChangedDataT,
   PlaybackPositionDataT,
   QueueSnapshotT,
+  RouteT,
   SearchHitT,
   SearchResponseT,
   VisualizerModeT,
 } from 'spotoei-protocol';
-
-export type Route = 'home' | 'search' | 'library' | 'queue' | 'lyrics' | 'settings';
 export type FocusArea = 'sidebar' | 'main';
-export type LibraryItemT = CatalogTrackT | CatalogAlbumT | CatalogArtistT | CatalogPlaylistT;
 
+export interface LibraryItemT {
+  id: string;
+  uri: string;
+  name: string;
+  artists: Array<{ id?: string; name: string; uri?: string }>;
+  albumId?: string;
+  albumName?: string;
+  durationMs?: number;
+  image?: { url: string; width?: number; height?: number };
+  isExplicit?: boolean;
+  isPlayable?: boolean;
+}
+// Legacy string-typed Route kept as a transitional alias for callers that
+// compare routes by kind only. New code should use `RouteT` directly.
+export type Route = RouteT;
 export interface UiViewState {
   protocol: number;
   playerVersion: string;
@@ -46,8 +55,13 @@ export interface UiViewState {
 }
 
 export interface VisualizerFrame {
-  mode: VisualizerModeT;
-  data: number[];
+  mode: 'off' | VisualizerModeT;
+  bands?: number[];
+  maxBands?: number[];
+  rms?: number;
+  peak?: number;
+  fps?: number;
+  data?: Uint8Array | number[];
 }
 
 export type KeyDispatch = (key: {
@@ -60,7 +74,9 @@ export type KeyDispatch = (key: {
 }) => void;
 
 export interface Ui {
-  setRoute(next: Route): void;
+  navigateBack(): boolean;
+  getRouteStack(): Route[];
+  setRoute(next: Route | string): void;
   getRoute(): Route;
   setFocus(next: FocusArea): void;
   getFocus(): FocusArea;

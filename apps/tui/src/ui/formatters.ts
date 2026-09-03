@@ -40,9 +40,10 @@ export function authSummary(auth: UiViewState['auth']): string {
 }
 
 export function routeTitle(route: Route): string {
-  switch (route) {
+  const kind = typeof route === 'string' ? route : route.kind;
+  switch (kind) {
     case 'home':
-      return 'Now Playing';
+      return 'Home';
     case 'search':
       return 'Search';
     case 'library':
@@ -53,6 +54,16 @@ export function routeTitle(route: Route): string {
       return 'Lyrics';
     case 'settings':
       return 'Settings';
+    case 'visualizer':
+      return 'Visualizer';
+    case 'artist':
+      return 'Artist';
+    case 'album':
+      return 'Album';
+    case 'playlist':
+      return 'Playlist';
+    default:
+      return 'Now Playing';
   }
 }
 

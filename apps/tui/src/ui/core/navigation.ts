@@ -1,40 +1,43 @@
 import { resolveClientId } from '../../config';
+import { defaultRoute, popRoute, pushRoute, routeFromLegacy, routeKind } from './navigationStack';
 import type { FocusArea, Route, UiCoreContext } from './types';
 
 export function createNavigationHelpers(ctx: UiCoreContext) {
-  const { built, focus, manualLyricsScroll, opts, route, state } = ctx;
-
-  const showRoute = (next: Route, force = false): void => {
-    if (!force && state.auth.state !== 'authenticated' && next !== 'settings') {
+  const { built, focus, manualLyricsScroll, opts, route, routeStack, state } = ctx;
+  const showRoute = (nextInput: Route | string, force = false): void => {
+    let next = routeFromLegacy(nextInput);
+    const kind = routeKind(next);
+    if (!force && state.auth.state !== 'authenticated' && kind !== 'settings') {
       const clientRes = resolveClientId();
       if (!clientRes.clientId) {
-        ctx.helpers.setStatus(
-          'Setup required: Please enter Spotify Client ID first (press c to edit)',
-          true,
-        );
+        ctx.helpers.setStatus('Please set your Spotify Client ID in Settings first');
       } else {
-        ctx.helpers.setStatus(
-          'Authentication required: Please log in with Spotify (press a or Enter to log in)',
-          true,
-        );
+        ctx.helpers.setStatus('Please complete authentication in Settings first');
       }
-      next = 'settings';
+      next = { kind: 'settings' };
+    }
+    const currentKind = routeKind(route.current);
+    if (currentKind !== kind || JSON.stringify(route.current) !== JSON.stringify(next)) {
+      ctx.routeStack = pushRoute(routeStack, route.current, next);
     }
 
     route.current = next;
-    built.home.visible = next === 'home';
-    built.search.visible = next === 'search';
-    built.library.visible = next === 'library';
-    built.queue.visible = next === 'queue';
-    built.lyrics.visible = next === 'lyrics';
-    built.settings.visible = next === 'settings';
-    if (next === 'lyrics') {
+    const finalKind = routeKind(next);
+
+    built.home.visible = finalKind === 'home';
+    built.search.visible = finalKind === 'search';
+    built.library.visible = finalKind === 'library';
+    built.queue.visible = finalKind === 'queue';
+    built.lyrics.visible = finalKind === 'lyrics';
+    built.settings.visible = finalKind === 'settings';
+
+    if (finalKind === 'lyrics') {
       manualLyricsScroll.value = false;
     }
     ctx.helpers.setNavSelected(next);
 
     if (focus.current === 'main') {
-      if (next === 'search') {
+      if (finalKind === 'search') {
         built.searchResults.blur();
         built.searchInput.focus();
         ctx.helpers.updateSearchFocusVisuals(true);
@@ -42,7 +45,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
         built.searchInput.blur();
         built.searchResults.blur();
       }
-      if (next === 'settings') {
+      if (finalKind === 'settings') {
         ctx.helpers.refreshSettings();
         const clientRes = resolveClientId();
         if (!clientRes.clientId) {
@@ -53,12 +56,12 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       } else {
         built.clientIdInput.blur();
       }
-      if (next === 'library') {
+      if (finalKind === 'library') {
         built.libraryList.focus();
       } else {
         built.libraryList.blur();
       }
-      if (next === 'queue') {
+      if (finalKind === 'queue') {
         built.queueList.focus();
       } else {
         built.queueList.blur();
@@ -75,9 +78,25 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     }
   };
 
+  const navigateBack = (): boolean => {
+    const { stack, popped } = popRoute(ctx.routeStack);
+    ctx.routeStack = stack;
+    if (popped) {
+      showRoute(popped, true);
+      return true;
+    }
+    // If stack was empty, navigate to Home
+    if (routeKind(route.current) !== 'home') {
+      showRoute(defaultRoute(), true);
+      return true;
+    }
+    return false;
+  };
+
   const setFocusArea = (next: FocusArea): void => {
     focus.current = next;
     ctx.helpers.updateFocusVisuals();
+    const curKind = routeKind(route.current);
 
     if (next === 'sidebar') {
       built.searchInput.blur();
@@ -88,11 +107,11 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       built.nav.focus();
     } else {
       built.nav.blur();
-      if (route.current === 'search') {
+      if (curKind === 'search') {
         built.searchResults.blur();
         built.searchInput.focus();
         ctx.helpers.updateSearchFocusVisuals(true);
-      } else if (route.current === 'settings') {
+      } else if (curKind === 'settings') {
         ctx.helpers.refreshSettings();
         const clientRes = resolveClientId();
         if (!clientRes.clientId) {
@@ -100,9 +119,9 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
         } else {
           built.clientIdInput.blur();
         }
-      } else if (route.current === 'library') {
+      } else if (curKind === 'library') {
         built.libraryList.focus();
-      } else if (route.current === 'queue') {
+      } else if (curKind === 'queue') {
         built.queueList.focus();
       }
       if (opts.onRouteChange) {
@@ -111,5 +130,5 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     }
   };
 
-  return { showRoute, setFocusArea };
+  return { showRoute, navigateBack, setFocusArea };
 }

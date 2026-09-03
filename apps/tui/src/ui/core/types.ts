@@ -29,11 +29,12 @@ export interface UiCoreContext {
   opts: UiOptions;
   built: BuiltUi;
   route: { current: Route };
+  routeStack: Route[];
   focus: { current: FocusArea };
   visualizerVisible: { value: boolean };
   latestVizFrame: { value: VisualizerFrame | null };
-  currentSearchHits: { value: SearchHitT[] };
   currentLibraryItems: { value: LibraryItemT[] };
+  currentSearchHits: { value: SearchHitT[] };
   manualLyricsScroll: { value: boolean };
   palette: {
     commands: Array<{ name: string; description: string; action: () => void }>;
@@ -48,7 +49,8 @@ export interface UiCoreContext {
     setStatus: (msg: string, persist?: boolean) => void;
     refreshNav: () => void;
     setNavSelected: (target: Route) => void;
-    showRoute: (next: Route, force?: boolean) => void;
+    showRoute: (next: Route | string, force?: boolean) => void;
+    navigateBack: () => boolean;
     setFocusArea: (next: FocusArea) => void;
     updateFocusVisuals: () => void;
     updateSearchFocusVisuals: (inputFocused: boolean) => void;

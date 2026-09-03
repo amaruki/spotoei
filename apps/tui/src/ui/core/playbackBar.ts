@@ -3,16 +3,17 @@ import { cap, formatArtists, renderProgressBarStyled } from '../formatters';
 import { COLOR_ACCENT, COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
 import { getHomeContent } from '../views/home';
 import { getSettingsContent } from '../views/settings';
+import { routeKind } from './navigationStack';
 import type { UiCoreContext } from './types';
-
 // Build the live status / progress / footer / header surface. Each
 // closure mutates `ctx.state` and refreshes the matching renderable.
 export function createPlaybackBarHelpers(ctx: UiCoreContext) {
   const { built, focus, route, state, statusTimer } = ctx;
 
   const getFooterHelp = (): string => {
+    const curKind = routeKind(route.current);
     if (state.auth.state !== 'authenticated') {
-      if (route.current === 'settings' && built.clientIdInput.focused) {
+      if (curKind === 'settings' && built.clientIdInput.focused) {
         return 'Enter: save Client ID  Esc/Tab: exit input';
       }
       if (focus.current === 'sidebar') {
@@ -23,16 +24,16 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     if (focus.current === 'sidebar') {
       return '↑/↓: navigate  Enter: select view  Tab/→: enter view  q: quit';
     }
-    if (route.current === 'search') {
+    if (curKind === 'search') {
       if (built.searchInput.focused) {
         return 'Enter: search Spotify  ↓: results  Tab/Esc: navigation  q: quit';
       }
       return '↑/↓: select track  Enter: play  ↑ at top: edit search  Tab/Esc: navigation  q: quit';
     }
-    if (route.current === 'library' || route.current === 'queue') {
+    if (curKind === 'library' || curKind === 'queue') {
       return '↑/↓: browse list  Enter: play  Tab/Esc: navigation  q: quit';
     }
-    if (route.current === 'lyrics') {
+    if (curKind === 'lyrics') {
       return '↑/↓: scroll  l/Esc: close lyrics  L: reload lyrics  q: quit';
     }
     return 'Space: play/pause  n: next  p: prev  l: lyrics  S: shuffle  R: repeat  A: autoplay  +/-: vol  Tab: nav  q: quit';

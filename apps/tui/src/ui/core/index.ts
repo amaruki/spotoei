@@ -21,7 +21,8 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
 
   // Mutable state bag (single-cell objects so helpers can mutate in place
   // without React-style setter plumbing).
-  const route = { current: 'home' as Route };
+  const route = { current: { kind: 'home', tab: 'for_you' } as Route };
+  const routeStack: Route[] = [];
   const focus = { current: 'sidebar' as FocusArea };
   const visualizerVisible = { value: false };
   const latestVizFrame: { value: VisualizerFrame | null } = { value: null };
@@ -42,6 +43,7 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     opts,
     built,
     route,
+    routeStack,
     focus,
     visualizerVisible,
     latestVizFrame,

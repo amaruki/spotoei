@@ -1,11 +1,11 @@
 import { resolveClientId } from '../../config';
+import { routeKind } from './navigationStack';
 import type { Route, UiCoreContext } from './types';
 // Key dispatcher for the full TUI. Implements focus isolation: when an
 // input is focused or the palette is open, keystrokes are swallowed so they
-// do not trigger hotkeys (like Space to pause or 'q' to quit).
+// do not trigger global hotkeys (like Space to pause or 'q' to quit).
 export function createKeyDispatcher(ctx: UiCoreContext) {
   const { built, focus, manualLyricsScroll, opts, palette, route, state } = ctx;
-
   return (e: {
     name: string;
     sequence: string;
@@ -57,7 +57,7 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
     }
 
     // 2. Search route input focus isolation
-    if (route.current === 'search' && focus.current === 'main') {
+    if (routeKind(route.current) === 'search' && focus.current === 'main') {
       if (built.searchInput.focused) {
         if (e.ctrl && e.name === 'c') {
           opts.onKey(key);
@@ -115,7 +115,7 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
     }
 
     // 3. Settings route Client ID input isolation
-    if (route.current === 'settings' && built.clientIdInput.focused) {
+    if (routeKind(route.current) === 'settings' && built.clientIdInput.focused) {
       if (e.ctrl && e.name === 'c') {
         opts.onKey(key);
         return;
@@ -129,7 +129,11 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
       return;
     }
 
-    if (route.current === 'settings' && focus.current === 'main' && !built.clientIdInput.focused) {
+    if (
+      routeKind(route.current) === 'settings' &&
+      focus.current === 'main' &&
+      !built.clientIdInput.focused
+    ) {
       if (e.name === 'escape' || e.name === 'tab' || e.name === 'left') {
         ctx.helpers.setFocusArea('sidebar');
         return;
@@ -188,7 +192,7 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
     }
 
     // 4b. Library view focus handling
-    if (route.current === 'library' && focus.current === 'main') {
+    if (routeKind(route.current) === 'library' && focus.current === 'main') {
       if (e.ctrl && e.name === 'c') {
         opts.onKey(key);
         return;
@@ -208,7 +212,7 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
     }
 
     // 4c. Queue view focus handling
-    if (route.current === 'queue' && focus.current === 'main') {
+    if (routeKind(route.current) === 'queue' && focus.current === 'main') {
       if (e.ctrl && e.name === 'c') {
         opts.onKey(key);
         return;
@@ -226,9 +230,8 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
     // 5. Context exit keys (Esc/Tab/Left to return to sidebar or exit lyrics)
     if (focus.current === 'main') {
       if (e.name === 'escape' || e.name === 'left') {
-        if (route.current === 'lyrics') {
-          ctx.helpers.showRoute('home');
-          ctx.helpers.setFocusArea('main');
+        if (ctx.helpers.navigateBack) {
+          ctx.helpers.navigateBack();
           return;
         }
         ctx.helpers.setFocusArea('sidebar');
@@ -241,14 +244,14 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
     }
 
     // 6. Quick number navigation when not typing in an input
-    if (route.current !== 'search' && !built.clientIdInput.focused) {
+    if (routeKind(route.current) !== 'search' && !built.clientIdInput.focused) {
       const numRoutes: Record<string, Route> = {
-        '1': 'home',
-        '2': 'search',
-        '3': 'library',
-        '4': 'queue',
-        '5': 'lyrics',
-        '6': 'settings',
+        '1': { kind: 'home', tab: 'for_you' },
+        '2': { kind: 'search' },
+        '3': { kind: 'library', section: 'saved_tracks' },
+        '4': { kind: 'queue' },
+        '5': { kind: 'lyrics' },
+        '6': { kind: 'settings' },
       };
       const dest = numRoutes[e.name];
       if (dest) {
@@ -257,9 +260,8 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         return;
       }
     }
-
     // 7. Lyrics scroll navigation
-    if (route.current === 'lyrics' && focus.current === 'main') {
+    if (routeKind(route.current) === 'lyrics' && focus.current === 'main') {
       if (e.name === 'up' || e.name === 'k') {
         manualLyricsScroll.value = true;
         built.lyricsScroll.scrollBy(-2);

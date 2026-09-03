@@ -20,10 +20,12 @@ export function createVisualizerHelpers(ctx: UiCoreContext) {
       fb.clear(RGBA.fromHex(COLOR_PANEL_BG));
       return;
     }
+    const rawData = latestVizFrame.value.data ?? latestVizFrame.value.bands ?? [];
+    const dataArr = Array.isArray(rawData) ? rawData : Array.from(rawData);
     if (latestVizFrame.value.mode === 'spectrum') {
-      drawBars(fb as unknown as OptimizedBufferLike, latestVizFrame.value.data);
+      drawBars(fb as unknown as OptimizedBufferLike, dataArr);
     } else {
-      drawWave(fb as unknown as OptimizedBufferLike, latestVizFrame.value.data);
+      drawWave(fb as unknown as OptimizedBufferLike, dataArr);
     }
   };
 

@@ -11,6 +11,7 @@ import { COLOR_DIM } from '../theme';
 import { libraryItemOptions } from '../views/library';
 import { renderLyricsContent } from '../views/lyrics';
 import { searchHitOptions } from '../views/search';
+import { routeFromLegacy, routeKind } from './navigationStack';
 import type {
   FocusArea,
   LibraryItemT,
@@ -21,7 +22,6 @@ import type {
   UiCoreContext,
   VisualizerFrame,
 } from './types';
-
 // Creates the public `Ui` API handle that consumers use to update state.
 // All setters propagate through `ctx.helpers` and trigger granular repaints.
 export function createUiApi(ctx: UiCoreContext): Ui {
@@ -33,15 +33,23 @@ export function createUiApi(ctx: UiCoreContext): Ui {
     palette,
     renderer,
     route,
+    routeStack,
     state,
     statusTimer,
   } = ctx;
   const { helpers } = ctx;
 
   return {
-    setRoute(next: Route): void {
-      helpers.showRoute(next);
-      helpers.setNavSelected(next);
+    navigateBack(): boolean {
+      return helpers.navigateBack();
+    },
+    getRouteStack(): Route[] {
+      return [...routeStack];
+    },
+    setRoute(next: Route | string): void {
+      const target = routeFromLegacy(next);
+      helpers.showRoute(target);
+      helpers.setNavSelected(target);
       helpers.setFocusArea('main');
     },
     getRoute(): Route {
@@ -151,7 +159,7 @@ export function createUiApi(ctx: UiCoreContext): Ui {
         helpers.setHeader();
         helpers.refreshHome();
         if (
-          route.current === 'lyrics' &&
+          routeKind(route.current) === 'lyrics' &&
           !manualLyricsScroll.value &&
           state.lyrics?.kind === 'synced'
         ) {
