@@ -4,7 +4,9 @@ import type { CatalogTrackT, SearchHitT } from 'spotoei-protocol';
 import { entityRouteForHit } from '../entities/actions';
 import type { LibraryItemT, Ui } from '../ui';
 
-export function routeForLibraryItem(item: LibraryItemT): { kind: 'album' | 'artist' | 'playlist'; id: string } | null {
+export function routeForLibraryItem(
+  item: LibraryItemT,
+): { kind: 'album' | 'artist' | 'playlist'; id: string } | null {
   if ('durationMs' in item) return null;
   if (!item.uri) return null;
   if (item.uri.startsWith('spotify:album:')) return { kind: 'album', id: item.id };

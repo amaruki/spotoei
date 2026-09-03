@@ -19,7 +19,10 @@ describe('view positions', () => {
 
   it('keeps browse entry positions separate from category positions', () => {
     const store = new ViewPositionStore();
-    store.save({ kind: 'home', tab: 'browse', browse: { category: 'moods' } }, { selected: 2, scroll: 0 });
+    store.save(
+      { kind: 'home', tab: 'browse', browse: { category: 'moods' } },
+      { selected: 2, scroll: 0 },
+    );
     store.save(
       { kind: 'home', tab: 'browse', browse: { category: 'moods', entry: 'chill' } },
       { selected: 5, scroll: 40 },
