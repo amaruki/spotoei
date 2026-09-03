@@ -57,9 +57,7 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>;
 }
 
-export function createPlaybackClient(
-  options: PlaybackClientOptions,
-): PlaybackClient {
+export function createPlaybackClient(options: PlaybackClientOptions): PlaybackClient {
   const { child, timeoutMs = 5_000 } = options;
   const pending = new Map<string, PendingRequest>();
   const changeListeners = new Set<(s: PlaybackChangedDataT) => void>();
@@ -88,11 +86,7 @@ export function createPlaybackClient(
         if (msg.ok) {
           p.resolve(msg.data);
         } else {
-          p.reject(
-            new Error(
-              `${msg.error?.code ?? 'ERROR'}: ${msg.error?.message ?? 'unknown'}`,
-            ),
-          );
+          p.reject(new Error(`${msg.error?.code ?? 'ERROR'}: ${msg.error?.message ?? 'unknown'}`));
         }
       }
       return;
@@ -128,13 +122,37 @@ export function createPlaybackClient(
 
   rl.on('line', lineListener);
 
+  const MAX_PENDING = 256;
+
+  function drainPending(err: Error) {
+    for (const p of pending.values()) {
+      clearTimeout(p.timer);
+      p.reject(err);
+    }
+    pending.clear();
+  }
+
+  if (child.stdin) {
+    child.stdin.on('error', (err) => {
+      drainPending(err instanceof Error ? err : new Error(String(err)));
+    });
+    child.stdin.on('end', () => {
+      drainPending(new Error('playback client stdin closed'));
+    });
+  }
+  child.on('close', () => {
+    drainPending(new Error('playback client child process closed'));
+  });
+
   function sendCommand<T>(cmd: CommandT): Promise<T> {
     return new Promise<T>((resolve, reject) => {
+      if (pending.size >= MAX_PENDING) {
+        reject(new Error('pending command queue full'));
+        return;
+      }
       const timer = setTimeout(() => {
         pending.delete(cmd.id);
-        reject(
-          new Error(`timeout waiting for response to ${cmd.command}`),
-        );
+        reject(new Error(`timeout waiting for response to ${cmd.command}`));
       }, timeoutMs);
 
       pending.set(cmd.id, {
@@ -271,7 +289,6 @@ export function createPlaybackClient(
 
     close(): void {
       rl.off('line', lineListener);
-      rl.close();
       for (const p of pending.values()) {
         clearTimeout(p.timer);
         p.reject(new Error('playback client closed'));
