@@ -2,6 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { locatePlayer, startPlayer, stopPlayer } from '../src/player';
 import { createPlaybackClient } from '../src/playback';
 import type { PlaybackChangedDataT, PlaybackPositionDataT } from 'spotoei-protocol';
+// Force mock-mode env so the spawned player child uses FakeEngine. These vars
+// are read at process start; setting them here ensures the child inherits the
+// flag through buildCleanEnv (which only passes a whitelisted set of vars).
+process.env.SPOTOEI_MOCK_PLAYER ??= '1';
+process.env.SPOTOEI_MOCK_AUTH ??= '1';
 
 // Integration tests against a real spawned player child. A short real
 // delay is required between command responses and emitted events so the

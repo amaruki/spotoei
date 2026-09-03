@@ -165,12 +165,20 @@ impl PlaybackEngine for FakeEngine {
             genre: None,
         })
     }
-    fn context_tracks(&self, _context_uri: &str) -> Vec<Track> {
-        // Fake engine: real context URIs (album/playlist) require server
-        // resolution. Return an empty list so callers defer playback until
-        // a concrete track URI is supplied rather than fabricating
-        // `spotify:track:ctx-*` placeholders.
-        Vec::new()
+    fn context_tracks(&self, context_uri: &str) -> Vec<Track> {
+        if !context_uri.starts_with("spotify:") {
+            return Vec::new();
+        }
+        (1..=3)
+            .map(|i| Track {
+                uri: format!("spotify:track:ctx-{}-{}", context_uri, i),
+                name: format!("Context Track {i}"),
+                artists: vec!["Test Artist".to_string()],
+                album: Some("Test Album".to_string()),
+                duration_ms: 180_000,
+                genre: None,
+            })
+            .collect()
     }
 }
 
