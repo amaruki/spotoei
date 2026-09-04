@@ -93,7 +93,8 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
     }
     return null;
   }
-  if (kind === 'home' && (route.current as { browse?: unknown }).browse !== undefined) {
+  const browse = (route.current as { browse?: { category?: string } }).browse;
+  if (kind === 'home' && browse?.category) {
     const entry = asEntity(ctx.currentRouteItems.value[built.browseList.getSelectedIndex()]) as
       | (EntityLike & { label?: string })
       | null;

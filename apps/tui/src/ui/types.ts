@@ -178,6 +178,7 @@ export interface UiOptions {
   onSelectEntityTrack?: (trackUri: string, title: string) => void;
   onEntityListEnd?: (kind: 'artist' | 'album' | 'playlist') => void;
   onSelectHomeRow?: (row: HomeRow) => void;
+  onSelectBrowseEntry?: (index: number) => void;
   onSaveClientId?: (clientId: string) => void | Promise<void>;
   onAuthenticate?: () => void | Promise<void>;
   onRouteChange?: (route: Route) => void;

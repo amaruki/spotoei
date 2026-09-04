@@ -3,6 +3,7 @@ import type { CatalogTrackT } from 'spotoei-protocol';
 import { createUi, type Ui } from '../ui';
 import type { ContextTarget } from '../ui/types';
 import { routeKind } from '../ui/core/navigationStack';
+import { ensureBrowseLevel, resolveBrowseSelection } from './browseLoad';
 import { runContextAction } from './contextMenuItems';
 import { ensureEntityRoute, loadMoreEntityItems } from './entityLoaders';
 import { ensureHomeTab } from './homeLoad';
@@ -38,50 +39,69 @@ export async function initUi(
 ): Promise<Ui> {
   const { clients, state, getUi, quit } = ctx;
 
+  function submitSearch(query: string, label?: string): void {
+    const q = query.trim();
+    if (!q) return;
+    const currentUi = getUi();
+    if (currentUi) {
+      currentUi.setSearchLoading(true);
+      currentUi.setStatus(label ?? `Searching Spotify for "${q}"…`);
+    }
+    const seq = ++state.searchSequence;
+    clients.searchClient
+      .search(q)
+      .then((res) => {
+        if (seq === state.searchSequence) {
+          const u = getUi();
+          if (u) {
+            u.setSearchLoading(false);
+            u.setSearchResults(q, res);
+            state.currentSearchHits = res.hits;
+            const count = res.hits.length;
+            u.setStatus(
+              count > 0
+                ? `Found ${count} result${count === 1 ? '' : 's'} for "${q}". Press Enter to play.`
+                : `No results found for "${q}".`,
+            );
+          }
+        }
+      })
+      .catch((e: unknown) => {
+        if (seq === state.searchSequence) {
+          const u = getUi();
+          if (u) {
+            u.setSearchLoading(false);
+            const msg = e instanceof Error ? e.message : String(e);
+            u.setStatus(`Search error: ${msg}`, true);
+            u.setSearchResults(q, {
+              query: q,
+              hits: [],
+              error: { code: 'SEARCH_ERROR', message: msg },
+            });
+          }
+        }
+      });
+  }
+
   const ui = await createUi(state.currentInfo, {
     onKey: actions.handleKey,
-    onSearchSubmit: (q) => {
-      const query = q.trim();
-      if (!query) return;
-      const currentUi = getUi();
-      if (currentUi) {
-        currentUi.setSearchLoading(true);
-        currentUi.setStatus(`Searching Spotify for "${query}"…`);
+    onSearchSubmit: (q) => submitSearch(q),
+    onSelectBrowseEntry: (idx) => {
+      const u = getUi();
+      const r = u?.getRoute();
+      if (!r || r.kind !== 'home' || r.tab !== 'browse') return;
+      const nav = resolveBrowseSelection(r.browse ?? {}, idx);
+      if (nav.kind === 'message') {
+        u?.setStatus(nav.text, nav.persist);
+        return;
       }
-      const seq = ++state.searchSequence;
-      clients.searchClient
-        .search(query)
-        .then((res) => {
-          if (seq === state.searchSequence) {
-            const u = getUi();
-            if (u) {
-              u.setSearchLoading(false);
-              u.setSearchResults(query, res);
-              state.currentSearchHits = res.hits;
-              const count = res.hits.length;
-              u.setStatus(
-                count > 0
-                  ? `Found ${count} result${count === 1 ? '' : 's'} for "${query}". Press Enter to play.`
-                  : `No results found for "${query}".`,
-              );
-            }
-          }
-        })
-        .catch((e: unknown) => {
-          if (seq === state.searchSequence) {
-            const u = getUi();
-            if (u) {
-              u.setSearchLoading(false);
-              const msg = e instanceof Error ? e.message : String(e);
-              u.setStatus(`Search error: ${msg}`, true);
-              u.setSearchResults(query, {
-                query,
-                hits: [],
-                error: { code: 'SEARCH_ERROR', message: msg },
-              });
-            }
-          }
-        });
+      if (nav.route.kind === 'search') {
+        u?.setRoute(nav.route);
+        submitSearch(nav.route.query, nav.note);
+        return;
+      }
+      u?.setRoute(nav.route);
+      if (nav.note) u?.setStatus(nav.note);
     },
     onSelectSearchHit: (hit) => {
       const opened = handleSearchHitSelect(hit, getUi(), (track) => {
@@ -196,6 +216,10 @@ export async function initUi(
       }
       if (curKind === 'artist' || curKind === 'album' || curKind === 'playlist') {
         void ensureEntityRoute({ entityManager: clients.entityManager, getUi, state }, route);
+      }
+      if (curKind === 'home' && route.kind === 'home' && route.tab === 'browse') {
+        const u = getUi();
+        if (u) ensureBrowseLevel(u, route.browse ?? {});
       }
     },
     onSaveClientId: actions.handleSaveClientId,

@@ -125,6 +125,11 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
       opts.onSelectHomeRow(row);
     }
   });
+  built.browseList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
+    if (opts.onSelectBrowseEntry) {
+      opts.onSelectBrowseEntry(idx);
+    }
+  });
   built.artistList.on(SelectRenderableEvents.ITEM_SELECTED, () => {
     const item = ctx.currentRouteItems.value[built.artistList.getSelectedIndex()] as unknown as
       | { id?: string }
