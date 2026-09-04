@@ -1,5 +1,5 @@
 import { routeKind } from '../ui/core/navigationStack';
-import type { Ui } from '../ui/types';
+import type { ContextTarget, Ui } from '../ui/types';
 import { contextActionCommands } from './paletteContextActions';
 import type { AppContext } from './types';
 
@@ -28,6 +28,11 @@ export function buildPaletteCommands(
   actions: PaletteActionDeps,
   getUi: () => Ui | null,
   quit: () => Promise<void>,
+  paletteContext?: {
+    getTarget: () => ContextTarget | null;
+    run: (action: string, target: ContextTarget) => void;
+    notify: (msg: string) => void;
+  },
 ): PaletteCommand[] {
   const { clients, state } = ctx;
   return [
@@ -53,7 +58,9 @@ export function buildPaletteCommands(
       },
     },
     { name: 'Settings', description: 's', action: () => getUi()?.setRoute('settings') },
-    ...contextActionCommands(),
+    ...(paletteContext
+      ? contextActionCommands(paletteContext.getTarget, paletteContext.run, paletteContext.notify)
+      : []),
     {
       name: 'Configure Spotify Client ID',
       description: 'Set/update Spotify Client ID',

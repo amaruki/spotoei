@@ -14,6 +14,7 @@ import type {
 import type { ViewPositionStore } from '../../navigation/viewPositions';
 import type { BuiltUi } from '../componentTree';
 import type {
+  ContextMenuItem,
   FocusArea,
   KeyDispatch,
   LibraryItemT,
@@ -37,7 +38,13 @@ export interface UiCoreContext {
   latestVizFrame: { value: VisualizerFrame | null };
   currentLibraryItems: { value: LibraryItemT[] };
   currentSearchHits: { value: SearchHitT[] };
+  currentRouteItems: { value: unknown[] };
   manualLyricsScroll: { value: boolean };
+  menu: {
+    open: boolean;
+    prevFocus: FocusArea;
+    items: ContextMenuItem[];
+  };
   palette: {
     commands: Array<{ name: string; description: string; action: () => void }>;
     filtered: Array<{ name: string; description: string; action: () => void }>;
@@ -67,6 +74,10 @@ export interface UiCoreContext {
     isVisualizerVisible: () => boolean;
     setPaletteOpen: (open: boolean) => void;
     updatePaletteList: (filter: string) => void;
+    openContextMenu: (title: string, items: ContextMenuItem[]) => void;
+    closeContextMenu: () => void;
+    isContextMenuOpen: () => boolean;
+    runMenuSelected: () => void;
   };
 }
 

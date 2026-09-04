@@ -3,8 +3,17 @@ import { InputRenderableEvents, SelectRenderableEvents } from '@opentui/core';
 
 import { ViewPositionStore } from '../../navigation/viewPositions';
 import { buildRoot } from '../componentTree';
-import type { FocusArea, Route, Ui, UiOptions, UiViewState, VisualizerFrame } from '../types';
+import type {
+  ContextMenuItem,
+  FocusArea,
+  Route,
+  Ui,
+  UiOptions,
+  UiViewState,
+  VisualizerFrame,
+} from '../types';
 import { createUiApi } from './api';
+import { createContextMenuHelpers } from './contextMenu';
 import { createKeyDispatcher } from './keyboard';
 import { createNavigationHelpers } from './navigation';
 import { createPaletteHelpers } from './palette';
@@ -30,6 +39,12 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   const latestVizFrame: { value: VisualizerFrame | null } = { value: null };
   const currentSearchHits = { value: [] as unknown[] as never };
   const currentLibraryItems = { value: [] as never };
+  const currentRouteItems: { value: unknown[] } = { value: [] };
+  const menu: { open: boolean; prevFocus: FocusArea; items: ContextMenuItem[] } = {
+    open: false,
+    prevFocus: 'sidebar',
+    items: [],
+  };
   const manualLyricsScroll = { value: false };
   const statusTimer: { value: ReturnType<typeof setTimeout> | null } = { value: null };
   const palette = {
@@ -52,7 +67,9 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     latestVizFrame,
     currentSearchHits: currentSearchHits as unknown as UiCoreContext['currentSearchHits'],
     currentLibraryItems: currentLibraryItems as unknown as UiCoreContext['currentLibraryItems'],
+    currentRouteItems,
     manualLyricsScroll,
+    menu,
     palette,
     statusTimer,
     helpers: {} as UiCoreContext['helpers'],
@@ -64,7 +81,8 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   const barH = createPlaybackBarHelpers(ctx);
   const vizH = createVisualizerHelpers(ctx);
   const paletteH = createPaletteHelpers(ctx);
-  Object.assign(ctx.helpers, routeH, navH, barH, vizH, paletteH);
+  const menuH = createContextMenuHelpers(ctx);
+  Object.assign(ctx.helpers, routeH, navH, barH, vizH, paletteH, menuH);
 
   // Listeners — wire them once with closures over the shared `ctx`.
   built.nav.on(SelectRenderableEvents.ITEM_SELECTED, (_idx, option) => {
@@ -96,6 +114,28 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   });
   built.queueList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
     opts.onSelectQueue(idx);
+  });
+  built.artistList.on(SelectRenderableEvents.ITEM_SELECTED, () => {
+    const item = ctx.currentRouteItems.value[built.artistList.getSelectedIndex()] as unknown as
+      | { id?: string }
+      | undefined;
+    if (item?.id && opts.onSelectArtistAlbum) {
+      opts.onSelectArtistAlbum(item.id);
+    }
+  });
+  const playSelectedEntityTrack = (list: { getSelectedIndex: () => number }): void => {
+    const item = ctx.currentRouteItems.value[list.getSelectedIndex()] as unknown as
+      | { uri?: string; name?: string }
+      | undefined;
+    if (item?.uri && opts.onSelectEntityTrack) {
+      opts.onSelectEntityTrack(item.uri, item.name ?? item.uri);
+    }
+  };
+  built.albumList.on(SelectRenderableEvents.ITEM_SELECTED, () => {
+    playSelectedEntityTrack(built.albumList);
+  });
+  built.playlistList.on(SelectRenderableEvents.ITEM_SELECTED, () => {
+    playSelectedEntityTrack(built.playlistList);
   });
   built.paletteInput.on(InputRenderableEvents.CHANGE, (value: string) => {
     ctx.helpers.updatePaletteList(value);

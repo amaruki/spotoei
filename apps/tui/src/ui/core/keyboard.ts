@@ -59,6 +59,31 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
       return;
     }
 
+    // 1b. Context menu captures keys while open; Esc/X closes it and
+    // restores focus to the originating list.
+    if (ctx.menu.open) {
+      if (e.name === 'escape' || e.name === 'x' || e.name === 'X' || (e.ctrl && e.name === 'c')) {
+        ctx.helpers.closeContextMenu();
+        return;
+      }
+      if (e.name === 'up') {
+        const cur = built.menuList.getSelectedIndex();
+        built.menuList.setSelectedIndex(Math.max(0, cur - 1));
+        return;
+      }
+      if (e.name === 'down') {
+        const cur = built.menuList.getSelectedIndex();
+        const max = Math.max(0, built.menuList.options.length - 1);
+        built.menuList.setSelectedIndex(Math.min(max, cur + 1));
+        return;
+      }
+      if (e.name === 'return') {
+        ctx.helpers.runMenuSelected();
+        return;
+      }
+      return;
+    }
+
     // 2. Search route input focus isolation
     if (routeKind(route.current) === 'search' && focus.current === 'main') {
       if (built.searchInput.focused) {
@@ -216,10 +241,12 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         const action = resolveBackAction({
           route: route.current,
           browse: cur.browse ?? {},
+          overlayOpen: ctx.menu.open,
           paletteOpen: palette.open,
         });
         if (action === 'close_overlay') {
-          ctx.helpers.setPaletteOpen(false);
+          if (ctx.menu.open) ctx.helpers.closeContextMenu();
+          else ctx.helpers.setPaletteOpen(false);
           return;
         }
         if (ctx.helpers.navigateBack()) {

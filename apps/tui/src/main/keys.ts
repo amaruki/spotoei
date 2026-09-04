@@ -1,6 +1,7 @@
 import { resolveClientId } from '../config';
 import type { KeyDispatch } from '../ui';
 import { routeKind } from '../ui/core/navigationStack';
+import type { ContextTarget } from '../ui/types';
 import { isLowerKey, isUpperKey } from './utils';
 import type { AppContext } from './types';
 
@@ -24,6 +25,7 @@ export function createKeyHandler(
     toggleAutoplay: () => Promise<void>;
     seekRelative: (deltaMs: number) => Promise<void>;
     changeVolume: (delta: number) => Promise<void>;
+    openContextMenuFor: (target: ContextTarget) => void;
   },
 ): KeyDispatch {
   const { clients, state, getUi, quit } = ctx;
@@ -223,7 +225,14 @@ export function createKeyHandler(
       return;
     }
     if (key.name === 'x' || key.name === 'X') {
-      if (ui) ui.openPalette();
+      if (ui) {
+        const target = ui.getContextTarget();
+        if (!target) {
+          ui.setStatus('Nothing selected — move to a track, album, artist, or playlist first');
+          return;
+        }
+        actions.openContextMenuFor(target);
+      }
       return;
     }
   };

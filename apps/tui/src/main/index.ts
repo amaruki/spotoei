@@ -16,6 +16,7 @@ import { WebApiClient } from '../webApi';
 import { createAuthActions } from './auth';
 import { handleCliSearch, runNonTtyMode } from './batch';
 import { handleConfigSubcommand, printHelp, printVersion, runDoctor } from './cli';
+import { createMenuOpener } from './contextMenuItems';
 import { createEnrichment } from './enrich';
 import { createKeyHandler } from './keys';
 import {
@@ -189,6 +190,19 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
     const queueActions = createQueueActions(ctx);
     const playbackActions = createPlaybackActions(ctx);
     const enrichment = createEnrichment(ctx);
+    const menuActions = {
+      openContextMenuFor: createMenuOpener(
+        {
+          ...ctx,
+          contextActions: {
+            playTrackOrContext: playbackActions.playTrackOrContext,
+            updateQueueView: queueActions.updateQueueView,
+            ensureAutoplayTracks: queueActions.ensureAutoplayTracks,
+          },
+        },
+        () => ui,
+      ),
+    };
 
     const handleKey = createKeyHandler(ctx, {
       ...authActions,
@@ -196,6 +210,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
       ...lyricsActions,
       ...queueActions,
       ...playbackActions,
+      ...menuActions,
     });
 
     if (isTTY) {

@@ -73,6 +73,23 @@ export type KeyDispatch = (key: {
   raw: string;
 }) => void;
 
+export type ContextTargetKind = 'track' | 'artist' | 'album' | 'playlist' | 'browse-entry';
+
+export interface ContextTarget {
+  kind: ContextTargetKind;
+  id: string;
+  uri?: string;
+  name: string;
+}
+
+export interface ContextMenuItem {
+  label: string;
+  hint?: string;
+  disabled?: boolean;
+  reason?: string;
+  run: () => void;
+}
+
 export interface Ui {
   navigateBack(): boolean;
   getRouteStack(): Route[];
@@ -130,6 +147,10 @@ export interface Ui {
   openPalette(): void;
   closePalette(): void;
   isPaletteOpen(): boolean;
+  openContextMenu(title: string, items: ContextMenuItem[]): void;
+  closeContextMenu(): void;
+  isContextMenuOpen(): boolean;
+  getContextTarget(): ContextTarget | null;
   setPlayback(playback: PlaybackChangedDataT | null): void;
   setPlaybackPosition(pos: PlaybackPositionDataT): void;
   setAuth(auth: AuthStatusDataT): void;
@@ -148,6 +169,8 @@ export interface UiOptions {
   onSelectLibrary: (idx: number) => void;
   onSelectLibraryItem?: (item: LibraryItemT) => void;
   onSelectQueue: (idx: number) => void;
+  onSelectArtistAlbum?: (albumId: string) => void;
+  onSelectEntityTrack?: (trackUri: string, title: string) => void;
   onSaveClientId?: (clientId: string) => void | Promise<void>;
   onAuthenticate?: () => void | Promise<void>;
   onRouteChange?: (route: Route) => void;

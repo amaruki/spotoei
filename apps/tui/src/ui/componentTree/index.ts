@@ -2,6 +2,7 @@ import { BoxRenderable, TextRenderable, createCliRenderer } from '@opentui/core'
 import type { CliRenderer } from '@opentui/core';
 import { COLOR_BG } from '../theme';
 import type { UiViewState } from '../types';
+import { buildContextMenu, type ContextMenuNodes } from './contextMenu';
 import { buildMain, type MainNodes } from './main';
 import { buildPalette, type PaletteNodes } from './palette';
 import { buildPlaybackBar, type PlaybackBarNodes } from './playbackBar';
@@ -10,7 +11,8 @@ import { buildSidebar, type SidebarNodes } from './sidebar';
 // Flat handle the controller uses to look up every renderable by id.
 // Mirrors the original `buildRoot` return shape so existing wiring does not
 // need to know about the new region-based builders.
-export interface BuiltUi extends SidebarNodes, MainNodes, PlaybackBarNodes, PaletteNodes {
+export interface BuiltUi
+  extends SidebarNodes, MainNodes, PlaybackBarNodes, PaletteNodes, ContextMenuNodes {
   root: BoxRenderable;
   mainArea: BoxRenderable;
   headerText: TextRenderable;
@@ -57,6 +59,9 @@ export function buildRoot({ renderer, state }: BuildArgs): BuiltUi {
   const palette = buildPalette(renderer);
   root.add(palette.palette);
 
+  const menu = buildContextMenu(renderer);
+  root.add(menu.menu);
+
   return {
     root,
     mainArea,
@@ -65,6 +70,7 @@ export function buildRoot({ renderer, state }: BuildArgs): BuiltUi {
     ...main,
     ...playbackBar,
     ...palette,
+    ...menu,
   };
 }
 

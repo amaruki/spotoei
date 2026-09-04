@@ -8,12 +8,14 @@ import type {
 
 import { formatArtists } from '../formatters';
 import { COLOR_DIM } from '../theme';
+import { resolveContextTarget } from './contextMenu';
 import { browseCategoryOptions, browseEntryOptions } from '../views/browseView';
 import { albumTrackOptions, artistAlbumOptions, playlistTrackOptions } from '../views/entities';
 import { libraryItemOptions } from '../views/library';
 import { renderLyricsContent } from '../views/lyrics';
 import { searchHitOptions } from '../views/search';
 import { routeFromLegacy, routeKind } from './navigationStack';
+import type { ContextTarget } from '../types';
 import type {
   FocusArea,
   LibraryItemT,
@@ -122,24 +124,41 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       }
     },
     setArtistAlbums(items): void {
+      ctx.currentRouteItems.value = items as unknown[];
       built.artistList.options = artistAlbumOptions(items as never);
       built.artistList.setSelectedIndex(0);
     },
     setAlbumTracks(items): void {
+      ctx.currentRouteItems.value = items as unknown[];
       built.albumList.options = albumTrackOptions(items as never);
       built.albumList.setSelectedIndex(0);
     },
     setPlaylistTracks(items): void {
+      ctx.currentRouteItems.value = items as unknown[];
       built.playlistList.options = playlistTrackOptions(items as never);
       built.playlistList.setSelectedIndex(0);
     },
     setBrowseCategories(cats): void {
+      ctx.currentRouteItems.value = cats as unknown[];
       built.browseList.options = browseCategoryOptions(cats as never);
       built.browseList.setSelectedIndex(0);
     },
     setBrowseEntries(entries): void {
+      ctx.currentRouteItems.value = entries as unknown[];
       built.browseList.options = browseEntryOptions(entries as never);
       built.browseList.setSelectedIndex(0);
+    },
+    openContextMenu(title, items): void {
+      helpers.openContextMenu(title, items);
+    },
+    closeContextMenu(): void {
+      helpers.closeContextMenu();
+    },
+    isContextMenuOpen(): boolean {
+      return helpers.isContextMenuOpen();
+    },
+    getContextTarget(): ContextTarget | null {
+      return resolveContextTarget(ctx);
     },
     setLyrics(doc: LyricsDocumentT | null): void {
       state.lyrics = doc ?? undefined;

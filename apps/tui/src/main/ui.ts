@@ -1,7 +1,9 @@
 import type { CatalogTrackT } from 'spotoei-protocol';
 
 import { createUi, type Ui } from '../ui';
+import type { ContextTarget } from '../ui/types';
 import { routeKind } from '../ui/core/navigationStack';
+import { runContextAction } from './contextMenuItems';
 import { handleSearchHitSelect, routeForLibraryItem } from './entitySelect';
 import { buildPaletteCommands } from './paletteCommands';
 import type { AppContext } from './types';
@@ -113,6 +115,14 @@ export async function initUi(
     onSelectLibrary: (_idx) => {
       // Playback is handled by onSelectLibraryItem
     },
+    onSelectArtistAlbum: (albumId) => {
+      getUi()?.setRoute({ kind: 'album', id: albumId });
+    },
+    onSelectEntityTrack: (trackUri, title) => {
+      void actions.playTrackOrContext({ trackUri, title });
+      void actions.updateQueueView();
+      void actions.ensureAutoplayTracks();
+    },
     onSelectQueue: (idx) => {
       const snap = clients.queueManager.getSnapshot();
       const hasCurrent = Boolean(snap.current);
@@ -158,9 +168,26 @@ export async function initUi(
     }
   }
 
-  // Palette command list (split for LoC cap; behavior unchanged)
+  const contextDeps = {
+    ...ctx,
+    contextActions: {
+      playTrackOrContext: actions.playTrackOrContext,
+      updateQueueView: actions.updateQueueView,
+      ensureAutoplayTracks: actions.ensureAutoplayTracks,
+    },
+  };
+  const runPaletteAction = (action: string, target: ContextTarget): void => {
+    void runContextAction(contextDeps, getUi, action, target);
+  };
+
+  // Palette command list (split for LoC cap); context entries resolve the
+  // live selection and run through the shared runner.
   ui.setPaletteCommands(
-    buildPaletteCommands(ctx, { ...actions, cycleVisualizerMode }, getUi, quit),
+    buildPaletteCommands(ctx, { ...actions, cycleVisualizerMode }, getUi, quit, {
+      getTarget: () => getUi()?.getContextTarget() ?? null,
+      run: runPaletteAction,
+      notify: (msg) => getUi()?.setStatus(msg),
+    }),
   );
 
   return ui;
