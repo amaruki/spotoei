@@ -36,6 +36,14 @@ export function sameRoute(a: RouteT, b: RouteT): boolean {
         (ha.browse?.entry ?? '') === (hb.browse?.entry ?? '')
       );
     }
+    case 'browse': {
+      const pa = a as { path?: { category?: string; entry?: string } };
+      const pb = b as { path?: { category?: string; entry?: string } };
+      return (
+        (pa.path?.category ?? '') === (pb.path?.category ?? '') &&
+        (pa.path?.entry ?? '') === (pb.path?.entry ?? '')
+      );
+    }
     case 'search':
       return (a.query ?? '') === ((b as { query?: string }).query ?? '');
     case 'library':

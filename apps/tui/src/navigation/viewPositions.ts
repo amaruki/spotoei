@@ -13,6 +13,8 @@ export function routePositionKey(route: RouteT): string {
   switch (route.kind) {
     case 'home':
       return `home:${route.tab}:${route.browse?.category ?? ''}:${route.browse?.entry ?? ''}`;
+    case 'browse':
+      return `browse:${route.path?.category ?? ''}:${route.path?.entry ?? ''}`;
     case 'search':
       return `search:${route.query ?? ''}`;
     case 'library':

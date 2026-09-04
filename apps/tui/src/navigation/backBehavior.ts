@@ -27,5 +27,11 @@ export function resolveBackAction(input: BackInput): BackAction {
     if (b?.category) return 'browse_entries_to_categories';
     return 'browse_to_home';
   }
+  if (r.kind === 'browse') {
+    const b = (r as { path?: { category?: string; entry?: string } }).path ?? input.browse;
+    if (b?.entry && b?.category) return 'browse_results_to_entries';
+    if (b?.category) return 'browse_entries_to_categories';
+    return 'pop_route';
+  }
   return 'pop_route';
 }

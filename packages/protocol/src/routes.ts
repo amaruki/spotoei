@@ -9,7 +9,13 @@ export const RouteSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('home'),
     tab: HomeTab,
+    // Deprecated: Browse is moving to `kind: 'browse'`. Kept until
+    // consumers migrate off `{ kind: 'home', tab: 'browse' }`.
     browse: BrowsePath.optional(),
+  }),
+  z.object({
+    kind: z.literal('browse'),
+    path: BrowsePath.optional(),
   }),
   z.object({
     kind: z.literal('search'),
