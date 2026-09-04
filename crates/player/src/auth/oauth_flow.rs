@@ -192,9 +192,13 @@ impl AuthManager {
             s.state = AuthState::Authenticated;
             s.pkce = None;
             s.last_auth_url = None;
-            s.storage = Storage::Keyring;
-            if let Err(e) = storage::save_session(s.current.as_ref().expect("just set")).await {
-                warn!(error = %e, "session save on complete failed");
+            match storage::save_session(s.current.as_ref().expect("just set")).await {
+                Ok(()) => s.storage = Storage::Keyring,
+                Err(AuthError::KeyringUnavailable(_)) => s.storage = Storage::Memory,
+                Err(e) => {
+                    warn!(error = %e, "session save on complete failed");
+                    s.storage = Storage::Memory;
+                }
             }
             self.snapshot_locked(&s, None)
         };

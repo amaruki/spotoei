@@ -28,8 +28,9 @@ pub fn session_file_path() -> std::path::PathBuf {
     let config_dir = std::env::var("XDG_CONFIG_HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            std::path::PathBuf::from(home).join(".config")
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join(".config"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
         });
     let spotoei_dir = config_dir.join("spotoei");
     let _ = std::fs::create_dir_all(&spotoei_dir);
@@ -37,18 +38,18 @@ pub fn session_file_path() -> std::path::PathBuf {
 }
 
 pub async fn load_session() -> Result<Option<AccessToken>, AuthError> {
-    if let Ok(Some(at)) = load_from_keyring("default").await {
-        return Ok(Some(at));
-    }
+    // Keyring is the only durable store for refresh tokens. The legacy
+    // plaintext session.json fallback was removed for privacy (FSD 9.4,
+    // TSD02 5.1). If it exists on disk from an old build, remove it
+    // opportunistically but never read secrets from it.
     let path = session_file_path();
     if path.exists() {
-        if let Ok(bytes) = std::fs::read(&path) {
-            if let Ok(at) = serde_json::from_slice::<AccessToken>(&bytes) {
-                return Ok(Some(at));
-            }
-        }
+        let _ = std::fs::remove_file(&path);
     }
-    Ok(None)
+    match load_from_keyring("default").await {
+        Ok(v) => Ok(v),
+        Err(e) => Err(e),
+    }
 }
 
 pub async fn save_to_keyring_account(account_id: &str, at: &AccessToken) -> Result<(), AuthError> {
@@ -67,32 +68,12 @@ pub async fn save_session(at: &AccessToken) -> Result<(), AuthError> {
         let _ = std::fs::remove_file(path);
         return Ok(());
     }
-
-    warn!(
-        account_id = %at.account_id,
-        "keyring unavailable for all accounts; falling back to encrypted-at-rest session file",
-    );
-    let path = session_file_path();
-    let s = serde_json::to_string_pretty(at).map_err(|e| AuthError::Config(e.to_string()))?;
-    #[cfg(unix)]
-    {
-        use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create(true).truncate(true).mode(0o600);
-        let mut file = options
-            .open(&path)
-            .map_err(|e| AuthError::Config(format!("open {}: {e}", path.display())))?;
-        file.write_all(s.as_bytes())
-            .map_err(|e| AuthError::Config(format!("write {}: {e}", path.display())))?;
-    }
-    #[cfg(not(unix))]
-    {
-        std::fs::write(&path, s.as_bytes())
-            .map_err(|e| AuthError::Config(format!("write {}: {e}", path.display())))?;
-    }
-
-    Ok(())
+    // No durable store available — keep credentials in memory only and
+    // let the caller surface Storage::Memory to the UI. Never write
+    // refresh_token to session.json.
+    Err(AuthError::KeyringUnavailable(
+        "keyring unavailable for all accounts; credentials will be in-memory only".into(),
+    ))
 }
 
 pub async fn delete_from_keyring(account_id: &str) -> Result<(), AuthError> {
