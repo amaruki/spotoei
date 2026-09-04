@@ -7,7 +7,7 @@ import { resolveContextTarget } from './contextMenu';
 import { browseCategoryOptions, browseEntryOptions } from '../views/browseView';
 import { createEntitySetters } from './entitySetters';
 import { libraryItemOptions } from '../views/library';
-import { renderLyricsContent } from '../views/lyrics';
+import { binarySearchLastLE, renderLyricsContent } from '../views/lyrics';
 import { createPanelSetters, restoreListPosition } from './panelSetters';
 import { routeFromLegacy, routeKind } from './navigationStack';
 import type { ContextTarget } from '../types';
@@ -207,15 +207,7 @@ export function createUiApi(ctx: UiCoreContext): Ui {
         state.lyrics?.kind === 'synced'
       ) {
         built.lyricsText.content = renderLyricsContent(state);
-        let activeIdx = -1;
-        for (let i = 0; i < state.lyrics.lines.length; i++) {
-          const line = state.lyrics.lines[i];
-          if (line && line.startMs <= pos.positionMs) {
-            activeIdx = i;
-          } else {
-            break;
-          }
-        }
+        const activeIdx = binarySearchLastLE(state.lyrics.lines, pos.positionMs);
         if (activeIdx >= 0) {
           built.lyricsScroll.scrollTo(Math.max(0, activeIdx - 3));
         }

@@ -1,6 +1,26 @@
 import { formatTime } from '../formatters';
 import type { UiViewState } from '../types';
 
+export function binarySearchLastLE(
+  lines: Array<{ startMs: number }>,
+  positionMs: number,
+): number {
+  let lo = 0;
+  let hi = lines.length - 1;
+  let ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = lines[mid]!.startMs;
+    if (v <= positionMs) {
+      ans = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return ans;
+}
+
 export function renderLyricsContent(state: UiViewState): string {
   const doc = state.lyrics;
   if (!doc) {
@@ -10,15 +30,7 @@ export function renderLyricsContent(state: UiViewState): string {
     return doc.lines.map((l) => l.text).join('\n\n');
   }
   const curPos = state.playback?.positionMs ?? 0;
-  let activeIdx = -1;
-  for (let i = 0; i < doc.lines.length; i++) {
-    const line = doc.lines[i];
-    if (line && line.startMs <= curPos) {
-      activeIdx = i;
-    } else {
-      break;
-    }
-  }
+  const activeIdx = binarySearchLastLE(doc.lines, curPos);
 
   return doc.lines
     .map((l, i) => {
