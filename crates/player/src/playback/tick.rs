@@ -25,7 +25,7 @@ impl Playback {
         };
         inner.position_ms = clamped_pos;
         let reached_end =
-            inner.duration_ms > 0 && new_pos >= inner.duration_ms.saturating_add(1000);
+            inner.duration_ms > 0 && new_pos >= inner.duration_ms.saturating_add(100);
         if reached_end {
             // Honor repeat modes and autoplay rules when track finishes.
             match inner.repeat {
