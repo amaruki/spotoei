@@ -4,7 +4,7 @@ use tokio::sync::RwLock;
 use crate::auth::AuthManager;
 use crate::lyrics::LyricsService;
 use crate::playback::Playback;
-use crate::protocol::{err, ok, Command, ErrorBody, ErrorCode, PROTOCOL_VERSION, PLAYER_VERSION};
+use crate::protocol::{err, ok, Command, ErrorBody, ErrorCode, PLAYER_VERSION, PROTOCOL_VERSION};
 use crate::visualizer::VisualizerConfig;
 
 pub mod auth_cmd;
@@ -24,9 +24,7 @@ pub async fn handle(
         "hello" => hello(&cmd),
         "shutdown" => ok(&cmd.id, serde_json::json!({})),
         "player.status" => player_status(&cmd, playback).await,
-        command if command.starts_with("auth.") => {
-            auth_cmd::dispatch(command, &cmd, auth).await
-        }
+        command if command.starts_with("auth.") => auth_cmd::dispatch(command, &cmd, auth).await,
         command if command.starts_with("playback.") => {
             playback_cmd::dispatch(command, &cmd, playback).await
         }

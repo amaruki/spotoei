@@ -11,10 +11,7 @@ export function createAuthActions(ctx: AppContext) {
     if (!res.clientId) {
       if (ui) {
         ui.focusClientIdInput();
-        ui.setStatus(
-          'Spotify Client ID not set! Enter it below and press Enter to save.',
-          true,
-        );
+        ui.setStatus('Spotify Client ID not set! Enter it below and press Enter to save.', true);
       }
       return;
     }

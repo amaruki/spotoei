@@ -65,11 +65,15 @@ async fn load(cmd: &Command, playback: &Playback) -> String {
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
     let name = cmd.data.get("name").and_then(|v| v.as_str());
-    let artists = cmd.data.get("artists").and_then(|v| v.as_array()).map(|arr| {
-        arr.iter()
-            .filter_map(|x| x.as_str().map(|s| s.to_string()))
-            .collect::<Vec<String>>()
-    });
+    let artists = cmd
+        .data
+        .get("artists")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                .collect::<Vec<String>>()
+        });
     let album = cmd.data.get("album").and_then(|v| v.as_str());
     let duration_ms = cmd.data.get("durationMs").and_then(|v| v.as_u64());
     let genre = cmd.data.get("genre").and_then(|v| v.as_str());
@@ -134,9 +138,10 @@ async fn seek(cmd: &Command, playback: &Playback) -> String {
 
 async fn set_volume(cmd: &Command, playback: &Playback) -> String {
     let vol_result: Result<f32, ErrorBody> = match cmd.data.get("volume") {
-        Some(v) => v.as_f64().map(|f| f as f32).ok_or_else(|| {
-            ErrorBody::new(ErrorCode::InvalidRequest, "volume must be a float")
-        }),
+        Some(v) => v
+            .as_f64()
+            .map(|f| f as f32)
+            .ok_or_else(|| ErrorBody::new(ErrorCode::InvalidRequest, "volume must be a float")),
         None => Err(ErrorBody::new(
             ErrorCode::InvalidRequest,
             "missing required volume",
@@ -159,9 +164,9 @@ async fn set_volume(cmd: &Command, playback: &Playback) -> String {
 
 async fn set_shuffle(cmd: &Command, playback: &Playback) -> String {
     let shuffle_result: Result<bool, ErrorBody> = match cmd.data.get("shuffle") {
-        Some(v) => v.as_bool().ok_or_else(|| {
-            ErrorBody::new(ErrorCode::InvalidRequest, "shuffle must be a boolean")
-        }),
+        Some(v) => v
+            .as_bool()
+            .ok_or_else(|| ErrorBody::new(ErrorCode::InvalidRequest, "shuffle must be a boolean")),
         None => Err(ErrorBody::new(
             ErrorCode::InvalidRequest,
             "missing required shuffle",
@@ -181,9 +186,9 @@ async fn set_shuffle(cmd: &Command, playback: &Playback) -> String {
 
 async fn set_repeat(cmd: &Command, playback: &Playback) -> String {
     let repeat_result: Result<&str, ErrorBody> = match cmd.data.get("repeat") {
-        Some(v) => v.as_str().ok_or_else(|| {
-            ErrorBody::new(ErrorCode::InvalidRequest, "repeat must be a string")
-        }),
+        Some(v) => v
+            .as_str()
+            .ok_or_else(|| ErrorBody::new(ErrorCode::InvalidRequest, "repeat must be a string")),
         None => Err(ErrorBody::new(
             ErrorCode::InvalidRequest,
             "missing required repeat",

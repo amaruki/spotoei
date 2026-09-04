@@ -36,9 +36,7 @@ pub fn init_tracing() {
             .with_writer(std::sync::Arc::new(file))
             .with_ansi(false)
             .with_target(false);
-        let stderr_layer = fmt::layer()
-            .with_writer(std::io::stderr)
-            .with_target(false);
+        let stderr_layer = fmt::layer().with_writer(std::io::stderr).with_target(false);
 
         let _ = tracing_subscriber::registry()
             .with(filter)

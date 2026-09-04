@@ -248,7 +248,9 @@ export class LibraryEndpoints {
     safeLimit: number,
   ): Promise<LibraryPageResponseT> {
     const collection = 'playlists' as const;
-    const json = await this.transport.request(`/me/playlists?offset=${safeOffset}&limit=${safeLimit}`);
+    const json = await this.transport.request(
+      `/me/playlists?offset=${safeOffset}&limit=${safeLimit}`,
+    );
     const rawItems = toArray(pickObjectKey(json, 'items'));
     const playlists: CatalogPlaylistT[] = [];
     for (const item of rawItems) {

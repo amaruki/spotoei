@@ -1,4 +1,12 @@
-import { BoxRenderable, type CliRenderer, InputRenderable, SelectRenderable, TextRenderable, fg, t } from '@opentui/core';
+import {
+  BoxRenderable,
+  type CliRenderer,
+  InputRenderable,
+  SelectRenderable,
+  TextRenderable,
+  fg,
+  t,
+} from '@opentui/core';
 import { COLOR_BORDER_FOCUS, COLOR_DIM, COLOR_PANEL_BG } from '../theme';
 
 export interface PaletteNodes {

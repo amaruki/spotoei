@@ -1,14 +1,11 @@
+use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde_json::Value;
 
 use crate::protocol::{err, ok, Command, ErrorBody, ErrorCode};
 use crate::visualizer::{VisualizerConfig, VisualizerMode};
 
-pub async fn configure(
-    cmd: &Command,
-    visualizer_cfg: &Arc<RwLock<VisualizerConfig>>,
-) -> String {
+pub async fn configure(cmd: &Command, visualizer_cfg: &Arc<RwLock<VisualizerConfig>>) -> String {
     let enabled = match cmd.data.get("enabled").and_then(|v| v.as_bool()) {
         Some(b) => b,
         None => true,
@@ -37,10 +34,7 @@ pub async fn configure(
             _ => {
                 return err(
                     &cmd.id,
-                    ErrorBody::new(
-                        ErrorCode::InvalidRequest,
-                        "fps must be between 1 and 120",
-                    ),
+                    ErrorBody::new(ErrorCode::InvalidRequest, "fps must be between 1 and 120"),
                 );
             }
         }
@@ -53,10 +47,7 @@ pub async fn configure(
             _ => {
                 return err(
                     &cmd.id,
-                    ErrorBody::new(
-                        ErrorCode::InvalidRequest,
-                        "bands must be between 8 and 256",
-                    ),
+                    ErrorBody::new(ErrorCode::InvalidRequest, "bands must be between 8 and 256"),
                 );
             }
         }

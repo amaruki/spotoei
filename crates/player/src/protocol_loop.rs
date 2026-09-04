@@ -18,12 +18,9 @@ use crate::visualizer::VisualizerConfig;
 pub async fn run() -> ExitCode {
     // Separate multiplexed stdout channels so high-frequency visualizer
     // frames cannot starve or block critical protocol responses / events.
-    let (stdout_tx, mut stdout_rx) = mpsc::channel::<String>(
-        crate::protocol::PROTOCOL_STDOUT_CAP,
-    );
-    let (viz_stdout_tx, mut viz_stdout_rx) = mpsc::channel::<String>(
-        crate::protocol::VIZ_STDOUT_CAP,
-    );
+    let (stdout_tx, mut stdout_rx) = mpsc::channel::<String>(crate::protocol::PROTOCOL_STDOUT_CAP);
+    let (viz_stdout_tx, mut viz_stdout_rx) =
+        mpsc::channel::<String>(crate::protocol::VIZ_STDOUT_CAP);
     let writer_handle = tokio::spawn(async move {
         let mut stdout = tokio::io::stdout();
         loop {
@@ -56,8 +53,8 @@ pub async fn run() -> ExitCode {
     let _initial_status = auth.hydrate().await;
 
     let lyrics = LyricsService::new(Arc::new(crate::lyrics::MockLyricsProvider::new()));
-    let use_mock_playback = std::env::var("SPOTOEI_MOCK_AUTH").is_ok()
-        || std::env::var("SPOTOEI_MOCK_PLAYER").is_ok();
+    let use_mock_playback =
+        std::env::var("SPOTOEI_MOCK_AUTH").is_ok() || std::env::var("SPOTOEI_MOCK_PLAYER").is_ok();
     let (playback, pcm_rx) = if use_mock_playback {
         info!("Playback engine: FakeEngine (mock mode)");
         let (_pcm_tx, pcm_rx) = crossbeam_channel::bounded(64);
@@ -75,8 +72,12 @@ pub async fn run() -> ExitCode {
     // Visualizer publisher: emits real-time CAVA FFT spectrum and waveform
     // events from audio decoded by Librespot. Drops frames silently if
     // the stdout channel is full so the audio playback path is never blocked.
-    let viz_handle =
-        crate::viz_task::spawn_visualizer_task(playback.clone(), pcm_rx, visualizer_cfg.clone(), viz_stdout_tx.clone());
+    let viz_handle = crate::viz_task::spawn_visualizer_task(
+        playback.clone(),
+        pcm_rx,
+        visualizer_cfg.clone(),
+        viz_stdout_tx.clone(),
+    );
     // Position ticker task: advances position while playing and emits
     // periodic position events.
     let ticker_playback = playback.clone();
@@ -223,5 +224,4 @@ pub async fn run() -> ExitCode {
         ExitCode::SUCCESS => std::process::exit(0),
         _ => std::process::exit(2),
     }
-
 }

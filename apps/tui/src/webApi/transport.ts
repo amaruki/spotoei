@@ -31,7 +31,11 @@ export class Transport {
         }
         urlStr = url.toString();
       }
-    } else if (paramsOrBody && typeof paramsOrBody === 'object' && Object.keys(paramsOrBody).length > 0) {
+    } else if (
+      paramsOrBody &&
+      typeof paramsOrBody === 'object' &&
+      Object.keys(paramsOrBody).length > 0
+    ) {
       bodyStr = JSON.stringify(paramsOrBody);
     }
 
@@ -87,7 +91,10 @@ export class Transport {
         // 429 Too Many Requests: wait Retry-After seconds and retry once
         if (res.status === 429 && retryCount === 0) {
           const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10);
-          const baseWaitMs = Math.min(10000, Math.max(1, isNaN(retryAfterSec) ? 1 : retryAfterSec) * 1000);
+          const baseWaitMs = Math.min(
+            10000,
+            Math.max(1, isNaN(retryAfterSec) ? 1 : retryAfterSec) * 1000,
+          );
           const isBun = 'Bun' in globalThis;
           const waitMs = isBun ? Math.min(50, baseWaitMs) : baseWaitMs;
           await new Promise((r) => setTimeout(r, waitMs));

@@ -10,9 +10,7 @@ use serde_json::json;
 use tokio::sync::oneshot;
 use tracing::warn;
 
-use super::constants::{
-    html_error, html_escape, url_decode, HTML_SUCCESS, REDIRECT_PATH,
-};
+use super::constants::{html_error, html_escape, url_decode, HTML_SUCCESS, REDIRECT_PATH};
 use super::manager::AuthManager;
 use super::token::classify_auth_failure;
 use super::types::{AuthError, AuthState};

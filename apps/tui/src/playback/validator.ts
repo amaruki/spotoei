@@ -10,9 +10,7 @@ export const validatePlaybackChanged = (data: unknown) => {
       };
 };
 
-export type ValidateResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: Error };
+export type ValidateResult<T> = { ok: true; value: T } | { ok: false; error: Error };
 
 export type Validator<T> = (data: unknown) => ValidateResult<T>;
 

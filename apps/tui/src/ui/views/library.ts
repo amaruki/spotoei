@@ -7,9 +7,7 @@ export function libraryItemOptions(
   error?: { code: string; message: string },
 ): { name: string; description: string }[] {
   if (error) {
-    return [
-      { name: `⚠ Library Error: ${error.code}`, description: error.message },
-    ];
+    return [{ name: `⚠ Library Error: ${error.code}`, description: error.message }];
   }
   if (items.length === 0) {
     return [

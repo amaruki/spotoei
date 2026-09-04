@@ -8,9 +8,15 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     if (!force && state.auth.state !== 'authenticated' && next !== 'settings') {
       const clientRes = resolveClientId();
       if (!clientRes.clientId) {
-        ctx.helpers.setStatus('Setup required: Please enter Spotify Client ID first (press c to edit)', true);
+        ctx.helpers.setStatus(
+          'Setup required: Please enter Spotify Client ID first (press c to edit)',
+          true,
+        );
       } else {
-        ctx.helpers.setStatus('Authentication required: Please log in with Spotify (press a or Enter to log in)', true);
+        ctx.helpers.setStatus(
+          'Authentication required: Please log in with Spotify (press a or Enter to log in)',
+          true,
+        );
       }
       next = 'settings';
     }

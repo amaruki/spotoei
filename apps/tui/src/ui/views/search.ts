@@ -4,7 +4,9 @@ import type { SearchResponseT } from 'spotoei-protocol';
 // Map a `SearchResponseT` to the rows displayed in the results SelectRenderable.
 // Errors and empty results yield a single explanatory row rather than an
 // empty list so the user always sees feedback.
-export function searchHitOptions(results: SearchResponseT): { name: string; description: string }[] {
+export function searchHitOptions(
+  results: SearchResponseT,
+): { name: string; description: string }[] {
   if (results.error) {
     return [
       {

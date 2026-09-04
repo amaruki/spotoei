@@ -60,9 +60,15 @@ export function createKeyHandler(
         if (ui) {
           const cRes = resolveClientId();
           if (!cRes.clientId) {
-            ui.setStatus('Setup required: Please enter Spotify Client ID first (press c to edit)', true);
+            ui.setStatus(
+              'Setup required: Please enter Spotify Client ID first (press c to edit)',
+              true,
+            );
           } else {
-            ui.setStatus('Authentication required: Please log in with Spotify (press a or Enter to log in)', true);
+            ui.setStatus(
+              'Authentication required: Please log in with Spotify (press a or Enter to log in)',
+              true,
+            );
           }
         }
         return;

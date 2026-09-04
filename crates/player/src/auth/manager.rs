@@ -109,11 +109,7 @@ impl AuthManager {
         self.snapshot_locked(&s, s.last_auth_url.clone())
     }
 
-    pub(super) fn snapshot_locked(
-        &self,
-        s: &InnerState,
-        auth_url: Option<String>,
-    ) -> AuthStatus {
+    pub(super) fn snapshot_locked(&self, s: &InnerState, auth_url: Option<String>) -> AuthStatus {
         AuthStatus {
             v: 1,
             state: s.state,

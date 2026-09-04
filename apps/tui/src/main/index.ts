@@ -238,15 +238,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
 
       await requestQuit.promise;
     } else {
-      return await runNonTtyMode(
-        ctx,
-        args,
-        handshake,
-        initialAuth,
-        initialPlayback,
-        clients,
-        ui,
-      );
+      return await runNonTtyMode(ctx, args, handshake, initialAuth, initialPlayback, clients, ui);
     }
   } catch (e) {
     process.stderr.write(

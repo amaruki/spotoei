@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use librespot::playback::mixer::Mixer;
+use std::sync::Arc;
 
 use tracing::info;
 

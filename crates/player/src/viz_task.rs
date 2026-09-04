@@ -1,6 +1,6 @@
+use crossbeam_channel::Receiver;
 use std::sync::Arc;
 use std::time::Duration;
-use crossbeam_channel::Receiver;
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
@@ -85,8 +85,7 @@ pub fn spawn_visualizer_task(
             let seq = next_event_seq();
             let line = match mode {
                 VisualizerMode::Oscilloscope => {
-                    let downsampled =
-                        Analyzer::compute_waveform(&ring_buffer, waveform_samples);
+                    let downsampled = Analyzer::compute_waveform(&ring_buffer, waveform_samples);
                     let payload = serde_json::json!({ "samples": downsampled });
                     event("visualizer.waveform", seq, payload)
                 }

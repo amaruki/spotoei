@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use serde_json::Value;
+use std::sync::Arc;
 
 use crate::auth::{AuthError, AuthManager};
 use crate::protocol::{err, ok, Command, ErrorBody, ErrorCode};

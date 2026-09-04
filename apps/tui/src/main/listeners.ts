@@ -1,4 +1,8 @@
-import type { AuthStatusDataT, PlaybackChangedDataT, PlaybackPositionDataT } from 'spotoei-protocol';
+import type {
+  AuthStatusDataT,
+  PlaybackChangedDataT,
+  PlaybackPositionDataT,
+} from 'spotoei-protocol';
 
 import type { AppContext } from './types';
 import type { createEnrichment } from './enrich';

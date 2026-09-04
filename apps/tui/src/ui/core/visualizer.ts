@@ -1,10 +1,5 @@
 import { RGBA, bold, fg, t } from '@opentui/core';
-import {
-  COLOR_ACCENT,
-  COLOR_DIM,
-  COLOR_PANEL_BG,
-  COLOR_TEXT,
-} from '../theme';
+import { COLOR_ACCENT, COLOR_DIM, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
 import { drawBars, drawWave, type OptimizedBufferLike } from '../visualizerCanvas';
 import type { UiCoreContext } from './types';
 

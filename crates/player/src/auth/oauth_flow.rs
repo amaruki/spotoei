@@ -5,8 +5,8 @@ use tokio::sync::oneshot;
 use tracing::warn;
 
 use super::constants::{
-    generate_state, generate_verifier, now_ms, s256_challenge, KEYMASTER_CLIENT_ID,
-    KEYMASTER_PORT, REDIRECT_PATH, SPOTIFY_ACCOUNTS,
+    generate_state, generate_verifier, now_ms, s256_challenge, KEYMASTER_CLIENT_ID, KEYMASTER_PORT,
+    REDIRECT_PATH, SPOTIFY_ACCOUNTS,
 };
 use super::manager::AuthManager;
 use super::storage;
@@ -64,7 +64,11 @@ impl AuthManager {
             .local_addr()
             .map_err(|e| AuthError::Http(format!("local_addr: {e}")))?
             .port();
-        let redirect_path = if is_keymaster { "/login" } else { REDIRECT_PATH };
+        let redirect_path = if is_keymaster {
+            "/login"
+        } else {
+            REDIRECT_PATH
+        };
         let redirect_uri = format!("http://127.0.0.1:{bound_port}{redirect_path}");
 
         let scope_str = scopes.unwrap_or_else(|| self.scopes.clone()).join(" ");
@@ -163,8 +167,12 @@ impl AuthManager {
         Ok(snap)
     }
 
-
-    pub(super) async fn complete_flow(&self, code: &str, state: &str, port: u16) -> Result<(), AuthError> {
+    pub(super) async fn complete_flow(
+        &self,
+        code: &str,
+        state: &str,
+        port: u16,
+    ) -> Result<(), AuthError> {
         let pkce = {
             let s = self.state.lock().await;
             s.pkce.clone()

@@ -1,4 +1,12 @@
-import { BoxRenderable, type CliRenderer, FrameBufferRenderable, TextRenderable, bold, fg, t } from '@opentui/core';
+import {
+  BoxRenderable,
+  type CliRenderer,
+  FrameBufferRenderable,
+  TextRenderable,
+  bold,
+  fg,
+  t,
+} from '@opentui/core';
 import { COLOR_ACCENT, COLOR_BORDER, COLOR_DIM, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
 import type { UiViewState } from '../types';
 

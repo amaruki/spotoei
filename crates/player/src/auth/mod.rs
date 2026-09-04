@@ -16,8 +16,8 @@ mod token;
 mod types;
 
 pub use constants::{
-    DEFAULT_SCOPES, HTML_SUCCESS, KEYMASTER_CLIENT_ID, KEYMASTER_PATH, KEYMASTER_PORT,
-    KEYRING_SERVICE, REDIRECT_PATH, SPOTIFY_ACCOUNTS, html_error, html_escape,
+    html_error, html_escape, DEFAULT_SCOPES, HTML_SUCCESS, KEYMASTER_CLIENT_ID, KEYMASTER_PATH,
+    KEYMASTER_PORT, KEYRING_SERVICE, REDIRECT_PATH, SPOTIFY_ACCOUNTS,
 };
 pub use manager::AuthManager;
 pub use types::{AuthError, AuthState, AuthStatus, Storage};

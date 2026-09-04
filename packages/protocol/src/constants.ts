@@ -118,6 +118,4 @@ export const TopItemsRange = z.enum(['short_term', 'medium_term', 'long_term']);
 export type TopItemsRangeT = z.infer<typeof TopItemsRange>;
 
 // Helper used by schemas; build an ErrorCode zod enum from the closed const.
-export const ErrorCodeSchema = z.enum(
-  Object.values(ErrorCode) as [ErrorCodeT, ...ErrorCodeT[]],
-);
+export const ErrorCodeSchema = z.enum(Object.values(ErrorCode) as [ErrorCodeT, ...ErrorCodeT[]]);

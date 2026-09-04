@@ -85,8 +85,14 @@ pub async fn run_doctor(args: &[String]) -> ExitCode {
             {
                 if let Ok(val) = resp.json::<serde_json::Value>().await {
                     println!("Spotify /v1/me: {}", val);
-                    let user_id = val.get("id").and_then(|v| v.as_str()).unwrap_or("<unknown>");
-                    let product = val.get("product").and_then(|v| v.as_str()).unwrap_or("<unknown>");
+                    let user_id = val
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("<unknown>");
+                    let product = val
+                        .get("product")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("<unknown>");
                     println!("Spotify User ID: {user_id}");
                     println!("Spotify Product Plan: {product}");
                 }

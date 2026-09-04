@@ -108,4 +108,3 @@ describe('configuration and client ID resolution', () => {
     expect(getRedirectUri()).toBe('http://127.0.0.1:8080/callback');
   });
 });
-

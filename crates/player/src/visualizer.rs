@@ -115,7 +115,11 @@ impl Analyzer {
             self.fft_in[i] = s * self.window[i];
         }
 
-        if self.r2c.process(&mut self.fft_in, &mut self.fft_out).is_err() {
+        if self
+            .r2c
+            .process(&mut self.fft_in, &mut self.fft_out)
+            .is_err()
+        {
             return self.bars.clone();
         }
 
@@ -156,9 +160,17 @@ impl Analyzer {
         // Horizontal smoothing: 3-point moving average
         let mut smoothed = vec![0.0f32; self.bands];
         for i in 0..self.bands {
-            let left = if i > 0 { raw_bands[i - 1] } else { raw_bands[i] };
+            let left = if i > 0 {
+                raw_bands[i - 1]
+            } else {
+                raw_bands[i]
+            };
             let center = raw_bands[i];
-            let right = if i + 1 < self.bands { raw_bands[i + 1] } else { raw_bands[i] };
+            let right = if i + 1 < self.bands {
+                raw_bands[i + 1]
+            } else {
+                raw_bands[i]
+            };
             smoothed[i] = 0.15 * left + 0.70 * center + 0.15 * right;
         }
 

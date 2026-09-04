@@ -55,9 +55,9 @@ export function initSchema(db: Database): void {
       applied_at TEXT NOT NULL
     );
   `);
-  const maxVersionRow = db
-    .query('SELECT MAX(version) as max_v FROM schema_migrations;')
-    .get() as { max_v?: number } | null;
+  const maxVersionRow = db.query('SELECT MAX(version) as max_v FROM schema_migrations;').get() as {
+    max_v?: number;
+  } | null;
   if (maxVersionRow && typeof maxVersionRow.max_v === 'number' && maxVersionRow.max_v > 1) {
     throw new Error(`unsupported database schema version: ${maxVersionRow.max_v}`);
   }

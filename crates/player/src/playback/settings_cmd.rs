@@ -1,13 +1,12 @@
 use std::time::Instant;
 
 use super::state::Playback;
-use super::types::{PlaybackChangedPayload, PlaybackError, PlaybackInner, PlaybackState, RepeatMode};
+use super::types::{
+    PlaybackChangedPayload, PlaybackError, PlaybackInner, PlaybackState, RepeatMode,
+};
 
 impl Playback {
-    pub async fn set_volume(
-        &self,
-        volume: f32,
-    ) -> Result<PlaybackChangedPayload, PlaybackError> {
+    pub async fn set_volume(&self, volume: f32) -> Result<PlaybackChangedPayload, PlaybackError> {
         if !(0.0..=1.0).contains(&volume) {
             return Err(PlaybackError);
         }
@@ -79,6 +78,9 @@ impl Playback {
 fn advance_position_if_playing(inner: &mut PlaybackInner) {
     if inner.state == PlaybackState::Playing {
         let elapsed = inner.last_change_at.elapsed().as_millis() as u64;
-        inner.position_ms = inner.position_ms.saturating_add(elapsed).min(inner.duration_ms);
+        inner.position_ms = inner
+            .position_ms
+            .saturating_add(elapsed)
+            .min(inner.duration_ms);
     }
 }

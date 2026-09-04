@@ -25,7 +25,17 @@ import type {
 // Creates the public `Ui` API handle that consumers use to update state.
 // All setters propagate through `ctx.helpers` and trigger granular repaints.
 export function createUiApi(ctx: UiCoreContext): Ui {
-  const { built, focus, latestVizFrame, manualLyricsScroll, palette, renderer, route, state, statusTimer } = ctx;
+  const {
+    built,
+    focus,
+    latestVizFrame,
+    manualLyricsScroll,
+    palette,
+    renderer,
+    route,
+    state,
+    statusTimer,
+  } = ctx;
   const { helpers } = ctx;
 
   return {
@@ -54,10 +64,7 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       built.searchResults.options = searchHitOptions(results);
       built.searchResults.setSelectedIndex(0);
     },
-    setLibraryItems(
-      items: LibraryItemT[],
-      error?: { code: string; message: string },
-    ): void {
+    setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }): void {
       ctx.currentLibraryItems.value = items;
       built.libraryList.options = libraryItemOptions(items, error);
       built.libraryList.setSelectedIndex(0);
@@ -143,7 +150,11 @@ export function createUiApi(ctx: UiCoreContext): Ui {
         state.playback.positionMs = pos.positionMs;
         helpers.setHeader();
         helpers.refreshHome();
-        if (route.current === 'lyrics' && !manualLyricsScroll.value && state.lyrics?.kind === 'synced') {
+        if (
+          route.current === 'lyrics' &&
+          !manualLyricsScroll.value &&
+          state.lyrics?.kind === 'synced'
+        ) {
           built.lyricsText.content = renderLyricsContent(state);
           let activeIdx = -1;
           for (let i = 0; i < state.lyrics.lines.length; i++) {
@@ -167,7 +178,10 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       helpers.refreshSettings();
       helpers.refreshNav();
       if (!wasAuth && auth.state === 'authenticated') {
-        helpers.setStatus(`🎉 Authenticated as ${auth.accountId ?? 'user'}! Welcome to Spotoei.`, true);
+        helpers.setStatus(
+          `🎉 Authenticated as ${auth.accountId ?? 'user'}! Welcome to Spotoei.`,
+          true,
+        );
         helpers.showRoute('home', true);
       }
     },

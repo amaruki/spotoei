@@ -1,8 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
-import type {
-  PlaybackChangedDataT,
-  PlaybackPositionDataT,
-} from 'spotoei-protocol';
+import type { PlaybackChangedDataT, PlaybackPositionDataT } from 'spotoei-protocol';
 
 export interface PlaybackClient {
   status(): Promise<PlaybackChangedDataT>;

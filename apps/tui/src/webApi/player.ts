@@ -61,7 +61,9 @@ export class PlayerEndpoints {
     }
   }
 
-  async getDevices(): Promise<Array<{ id: string; name: string; is_active: boolean; type: string }>> {
+  async getDevices(): Promise<
+    Array<{ id: string; name: string; is_active: boolean; type: string }>
+  > {
     try {
       const json = await this.transport.request('/me/player/devices');
       if (

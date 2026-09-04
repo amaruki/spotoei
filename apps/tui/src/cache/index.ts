@@ -73,9 +73,7 @@ export class Cache {
     // TTL pruning on read: drop expired rows immediately
     if (row.expires_at !== null && row.expires_at < Date.now()) {
       this.db
-        .prepare(
-          'DELETE FROM entities WHERE account_id = ? AND entity_type = ? AND entity_id = ?;',
-        )
+        .prepare('DELETE FROM entities WHERE account_id = ? AND entity_type = ? AND entity_id = ?;')
         .run(accountId, entityType, entityId);
       return null;
     }
@@ -152,9 +150,7 @@ export class Cache {
   // --- Cache invalidation & pruning ---
 
   invalidateQuery(accountId: string, queryKey: string): void {
-    const stmt = this.db.prepare(
-      'DELETE FROM query_cache WHERE account_id = ? AND query_key = ?;',
-    );
+    const stmt = this.db.prepare('DELETE FROM query_cache WHERE account_id = ? AND query_key = ?;');
     stmt.run(accountId, queryKey);
   }
 

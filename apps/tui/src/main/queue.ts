@@ -17,9 +17,10 @@ export function createQueueActions(ctx: AppContext) {
     }
 
     // 2. Synthesize queue from activePlaylistTracks or libraryItems
-    const pool: CatalogTrackT[] = state.activePlaylistTracks.length > 0
-      ? state.activePlaylistTracks
-      : state.libraryItems.filter((libItem): libItem is CatalogTrackT => 'durationMs' in libItem);
+    const pool: CatalogTrackT[] =
+      state.activePlaylistTracks.length > 0
+        ? state.activePlaylistTracks
+        : state.libraryItems.filter((libItem): libItem is CatalogTrackT => 'durationMs' in libItem);
     if (pool.length > 0 && ui) {
       const curUri = state.currentInfo.playback?.track?.uri;
       const curIdx = pool.findIndex((t) => t.uri === curUri);
@@ -68,9 +69,10 @@ export function createQueueActions(ctx: AppContext) {
     if (state.isFetchingAutoplay) return;
     if (!state.currentInfo.playback?.autoplay) return;
 
-    const pool: CatalogTrackT[] = state.activePlaylistTracks.length > 0
-      ? state.activePlaylistTracks
-      : state.libraryItems.filter((libItem): libItem is CatalogTrackT => 'durationMs' in libItem);
+    const pool: CatalogTrackT[] =
+      state.activePlaylistTracks.length > 0
+        ? state.activePlaylistTracks
+        : state.libraryItems.filter((libItem): libItem is CatalogTrackT => 'durationMs' in libItem);
     const curTrack = state.currentInfo.playback?.track;
     const curUri = curTrack?.uri;
     const curIdx = pool.findIndex((t) => t.uri === curUri);

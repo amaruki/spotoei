@@ -1,7 +1,7 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 /// Process-global monotonic event sequence counter shared across
 /// subsystems (auth, playback, lyrics, visualizer).

@@ -9,9 +9,7 @@ pub fn keyring_entry(account_id: &str) -> Result<keyring::Entry, AuthError> {
         .map_err(|e| AuthError::KeyringUnavailable(e.to_string()))
 }
 
-pub async fn load_from_keyring(
-    account_id: &str,
-) -> Result<Option<AccessToken>, AuthError> {
+pub async fn load_from_keyring(account_id: &str) -> Result<Option<AccessToken>, AuthError> {
     let entry = keyring_entry(account_id)?;
     match entry.get_password() {
         Ok(s) => match serde_json::from_str::<AccessToken>(&s) {
@@ -53,10 +51,7 @@ pub async fn load_session() -> Result<Option<AccessToken>, AuthError> {
     Ok(None)
 }
 
-pub async fn save_to_keyring_account(
-    account_id: &str,
-    at: &AccessToken,
-) -> Result<(), AuthError> {
+pub async fn save_to_keyring_account(account_id: &str, at: &AccessToken) -> Result<(), AuthError> {
     let entry = keyring_entry(account_id)?;
     let s = serde_json::to_string(at).map_err(|e| AuthError::Config(e.to_string()))?;
     entry

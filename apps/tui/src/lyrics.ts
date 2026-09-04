@@ -195,7 +195,9 @@ export function parseLrc(lrcText: string): Array<{ startMs: number; text: string
   return lines;
 }
 
-export async function fetchLyricsFromLrclib(opts: FetchLyricsOptions): Promise<LyricsDocumentT | null> {
+export async function fetchLyricsFromLrclib(
+  opts: FetchLyricsOptions,
+): Promise<LyricsDocumentT | null> {
   const title = opts.title?.trim();
   if (!title) return null;
   const artist = opts.artist?.trim() ?? '';
@@ -227,7 +229,10 @@ export async function fetchLyricsFromLrclib(opts: FetchLyricsOptions): Promise<L
         signal: AbortSignal.timeout(5000),
       });
       if (searchRes.ok) {
-        const hits = (await searchRes.json()) as Array<{ syncedLyrics?: string; plainLyrics?: string }>;
+        const hits = (await searchRes.json()) as Array<{
+          syncedLyrics?: string;
+          plainLyrics?: string;
+        }>;
         if (Array.isArray(hits) && hits.length > 0) {
           const best = hits[0];
           if (best?.syncedLyrics) {

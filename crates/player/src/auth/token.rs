@@ -1,6 +1,8 @@
 use tracing::warn;
 
-use super::constants::{now_ms, KEYMASTER_CLIENT_ID, KEYMASTER_PATH, REDIRECT_PATH, SPOTIFY_ACCOUNTS};
+use super::constants::{
+    now_ms, KEYMASTER_CLIENT_ID, KEYMASTER_PATH, REDIRECT_PATH, SPOTIFY_ACCOUNTS,
+};
 use super::manager::AuthManager;
 use super::storage;
 use super::types::{AccessToken, AuthError, AuthState, RefreshedToken, TokenResponse};
@@ -64,7 +66,11 @@ impl AuthManager {
             .map_err(|e| AuthError::Http(e.to_string()))?;
         let client_id = self.client_id.read().await.clone();
         let is_keymaster = client_id == KEYMASTER_CLIENT_ID;
-        let redirect_path = if is_keymaster { KEYMASTER_PATH } else { REDIRECT_PATH };
+        let redirect_path = if is_keymaster {
+            KEYMASTER_PATH
+        } else {
+            REDIRECT_PATH
+        };
         let redirect_uri = format!("http://{host}:{port}{redirect_path}");
         let body = [
             ("grant_type", "authorization_code"),
@@ -102,10 +108,7 @@ impl AuthManager {
         Ok((at, account_id))
     }
 
-    pub(super) async fn refresh(
-        &self,
-        refresh_token: &str,
-    ) -> Result<RefreshedToken, AuthError> {
+    pub(super) async fn refresh(&self, refresh_token: &str) -> Result<RefreshedToken, AuthError> {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()

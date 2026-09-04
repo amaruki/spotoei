@@ -1,12 +1,6 @@
 import { bold, fg, t } from '@opentui/core';
 import { cap, formatArtists, renderProgressBarStyled } from '../formatters';
-import {
-  COLOR_ACCENT,
-  COLOR_DIM,
-  COLOR_SUCCESS,
-  COLOR_TEXT,
-  COLOR_WARN,
-} from '../theme';
+import { COLOR_ACCENT, COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
 import { getHomeContent } from '../views/home';
 import { getSettingsContent } from '../views/settings';
 import type { UiCoreContext } from './types';

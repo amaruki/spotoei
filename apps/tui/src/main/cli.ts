@@ -46,9 +46,7 @@ export function runDoctor(args: string[]): number {
   const sub = args[0] ?? 'all';
   const valid = ['all', 'audio', 'auth', 'network', 'db', 'system'];
   if (!valid.includes(sub)) {
-    process.stderr.write(
-      `spotoei doctor: unknown check "${sub}". Valid: ${valid.join(', ')}\n`,
-    );
+    process.stderr.write(`spotoei doctor: unknown check "${sub}". Valid: ${valid.join(', ')}\n`);
     return 1;
   }
   process.stdout.write(`spotoei doctor: running checks [${sub}]\n`);

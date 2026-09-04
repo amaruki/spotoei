@@ -76,6 +76,7 @@ Rules for modular decomposition:
      -not -path "*/node_modules/*" -not -path "*/target/*" -not -path "*/dist/*" \
      -exec wc -l {} + | awk '$1 > 300 && $2 != "total" {print $1, $2}' | grep . && exit 1
    ```
+
 Warning signs requiring immediate refactor:
 
 - file exceeds 250 LoC;

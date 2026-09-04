@@ -4,8 +4,6 @@ import type { KeyEvent } from '@opentui/core';
 import { PROTOCOL_VERSION } from 'spotoei-protocol';
 import { createUiCore, type LibraryItemT, type UiViewState } from '../src/ui';
 
-
-
 describe('OpenTUI renderables integration', () => {
   const dummyState: UiViewState = {
     protocol: 1,
@@ -201,8 +199,20 @@ describe('OpenTUI renderables integration', () => {
     // Verify command palette execution
     let executedCmd = '';
     ui.setPaletteCommands([
-      { name: 'Command Alpha', description: 'desc1', action: () => { executedCmd = 'alpha'; } },
-      { name: 'Command Beta', description: 'desc2', action: () => { executedCmd = 'beta'; } },
+      {
+        name: 'Command Alpha',
+        description: 'desc1',
+        action: () => {
+          executedCmd = 'alpha';
+        },
+      },
+      {
+        name: 'Command Beta',
+        description: 'desc2',
+        action: () => {
+          executedCmd = 'beta';
+        },
+      },
     ]);
     ui.openPalette();
     expect(ui.isPaletteOpen()).toBe(true);

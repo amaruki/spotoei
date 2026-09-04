@@ -20,7 +20,12 @@ export function formatArtists(artists?: unknown): string {
   return artists
     .map((a) => {
       if (typeof a === 'string') return a;
-      if (a && typeof a === 'object' && 'name' in a && typeof (a as { name: unknown }).name === 'string') {
+      if (
+        a &&
+        typeof a === 'object' &&
+        'name' in a &&
+        typeof (a as { name: unknown }).name === 'string'
+      ) {
         return (a as { name: string }).name;
       }
       return String(a ?? '');
@@ -66,7 +71,8 @@ export function formatTime(ms: number): string {
 export function renderProgressBarStyled(positionMs: number, durationMs: number, totalWidth = 64) {
   const curStr = formatTime(positionMs);
   const durStr = formatTime(durationMs);
-  const percent = durationMs > 0 ? Math.min(100, Math.max(0, Math.round((positionMs / durationMs) * 100))) : 0;
+  const percent =
+    durationMs > 0 ? Math.min(100, Math.max(0, Math.round((positionMs / durationMs) * 100))) : 0;
   const pctStr = `${percent}%`;
 
   const barWidth = Math.max(12, totalWidth - (curStr.length + durStr.length + pctStr.length + 8));

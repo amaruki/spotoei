@@ -26,8 +26,7 @@ export function mapTrack(raw: unknown): CatalogTrackT | null {
   const firstImg = toFirstImage(albumRef.images);
   const durationMs = typeof candidate.duration_ms === 'number' ? candidate.duration_ms : 0;
   const isExplicit = typeof candidate.explicit === 'boolean' ? candidate.explicit : undefined;
-  const isPlayable =
-    typeof candidate.is_playable === 'boolean' ? candidate.is_playable : undefined;
+  const isPlayable = typeof candidate.is_playable === 'boolean' ? candidate.is_playable : undefined;
 
   const track = {
     id,
@@ -131,8 +130,7 @@ export function mapPlaylist(raw: unknown): CatalogPlaylistT | null {
     candidate.tracks !== null && typeof candidate.tracks === 'object'
       ? (candidate.tracks as { total?: unknown })
       : null;
-  const trackCount =
-    tracksObj && typeof tracksObj.total === 'number' ? tracksObj.total : undefined;
+  const trackCount = tracksObj && typeof tracksObj.total === 'number' ? tracksObj.total : undefined;
 
   const isPublic = typeof candidate.public === 'boolean' ? candidate.public : undefined;
   const isCollaborative =

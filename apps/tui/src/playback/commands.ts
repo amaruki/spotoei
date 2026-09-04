@@ -53,7 +53,9 @@ function makeCommandWithArg<Arg>(
   };
 }
 
-export function buildCommandMethods(deps: CommandBuilderDeps): Pick<
+export function buildCommandMethods(
+  deps: CommandBuilderDeps,
+): Pick<
   PlaybackClient,
   | 'status'
   | 'load'

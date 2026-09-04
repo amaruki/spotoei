@@ -20,10 +20,9 @@ pub mod viz_task;
 
 // Re-export protocol types and helpers used across the crate / externally.
 pub use protocol::{
-    event, next_event_seq, parse_command, Command, ErrorBody, ErrorCode, EventOut,
-    ProtocolError, ResponseErr, ResponseOk, HANDSHAKE_TIMEOUT, MAX_ID_BYTES,
-    MAX_LINE_BYTES, PLAYER_VERSION, PROTOCOL_STDOUT_CAP, PROTOCOL_VERSION,
-    VIZ_STDOUT_CAP,
+    event, next_event_seq, parse_command, Command, ErrorBody, ErrorCode, EventOut, ProtocolError,
+    ResponseErr, ResponseOk, HANDSHAKE_TIMEOUT, MAX_ID_BYTES, MAX_LINE_BYTES, PLAYER_VERSION,
+    PROTOCOL_STDOUT_CAP, PROTOCOL_VERSION, VIZ_STDOUT_CAP,
 };
 
 #[tokio::main(flavor = "multi_thread")]

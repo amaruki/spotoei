@@ -1,7 +1,9 @@
 import { formatArtists } from '../formatters';
 import type { QueueSnapshotT } from 'spotoei-protocol';
 
-export function queueSnapshotOptions(snap: QueueSnapshotT): { name: string; description: string }[] {
+export function queueSnapshotOptions(
+  snap: QueueSnapshotT,
+): { name: string; description: string }[] {
   const items: { name: string; description: string }[] = [];
   if (snap.current) {
     items.push({

@@ -23,10 +23,7 @@ export interface PlaybackTransport {
   close(): void;
 }
 
-export function createPlaybackTransport(
-  child: ChildProcess,
-  timeoutMs = 5_000,
-): PlaybackTransport {
+export function createPlaybackTransport(child: ChildProcess, timeoutMs = 5_000): PlaybackTransport {
   if (!child.stdout || !child.stdin) {
     throw new Error('child stdin/stdout must be piped to createPlaybackClient');
   }

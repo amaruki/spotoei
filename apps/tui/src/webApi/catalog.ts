@@ -1,10 +1,6 @@
 // Catalog and search endpoints (search, track view, album view, recommendations).
 
-import type {
-  CatalogTrackT,
-  EntityViewResponseT,
-  SearchResponseT,
-} from 'spotoei-protocol';
+import type { CatalogTrackT, EntityViewResponseT, SearchResponseT } from 'spotoei-protocol';
 import { mapAlbum, mapArtist, mapPlaylist, mapTrack } from './mappers';
 import { pickObjectKey, toAlbum, toArray, toSearchResponse } from './shape';
 import type { Transport } from './transport';

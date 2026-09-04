@@ -124,7 +124,8 @@ function isValidConfig(value: unknown): value is AppConfig {
     const p = v.playback;
     if (p === null || typeof p !== 'object') return false;
     const pr = p as Record<string, unknown>;
-    if ('volume' in pr && (typeof pr.volume !== 'number' || pr.volume < 0 || pr.volume > 100)) return false;
+    if ('volume' in pr && (typeof pr.volume !== 'number' || pr.volume < 0 || pr.volume > 100))
+      return false;
     if ('autoplay' in pr && typeof pr.autoplay !== 'boolean') return false;
   }
   return true;

@@ -35,7 +35,7 @@ export function isLowerKey(
 export function formatArtistsList(raw?: Array<string | { name: string }>): string[] {
   if (!raw || !Array.isArray(raw)) return [];
   return raw
-    .map((a) => (typeof a === 'string' ? a : a?.name ?? ''))
+    .map((a) => (typeof a === 'string' ? a : (a?.name ?? '')))
     .filter((s) => s.trim().length > 0);
 }
 

@@ -51,9 +51,10 @@ export function createPlaybackActions(ctx: AppContext) {
       return;
     }
 
-    let tracksToUse: CatalogTrackT[] = state.activePlaylistTracks.length > 0
-      ? state.activePlaylistTracks
-      : state.libraryItems.filter((it): it is CatalogTrackT => 'durationMs' in it);
+    let tracksToUse: CatalogTrackT[] =
+      state.activePlaylistTracks.length > 0
+        ? state.activePlaylistTracks
+        : state.libraryItems.filter((it): it is CatalogTrackT => 'durationMs' in it);
     if (tracksToUse.length > 0) {
       const curUri = state.currentInfo.playback?.track?.uri;
       let curIdx = tracksToUse.findIndex((item) => item.uri === curUri);
@@ -61,9 +62,10 @@ export function createPlaybackActions(ctx: AppContext) {
       if (curIdx >= tracksToUse.length - 2 && state.currentInfo.playback?.autoplay) {
         const beforeLen = tracksToUse.length;
         // refresh on next call
-        tracksToUse = state.activePlaylistTracks.length > 0
-          ? state.activePlaylistTracks
-          : state.libraryItems.filter((it): it is CatalogTrackT => 'durationMs' in it);
+        tracksToUse =
+          state.activePlaylistTracks.length > 0
+            ? state.activePlaylistTracks
+            : state.libraryItems.filter((it): it is CatalogTrackT => 'durationMs' in it);
         if (tracksToUse.length === beforeLen) {
           // no growth; continue
         }
@@ -107,9 +109,10 @@ export function createPlaybackActions(ctx: AppContext) {
       return;
     }
 
-    const tracksToUse: CatalogTrackT[] = state.activePlaylistTracks.length > 0
-      ? state.activePlaylistTracks
-      : state.libraryItems.filter((it): it is CatalogTrackT => 'durationMs' in it);
+    const tracksToUse: CatalogTrackT[] =
+      state.activePlaylistTracks.length > 0
+        ? state.activePlaylistTracks
+        : state.libraryItems.filter((it): it is CatalogTrackT => 'durationMs' in it);
     if (tracksToUse.length > 0) {
       const curUri = state.currentInfo.playback?.track?.uri;
       const curIdx = tracksToUse.findIndex((item) => item.uri === curUri);
