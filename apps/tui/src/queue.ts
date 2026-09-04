@@ -40,10 +40,20 @@ export class QueueManager {
       return this.snapshot;
     }
     if (fresh) {
+      // Only bump revision when content actually changed (hash comparison).
+      const prevHash = JSON.stringify({
+        current: this.snapshot.current?.id ?? null,
+        upcoming: this.snapshot.upcoming.map((i) => i.track.id),
+      });
+      const nextHash = JSON.stringify({
+        current: fresh.current?.id ?? null,
+        upcoming: fresh.upcoming.map((i) => i.track.id),
+      });
+      const revision = prevHash === nextHash ? this.snapshot.revision : this.snapshot.revision + 1;
       this.snapshot = {
         current: fresh.current,
         upcoming: fresh.upcoming,
-        revision: this.snapshot.revision + 1,
+        revision,
       };
       for (const listener of this.listeners) listener(this.snapshot);
     }

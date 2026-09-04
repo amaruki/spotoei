@@ -43,6 +43,9 @@ export class QueueEndpoints {
       return {
         current,
         upcoming,
+        // Web API does not provide a queue revision; revision: 0 is
+        // intentional — QueueManager owns the monotonic revision and bumps
+        // only when content hash changes (see queue.ts refresh()).
         revision: 0,
       };
     } catch {

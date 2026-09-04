@@ -1,4 +1,4 @@
-import type { CatalogTrackT, QueueItemT } from 'spotoei-protocol';
+import type { CatalogTrackT } from 'spotoei-protocol';
 
 import { logToFile } from '../config';
 import type { AppContext } from './types';
@@ -8,61 +8,10 @@ export function createQueueActions(ctx: AppContext) {
 
   const updateQueueView = async (): Promise<void> => {
     const ui = getUi();
-    // 1. Attempt to refresh canonical Spotify queue from webApi
+    // Always forward the canonical player queue — do not synthesize.
     await clients.queueManager.refresh().catch(() => {});
     const qSnap = clients.queueManager.getSnapshot();
-    if (qSnap.upcoming.length > 0) {
-      if (ui) ui.setQueueSnapshot(qSnap);
-      return;
-    }
-
-    // 2. Synthesize queue from activePlaylistTracks or libraryItems
-    const pool: CatalogTrackT[] =
-      state.activePlaylistTracks.length > 0
-        ? state.activePlaylistTracks
-        : state.libraryItems.filter((libItem): libItem is CatalogTrackT => 'durationMs' in libItem);
-    if (pool.length > 0 && ui) {
-      const curUri = state.currentInfo.playback?.track?.uri;
-      const curIdx = pool.findIndex((t) => t.uri === curUri);
-      const upcomingList: QueueItemT[] = [];
-      const startIdx = curIdx >= 0 ? curIdx + 1 : 0;
-      const count = Math.min(pool.length, startIdx + 50);
-      for (let i = startIdx; i < count; i++) {
-        const t = pool[i];
-        if (t) {
-          const artists = t.artists.map((a) => ({ id: a.id, name: a.name, uri: a.uri }));
-          upcomingList.push({
-            id: `${t.uri}-${i}`,
-            track: {
-              id: t.id,
-              name: t.name,
-              uri: t.uri,
-              artists,
-              durationMs: t.durationMs,
-            },
-            source: 'autoplay',
-            addedAt: Date.now(),
-          });
-        }
-      }
-      ui.setQueueSnapshot({
-        current: state.currentInfo.playback?.track
-          ? {
-              id: state.currentInfo.playback.track.uri.replace('spotify:track:', ''),
-              name: state.currentInfo.playback.track.name,
-              uri: state.currentInfo.playback.track.uri,
-              artists: state.currentInfo.playback.track.artists.map((name) => ({
-                id: name,
-                name,
-                uri: '',
-              })),
-              durationMs: state.currentInfo.playback.durationMs,
-            }
-          : null,
-        upcoming: upcomingList,
-        revision: qSnap.revision + 1,
-      });
-    }
+    if (ui) ui.setQueueSnapshot(qSnap);
   };
 
   const ensureAutoplayTracks = async (): Promise<void> => {
