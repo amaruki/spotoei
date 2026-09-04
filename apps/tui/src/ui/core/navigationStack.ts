@@ -47,6 +47,7 @@ export function sameRoute(a: RouteT, b: RouteT): boolean {
     case 'queue':
     case 'lyrics':
     case 'settings':
+    case 'onboarding':
     case 'visualizer':
       return true;
     default:
@@ -77,6 +78,8 @@ export function routeFromLegacy(input: string | RouteT): RouteT {
       return { kind: 'lyrics' };
     case 'settings':
       return { kind: 'settings' };
+    case 'onboarding':
+      return { kind: 'onboarding' };
     case 'visualizer':
       return { kind: 'visualizer' };
     default:

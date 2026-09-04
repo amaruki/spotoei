@@ -5,16 +5,14 @@ import {
   ScrollBoxRenderable,
   SelectRenderable,
   TextRenderable,
-  bold,
-  fg,
-  t,
 } from '@opentui/core';
-import { COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_DIM, COLOR_PANEL_BG } from '../theme';
+import { COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_PANEL_BG } from '../theme';
 import type { UiViewState } from '../types';
 import { getSettingsContent } from '../views/settings';
 import { buildEntityViews, type EntityViewNodes } from './entityViews';
 import { buildHomeView } from './homeView';
 import { buildLyricsView } from './lyricsView';
+import { buildOnboardingView } from './onboardingView';
 import { buildSearchGrid } from './searchView';
 
 export interface MainNodes extends EntityViewNodes {
@@ -52,6 +50,8 @@ export interface MainNodes extends EntityViewNodes {
   lyricsText: TextRenderable;
   settings: BoxRenderable;
   settingsText: TextRenderable;
+  onboarding: BoxRenderable;
+  onboardingText: TextRenderable;
   clientIdBox: BoxRenderable;
   clientIdInput: InputRenderable;
 }
@@ -212,31 +212,11 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     content: getSettingsContent(state),
   });
   settings.add(settingsText);
-
-  const clientIdBox = new BoxRenderable(renderer, {
-    id: 'settings-client-id-box',
-    width: '100%',
-    flexDirection: 'column',
-    marginTop: 1,
-  });
-  const clientIdLabel = new TextRenderable(renderer, {
-    id: 'client-id-label',
-    content: t`${bold('Configure Spotify Client ID')} ${fg(COLOR_DIM)('(press c / Enter to edit):')}`,
-  });
-  clientIdBox.add(clientIdLabel);
-  const clientIdInput = new InputRenderable(renderer, {
-    id: 'settings-client-id-input',
-    placeholder: 'Paste Spotify Client ID here and press Enter…',
-    width: '100%',
-  });
-  clientIdBox.add(clientIdInput);
-  const clientIdHelp = new TextRenderable(renderer, {
-    id: 'client-id-help',
-    content: t`${fg(COLOR_DIM)('Press Enter to save to config.json')}`,
-  });
-  clientIdBox.add(clientIdHelp);
-  settings.add(clientIdBox);
   main.add(settings);
+
+  // Onboarding flow (owns the Client ID input; Settings is account-only)
+  const onboardingView = buildOnboardingView(renderer);
+  main.add(onboardingView.onboarding);
 
   const entity = buildEntityViews(renderer, state);
   main.add(entity.artist);
@@ -280,8 +260,10 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     lyricsText: lyricsView.lyricsText,
     settings,
     settingsText,
-    clientIdBox,
-    clientIdInput,
+    onboarding: onboardingView.onboarding,
+    onboardingText: onboardingView.onboardingText,
+    clientIdBox: onboardingView.clientIdBox,
+    clientIdInput: onboardingView.clientIdInput,
     ...entity,
   };
 }

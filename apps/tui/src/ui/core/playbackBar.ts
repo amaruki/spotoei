@@ -1,6 +1,7 @@
 import { bold, fg, t } from '@opentui/core';
 import { formatArtists, formatTime } from '../formatters';
 import { COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
+import { getOnboardingContent } from '../views/onboarding';
 import { getSettingsContent } from '../views/settings';
 import { buildPlaybackBarContent } from '../playbackBarView';
 import { routeKind } from './navigationStack';
@@ -13,13 +14,10 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
   const getFooterHelp = (): string => {
     const curKind = routeKind(route.current);
     if (state.auth.state !== 'authenticated') {
-      if (curKind === 'settings' && built.clientIdInput.focused) {
+      if (built.clientIdInput.focused) {
         return 'Enter: save Client ID  Esc/Tab: exit input';
       }
-      if (focus.current === 'sidebar') {
-        return '↑/↓: navigate  Enter: select view  Tab/→: enter context  A: login  q: quit';
-      }
-      return 'A: authenticate  c: edit Client ID  Esc/Tab: navigation  q: quit';
+      return 'A/Enter: authenticate  c: edit Client ID  q: quit';
     }
     if (focus.current === 'sidebar') {
       return '↑/↓: navigate  Enter: select view  Tab/→: enter view  q: quit';
@@ -67,6 +65,10 @@ ${fg(COLOR_DIM)(`${pb?.state ?? 'idle'} · ${pos} / ${dur} · vol ${vol}% · shu
 
   const refreshSettings = (): void => {
     built.settingsText.content = getSettingsContent(state);
+  };
+
+  const refreshOnboarding = (): void => {
+    built.onboardingText.content = getOnboardingContent(state);
   };
 
   const renderPlaybackBar = (): void => {
@@ -130,5 +132,13 @@ ${fg(COLOR_DIM)(`${pb?.state ?? 'idle'} · ${pos} / ${dur} · vol ${vol}% · shu
     }, 2500);
   };
 
-  return { getFooterHelp, refreshHome, refreshSettings, renderPlaybackBar, setHeader, setStatus };
+  return {
+    getFooterHelp,
+    refreshHome,
+    refreshSettings,
+    refreshOnboarding,
+    renderPlaybackBar,
+    setHeader,
+    setStatus,
+  };
 }

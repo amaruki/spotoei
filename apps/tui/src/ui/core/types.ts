@@ -78,6 +78,7 @@ export interface UiCoreContext {
     updateSearchFocusVisuals: (inputFocused: boolean) => void;
     refreshHome: () => void;
     refreshSettings: () => void;
+    refreshOnboarding: () => void;
     renderPlaybackBar: () => void;
     setHeader: () => void;
     setVizTitle: () => void;

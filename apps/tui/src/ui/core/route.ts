@@ -26,10 +26,7 @@ export function createRouteHelpers(ctx: UiCoreContext) {
 
   const updateFocusVisuals = (): void => {
     const curKind = routeKind(route.current);
-    const baseTitle =
-      state.auth.state !== 'authenticated' && curKind === 'settings'
-        ? 'Setup & Authentication'
-        : routeTitle(route.current);
+    const baseTitle = routeTitle(route.current);
 
     if (focus.current === 'sidebar') {
       built.sidebar.borderColor = COLOR_BORDER_FOCUS;

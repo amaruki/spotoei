@@ -74,6 +74,7 @@ describe('routeTitle', () => {
     expect(routeTitle({ kind: 'artist', id: '456' } as RouteT)).toBe('Artist');
     expect(routeTitle({ kind: 'playlist', id: '789' } as RouteT)).toBe('Playlist');
     expect(routeTitle({ kind: 'visualizer' } as RouteT)).toBe('Visualizer');
+    expect(routeTitle({ kind: 'onboarding' } as RouteT)).toBe('Welcome');
   });
 });
 

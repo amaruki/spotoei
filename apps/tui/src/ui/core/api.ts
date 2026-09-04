@@ -223,6 +223,7 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       state.auth = auth;
       helpers.setHeader();
       helpers.refreshSettings();
+      helpers.refreshOnboarding();
       helpers.refreshNav();
       if (!wasAuth && auth.state === 'authenticated') {
         helpers.setStatus(
@@ -232,11 +233,11 @@ export function createUiApi(ctx: UiCoreContext): Ui {
         helpers.showRoute('home', true, true);
       }
       if (wasAuth && auth.state !== 'authenticated') {
-        helpers.showRoute('settings', true, true);
+        helpers.showRoute('onboarding', true, true);
       }
     },
     focusClientIdInput(): void {
-      helpers.showRoute('settings');
+      helpers.showRoute('onboarding', true, true);
       helpers.setFocusArea('main');
       built.clientIdInput.focus();
     },

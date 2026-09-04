@@ -36,8 +36,8 @@ const loggedIn = stateWith({
   authUrl: null,
 });
 
-describe('login-only mode', () => {
-  it('boots unauthenticated straight to settings with chrome hidden', async () => {
+describe('onboarding flow', () => {
+  it('boots unauthenticated straight to onboarding with chrome hidden', async () => {
     const { renderer, renderOnce } = await createTestRenderer({ width: 120, height: 40 });
     const ui = createUiCore(renderer, loggedOut, {
       onKey: () => {},
@@ -46,12 +46,12 @@ describe('login-only mode', () => {
       onSelectQueue: () => {},
     });
     await renderOnce();
-    expect(routeKind(ui.getRoute())).toBe('settings');
+    expect(routeKind(ui.getRoute())).toBe('onboarding');
     expect(ui.getRouteStack().length).toBe(0);
     await ui.shutdown();
   });
 
-  it('Esc in login mode stays on settings', async () => {
+  it('Esc in onboarding stays on onboarding', async () => {
     const { renderer, renderOnce } = await createTestRenderer({ width: 120, height: 40 });
     const ui = createUiCore(renderer, loggedOut, {
       onKey: () => {},
@@ -61,7 +61,7 @@ describe('login-only mode', () => {
     });
     await renderOnce();
     expect(ui.navigateBack()).toBe(false);
-    expect(routeKind(ui.getRoute())).toBe('settings');
+    expect(routeKind(ui.getRoute())).toBe('onboarding');
     await ui.shutdown();
   });
 

@@ -91,8 +91,9 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
       return;
     }
 
-    // 3. Settings route Client ID input isolation
-    if (routeKind(route.current) === 'settings' && built.clientIdInput.focused) {
+    // 3. Onboarding Client ID input isolation (input lives in the
+    // onboarding view; auth no longer happens on the settings page)
+    if (built.clientIdInput.focused) {
       if (e.ctrl && e.name === 'c') {
         opts.onKey(key);
         return;
@@ -107,7 +108,7 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
     }
 
     if (
-      routeKind(route.current) === 'settings' &&
+      routeKind(route.current) === 'onboarding' &&
       focus.current === 'main' &&
       !built.clientIdInput.focused
     ) {

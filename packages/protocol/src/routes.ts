@@ -29,6 +29,9 @@ export const RouteSchema = z.discriminatedUnion('kind', [
     kind: z.literal('settings'),
   }),
   z.object({
+    kind: z.literal('onboarding'),
+  }),
+  z.object({
     kind: z.literal('visualizer'),
   }),
   z.object({

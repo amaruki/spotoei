@@ -251,9 +251,9 @@ describe('OpenTUI renderables integration', () => {
     sendKey('down', '\u001b[B');
     sendKey('tab', '\t');
 
-    // Verify focusClientIdInput and client ID typing & saving
+    // Verify focusClientIdInput routes to onboarding and focuses input
     ui.focusClientIdInput();
-    expect(kindOf(ui.getRoute())).toBe('settings');
+    expect(kindOf(ui.getRoute())).toBe('onboarding');
 
     // Verify sidebar focus toggle with Tab
     ui.setFocus('sidebar');
@@ -262,7 +262,7 @@ describe('OpenTUI renderables integration', () => {
 
     // Verify focusClientIdInput and client ID typing & saving
     ui.focusClientIdInput();
-    expect(kindOf(ui.getRoute())).toBe('settings');
+    expect(kindOf(ui.getRoute())).toBe('onboarding');
     keyEvents.length = 0;
     sendKey('q', 'q');
     sendKey('c', 'c');
@@ -306,10 +306,10 @@ describe('OpenTUI renderables integration', () => {
 
     await renderOnce();
 
-    // 1. Initial route for unauthenticated users must be settings (setup)
-    expect(kindOf(ui.getRoute())).toBe('settings');
+    // 1. Initial route for unauthenticated users must be onboarding
+    expect(kindOf(ui.getRoute())).toBe('onboarding');
 
-    // 2. Pressing 'a' on settings triggers authentication
+    // 2. Pressing 'a' in onboarding triggers authentication
     renderer.keyInput.emit('keypress', {
       name: 'a',
       sequence: 'a',

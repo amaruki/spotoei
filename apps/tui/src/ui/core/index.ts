@@ -211,7 +211,7 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
       }
       built.clientIdInput.value = '';
       built.clientIdInput.blur();
-      ctx.helpers.refreshSettings();
+      ctx.helpers.refreshOnboarding();
     }
   });
 
@@ -226,9 +226,9 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     ctx.helpers.paintViz();
   });
 
-  // Mount initial state. Unauthenticated boots route straight to the
-  // login page without pushing a spurious home entry onto the stack.
-  ctx.helpers.showRoute(initial.auth.state === 'authenticated' ? 'home' : 'settings', true, true);
+  // Mount initial state. Unauthenticated boots straight into the
+  // onboarding flow without pushing a spurious home entry onto the stack.
+  ctx.helpers.showRoute(initial.auth.state === 'authenticated' ? 'home' : 'onboarding', true, true);
   ctx.helpers.setFocusArea('sidebar');
   ctx.helpers.refreshNav();
   applyStateToTree(ctx);
@@ -249,4 +249,5 @@ function applyStateToTree(ctx: UiCoreContext): void {
   ctx.helpers.paintViz();
   ctx.helpers.refreshHome();
   ctx.helpers.refreshSettings();
+  ctx.helpers.refreshOnboarding();
 }

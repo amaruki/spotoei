@@ -268,7 +268,7 @@ export function buildPaletteCommands(
     },
     {
       name: 'Authenticate with Spotify',
-      description: 'OAuth (press A in settings)',
+      description: 'OAuth (press A in onboarding)',
       action: actions.triggerAuth,
     },
     { name: 'Quit Spotoei', description: 'q / Ctrl-C', action: () => void quit() },

@@ -57,14 +57,14 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
   const showRoute = (nextInput: Route | string, force = false, replace = false): void => {
     let next = routeFromLegacy(nextInput);
     const kind = routeKind(next);
-    if (!force && state.auth.state !== 'authenticated' && kind !== 'settings') {
+    if (!force && state.auth.state !== 'authenticated' && kind !== 'onboarding') {
       const clientRes = resolveClientId();
       if (!clientRes.clientId) {
-        ctx.helpers.setStatus('Please set your Spotify Client ID in Settings first');
+        ctx.helpers.setStatus('Welcome! Set your Spotify Client ID to begin onboarding');
       } else {
-        ctx.helpers.setStatus('Please complete authentication in Settings first');
+        ctx.helpers.setStatus('Welcome back! Complete authentication to continue');
       }
-      next = { kind: 'settings' };
+      next = { kind: 'onboarding' };
     }
     const currentKind = routeKind(route.current);
     if (
@@ -86,6 +86,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     built.queue.visible = finalKind === 'queue';
     built.lyrics.visible = finalKind === 'lyrics';
     built.settings.visible = finalKind === 'settings';
+    built.onboarding.visible = finalKind === 'onboarding';
     built.artist.visible = finalKind === 'artist';
     built.album.visible = finalKind === 'album';
     built.playlist.visible = finalKind === 'playlist';
@@ -127,14 +128,18 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       }
       if (finalKind === 'settings') {
         ctx.helpers.refreshSettings();
+        built.clientIdInput.blur();
+      } else {
+        built.clientIdInput.blur();
+      }
+      if (finalKind === 'onboarding') {
+        ctx.helpers.refreshOnboarding();
         const clientRes = resolveClientId();
         if (!clientRes.clientId) {
           built.clientIdInput.focus();
         } else {
           built.clientIdInput.blur();
         }
-      } else {
-        built.clientIdInput.blur();
       }
       if (finalKind === 'library') {
         built.libraryList.focus();
@@ -239,6 +244,9 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
         ctx.helpers.updateSearchFocusVisuals(true);
       } else if (curKind === 'settings') {
         ctx.helpers.refreshSettings();
+        built.clientIdInput.blur();
+      } else if (curKind === 'onboarding') {
+        ctx.helpers.refreshOnboarding();
         const clientRes = resolveClientId();
         if (!clientRes.clientId) {
           built.clientIdInput.focus();

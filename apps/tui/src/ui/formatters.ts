@@ -62,6 +62,8 @@ export function routeTitle(route: Route): string {
       return 'Album';
     case 'playlist':
       return 'Playlist';
+    case 'onboarding':
+      return 'Welcome';
     default:
       return 'Now Playing';
   }
