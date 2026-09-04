@@ -12,7 +12,10 @@ export async function initUi(
   actions: {
     triggerAuth: () => Promise<void>;
     handleSaveClientId: (id: string) => Promise<void>;
-    loadLibrary: (force?: boolean) => Promise<void>;
+    loadLibrary: (
+      force?: boolean,
+      collection?: import('spotoei-protocol').LibraryCollectionT,
+    ) => Promise<void>;
     loadCurrentLyrics: (force?: boolean) => Promise<void>;
     updateQueueView: () => Promise<void>;
     ensureAutoplayTracks: () => Promise<void>;
@@ -142,8 +145,13 @@ export async function initUi(
     },
     onRouteChange: (route) => {
       const curKind = routeKind(route);
-      if (curKind === 'library' && state.libraryItems.length === 0) {
-        void actions.loadLibrary();
+      if (curKind === 'library') {
+        const section = route.kind === 'library' ? route.section : state.librarySection;
+        if (state.libraryItems.length === 0 || state.librarySection !== section) {
+          state.librarySection = section;
+          state.libraryItems = [];
+          void actions.loadLibrary(false, section);
+        }
       }
       if (curKind === 'queue') {
         void actions.updateQueueView();

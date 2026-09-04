@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import { createTestRenderer } from '@opentui/core/testing';
+import type { KeyEvent } from '@opentui/core';
 import { PROTOCOL_VERSION } from 'spotoei-protocol';
-import { createUiCore, type UiViewState } from '../src/ui';
+import { createUiCore, type LibraryItemT, type UiViewState } from '../src/ui';
 import { routeKind } from '../src/ui/core/navigationStack';
 
 const baseState: UiViewState = {
@@ -33,6 +34,14 @@ function makeUi() {
     return { ui, renderOnce };
   });
 }
+
+const track = (id: string): LibraryItemT => ({
+  id,
+  uri: `spotify:track:${id}`,
+  name: id,
+  artists: [{ name: 'A' }],
+  durationMs: 1000,
+});
 
 describe('history positions and back behavior wiring', () => {
   it('restores list selection when navigating back', async () => {
@@ -74,6 +83,44 @@ describe('history positions and back behavior wiring', () => {
     expect(ui.getRouteStack().length).toBe(1);
     expect(ui.navigateBack()).toBe(true);
     expect(routeKind(ui.getRoute())).toBe('home');
+    await ui.shutdown();
+  });
+
+  it('restores per-library-section positions independently', async () => {
+    const { renderer, renderOnce } = await createTestRenderer({ width: 120, height: 40 });
+    const ui = createUiCore(renderer, baseState, {
+      onKey: () => {},
+      onSearchSubmit: () => {},
+      onSelectLibrary: () => {},
+      onSelectQueue: () => {},
+    });
+    await renderOnce();
+    const sendKey = (name: string, sequence: string) => {
+      renderer.keyInput.emit('keypress', {
+        name,
+        sequence,
+        ctrl: false,
+        shift: false,
+        meta: false,
+      } as unknown as KeyEvent);
+    };
+    ui.setRoute({ kind: 'library', section: 'saved_tracks' });
+    ui.setLibraryItems([track('t1'), track('t2'), track('t3')]);
+    await renderOnce();
+    sendKey('down', '\u001b[B');
+    sendKey('down', '\u001b[B');
+    await renderOnce();
+
+    ui.setRoute({ kind: 'library', section: 'playlists' });
+    ui.setLibraryItems([track('p1'), track('p2')]);
+    await renderOnce();
+
+    expect(ui.navigateBack()).toBe(true);
+    expect(ui.getRoute()).toEqual({ kind: 'library', section: 'saved_tracks' });
+    // Async setLibraryItems re-applies the saved per-section position.
+    ui.setLibraryItems([track('t1'), track('t2'), track('t3')]);
+    await renderOnce();
+    expect(ui.getContextTarget()).toMatchObject({ kind: 'track', id: 't3' });
     await ui.shutdown();
   });
 

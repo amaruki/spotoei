@@ -136,6 +136,50 @@ describe('mutateUrisWithPreservation', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toBe('network down');
   });
+
+  it('coalesces identical concurrent mutations onto one request', async () => {
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const client = createMockClient({
+      saveUris: async () => {
+        calls++;
+        await gate;
+        return true;
+      },
+    });
+    const uris = ['spotify:track:coalesce'];
+    const first = mutateUrisWithPreservation(client, undefined, 'acct1', uris, 'save');
+    const second = mutateUrisWithPreservation(client, undefined, 'acct1', uris, 'save');
+    release();
+    const [r1, r2] = await Promise.all([first, second]);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    expect(calls).toBe(1);
+  });
+
+  it('rejects overlapping URIs with a conflicting action while in flight', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const client = createMockClient({
+      saveUris: async () => {
+        await gate;
+        return true;
+      },
+    });
+    const uris = ['spotify:track:conflict'];
+    const first = mutateUrisWithPreservation(client, undefined, 'acct1', uris, 'save');
+    const conflict = await mutateUrisWithPreservation(client, undefined, 'acct1', uris, 'remove');
+    expect(conflict.ok).toBe(false);
+    expect(conflict.error).toContain('IN_FLIGHT');
+    release();
+    const r1 = await first;
+    expect(r1.ok).toBe(true);
+  });
 });
 
 describe('checkMembershipBatched', () => {

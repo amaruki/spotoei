@@ -78,7 +78,11 @@ export function createUiApi(ctx: UiCoreContext): Ui {
     setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }): void {
       ctx.currentLibraryItems.value = items;
       built.libraryList.options = libraryItemOptions(items, error);
-      built.libraryList.setSelectedIndex(0);
+      // Re-apply the saved per-section position: async loads arrive after
+      // showRoute, so the restore there runs against stale options.
+      const pos = ctx.positions.restore(route.current);
+      const max = Math.max(0, built.libraryList.options.length - 1);
+      built.libraryList.setSelectedIndex(Math.min(Math.max(0, pos.selected), max));
     },
     setLibraryLoading(loading: boolean): void {
       if (loading) {

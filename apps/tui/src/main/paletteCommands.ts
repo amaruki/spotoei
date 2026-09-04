@@ -39,6 +39,26 @@ export function buildPaletteCommands(
     { name: 'Home View', description: 'Esc', action: () => getUi()?.setRoute('home') },
     { name: 'Search', description: '/', action: () => getUi()?.setRoute('search') },
     { name: 'Library', description: 'r', action: () => getUi()?.setRoute('library') },
+    {
+      name: 'Library: Tracks',
+      description: 'saved tracks',
+      action: () => getUi()?.setRoute({ kind: 'library', section: 'saved_tracks' }),
+    },
+    {
+      name: 'Library: Albums',
+      description: 'saved albums',
+      action: () => getUi()?.setRoute({ kind: 'library', section: 'saved_albums' }),
+    },
+    {
+      name: 'Library: Artists',
+      description: 'followed artists',
+      action: () => getUi()?.setRoute({ kind: 'library', section: 'followed_artists' }),
+    },
+    {
+      name: 'Library: Playlists',
+      description: 'saved playlists',
+      action: () => getUi()?.setRoute({ kind: 'library', section: 'playlists' }),
+    },
     { name: 'Queue', description: 'u', action: () => getUi()?.setRoute('queue') },
     {
       name: 'Toggle Lyrics View',

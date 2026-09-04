@@ -9,7 +9,10 @@ export function createKeyHandler(
   ctx: AppContext,
   actions: {
     triggerAuth: () => Promise<void>;
-    loadLibrary: (force?: boolean) => Promise<void>;
+    loadLibrary: (
+      force?: boolean,
+      collection?: import('spotoei-protocol').LibraryCollectionT,
+    ) => Promise<void>;
     loadCurrentLyrics: (force?: boolean) => Promise<void>;
     updateQueueView: () => Promise<void>;
     ensureAutoplayTracks: () => Promise<void>;
@@ -150,11 +153,13 @@ export function createKeyHandler(
       return;
     }
 
-    // Library route & refresh with 'r' (lowercase)
+    // Library route & refresh with 'r' (lowercase refreshes the active section only)
     if (isLowerKey(key, 'r')) {
       if (ui) {
-        ui.setRoute('library');
-        void actions.loadLibrary(true);
+        const cur = ui.getRoute();
+        const section = cur.kind === 'library' ? cur.section : 'saved_tracks';
+        ui.setRoute({ kind: 'library', section });
+        void actions.loadLibrary(true, section);
       }
       return;
     }

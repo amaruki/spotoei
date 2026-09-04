@@ -1,5 +1,10 @@
 import type { ChildProcess } from 'node:child_process';
-import type { CatalogTrackT, PlaybackChangedDataT, SearchResponseT } from 'spotoei-protocol';
+import type {
+  CatalogTrackT,
+  LibraryCollectionT,
+  PlaybackChangedDataT,
+  SearchResponseT,
+} from 'spotoei-protocol';
 
 import type { createAuthClient } from '../auth';
 import type { Cache } from '../cache';
@@ -33,6 +38,7 @@ export interface AppState {
   currentInfo: UiViewState;
   activeFocus: FocusArea;
   libraryItems: LibraryItemT[];
+  librarySection: LibraryCollectionT;
   activePlaylistTracks: CatalogTrackT[];
   currentSearchHits: SearchResponseT['hits'];
   artistGenreCache: Map<string, string>;

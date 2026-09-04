@@ -103,15 +103,14 @@ export class LibraryManager {
     this.cache.invalidateQueryPrefix(this.accountId, this.makePrefix(collection));
   }
 
-  async refresh(collection?: LibraryCollectionT): Promise<void> {
+  async refresh(collection?: LibraryCollectionT): Promise<LibraryPageResponseT> {
     if (collection) {
       this.invalidate(collection);
-      await this.getPage(collection, 0, 20, true).catch(() => null);
-    } else {
-      for (const c of ['saved_tracks', 'saved_albums', 'playlists', 'followed_artists'] as const) {
-        this.invalidate(c);
-      }
-      await this.getPage('saved_tracks', 0, 20, true).catch(() => null);
+      return this.getPage(collection, 0, 20, true);
     }
+    for (const c of ['saved_tracks', 'saved_albums', 'playlists', 'followed_artists'] as const) {
+      this.invalidate(c);
+    }
+    return this.getPage('saved_tracks', 0, 20, true);
   }
 }

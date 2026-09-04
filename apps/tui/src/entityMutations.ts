@@ -89,6 +89,28 @@ export async function checkMembershipBatched(
   return results;
 }
 
+// In-flight mutation registry. Identical concurrent calls coalesce onto
+// the same promise (e.g. double-Enter); overlapping URIs with a different
+// action are rejected with IN_FLIGHT instead of corrupting prior-state.
+const pendingMutations = new Map<string, Promise<{ ok: boolean; error?: string }>>();
+
+function mutationKey(action: 'save' | 'remove', uris: string[]): string {
+  return `${action}:${uris.toSorted().join(',')}`;
+}
+
+function conflictingUris(action: 'save' | 'remove', uris: string[]): boolean {
+  const want = new Set(uris);
+  for (const key of pendingMutations.keys()) {
+    const sep = key.indexOf(':');
+    const otherAction = key.slice(0, sep);
+    if (otherAction === action) continue;
+    for (const uri of key.slice(sep + 1).split(',')) {
+      if (want.has(uri)) return true;
+    }
+  }
+  return false;
+}
+
 export async function mutateUrisWithPreservation(
   client: WebApiClient,
   cache: Cache | undefined,
@@ -101,6 +123,27 @@ export async function mutateUrisWithPreservation(
     return { ok: false, error: `Cannot ${action} ${uris.length} URIs (max ${MAX_URIS})` };
   }
 
+  const key = mutationKey(action, uris);
+  const pending = pendingMutations.get(key);
+  if (pending) return pending;
+  if (conflictingUris(action, uris)) {
+    return { ok: false, error: 'IN_FLIGHT: conflicting mutation in progress' };
+  }
+
+  const flight = runMutation(client, cache, accountId, uris, action).finally(() => {
+    if (pendingMutations.get(key) === flight) pendingMutations.delete(key);
+  });
+  pendingMutations.set(key, flight);
+  return flight;
+}
+
+async function runMutation(
+  client: WebApiClient,
+  cache: Cache | undefined,
+  accountId: string,
+  uris: string[],
+  action: 'save' | 'remove',
+): Promise<{ ok: boolean; error?: string }> {
   const prior = await checkMembershipBatched(client, cache, accountId, uris, false);
   const priorState = new Map<string, SaveStateT>();
   for (const m of prior) {

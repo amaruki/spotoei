@@ -9,7 +9,10 @@ import type { AppContext } from './types';
 export function wireSubscriptions(
   ctx: AppContext,
   actions: {
-    loadLibrary: (force?: boolean) => Promise<void>;
+    loadLibrary: (
+      force?: boolean,
+      collection?: import('spotoei-protocol').LibraryCollectionT,
+    ) => Promise<void>;
     loadCurrentLyrics: (force?: boolean) => Promise<void>;
     updateQueueView: () => Promise<void>;
     ensureAutoplayTracks: () => Promise<void>;

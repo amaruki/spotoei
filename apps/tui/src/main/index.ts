@@ -170,6 +170,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
       currentInfo,
       activeFocus: 'main',
       libraryItems: [],
+      librarySection: 'saved_tracks',
       activePlaylistTracks: [],
       currentSearchHits: [],
       artistGenreCache: new Map(),
