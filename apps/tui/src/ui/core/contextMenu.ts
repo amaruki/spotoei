@@ -85,12 +85,20 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
   if (kind === 'home' && (route.current as { browse?: unknown }).browse === undefined) {
     const parts = partitionHomeRows(ctx.currentHomeItems.value as never) as unknown as Record<
       string,
-      Array<{ kind: string; track?: EntityLike; artist?: EntityLike }>
+      Array<{ kind: string; track?: EntityLike; artist?: EntityLike; id?: string; label?: string }>
     >;
-    const groups = [parts.tracks, parts.artists, parts.recent];
-    const lists = [built.homeTracksList, built.homeArtistsList, built.homeRecentList];
-    const panel = Math.max(0, Math.min(2, ctx.homePanel.value));
+    const groups = [parts.tracks, parts.artists, parts.recent, parts.discover];
+    const lists = [
+      built.homeTracksList,
+      built.homeArtistsList,
+      built.homeRecentList,
+      built.homeDiscoverList,
+    ];
+    const panel = Math.max(0, Math.min(3, ctx.homePanel.value));
     const row = groups[panel]?.[lists[panel]?.getSelectedIndex() ?? 0];
+    if (row?.kind === 'discover' && row.id) {
+      return { kind: 'browse-entry', id: row.id, name: row.label ?? row.id };
+    }
     if (row?.kind === 'track' && row.track?.id) {
       return {
         kind: 'track',

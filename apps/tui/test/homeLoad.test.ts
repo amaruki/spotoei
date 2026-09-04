@@ -44,6 +44,7 @@ function setup(opts?: { forYouError?: string; recentError?: string }) {
       rows = r;
       meta = m;
     },
+    setStatus: () => {},
   } as unknown as Ui;
   const state = { homeTabs: initialHomeTabs() } as AppState;
   const deps = { homeManager, entityManager, getUi: () => ui, state };

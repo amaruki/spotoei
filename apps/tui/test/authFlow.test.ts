@@ -82,8 +82,9 @@ describe('auth changed subscription', () => {
       { enrichPlaybackTrack: (x: never) => x } as never,
     );
 
+    const listener: (next: AuthStatusDataT) => void = authListener ?? (() => {});
     expect(authListener).not.toBeNull();
-    authListener?.(authedStatus());
+    listener(authedStatus());
     expect(routeKind(ui.getRoute())).toBe('home');
     expect(currentInfo.auth.state).toBe('authenticated');
     await ui.shutdown();

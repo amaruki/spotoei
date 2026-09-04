@@ -42,6 +42,7 @@ export function buildPaletteCommands(
   const { clients, state } = ctx;
   return [
     { name: 'Home View', description: 'Esc', action: () => getUi()?.setRoute('home') },
+    { name: 'Browse', description: 'b', action: () => getUi()?.setRoute('browse') },
     { name: 'Search', description: '/', action: () => getUi()?.setRoute('search') },
     { name: 'Library', description: 'r', action: () => getUi()?.setRoute('library') },
     {

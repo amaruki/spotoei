@@ -4,18 +4,18 @@ import { COLOR_BORDER, COLOR_BORDER_FOCUS } from '../theme';
 import type { BuiltUi } from '../componentTree';
 import type { UiCoreContext } from './types';
 
-// Shared 2x2 category-panel helpers for Home (tracks/artists/recent)
-// and Search (tracks/artists/albums/playlists). Exactly one panel per
-// view holds keyboard focus; Tab cycles panels, arrows move within.
-export const HOME_PANELS = ['tracks', 'artists', 'recent'] as const;
+// Shared 2x2 category-panel helpers for Home (tracks/artists/recent/
+// discover) and Search (tracks/artists/albums/playlists). Exactly one
+// panel per view holds keyboard focus; Tab cycles panels, arrows move within.
+export const HOME_PANELS = ['tracks', 'artists', 'recent', 'discover'] as const;
 export const SEARCH_PANELS = ['tracks', 'artists', 'albums', 'playlists'] as const;
 
 export function homePanelLists(built: BuiltUi): SelectRenderable[] {
-  return [built.homeTracksList, built.homeArtistsList, built.homeRecentList];
+  return [built.homeTracksList, built.homeArtistsList, built.homeRecentList, built.homeDiscoverList];
 }
 
 export function homePanelBoxes(built: BuiltUi): BoxRenderable[] {
-  return [built.homeTracks, built.homeArtists, built.homeRecent];
+  return [built.homeTracks, built.homeArtists, built.homeRecent, built.homeDiscover];
 }
 
 export function searchPanelLists(built: BuiltUi): SelectRenderable[] {

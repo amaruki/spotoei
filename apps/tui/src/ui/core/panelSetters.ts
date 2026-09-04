@@ -103,9 +103,19 @@ export function createPanelSetters(ctx: UiCoreContext) {
           list: built.homeRecentList,
           empty: '(nothing played recently)',
         },
+        {
+          key: 'discover',
+          list: built.homeDiscoverList,
+          empty: '(no categories)',
+        },
       ] as const;
       const parts = partitionHomeRows(rows as never);
-      const byKey = { tracks: parts.tracks, artists: parts.artists, recent: parts.recent };
+      const byKey = {
+        tracks: parts.tracks,
+        artists: parts.artists,
+        recent: parts.recent,
+        discover: parts.discover,
+      };
       for (const panel of panels) {
         const options = homeRowOptions(byKey[panel.key] as never, panel.empty);
         if (meta?.error && panel.key === 'tracks') {

@@ -155,10 +155,15 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   built.queueList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
     opts.onSelectQueue(idx);
   });
-  const selectHomeRow = (panel: 0 | 1 | 2): void => {
-    const lists = [built.homeTracksList, built.homeArtistsList, built.homeRecentList];
+  const selectHomeRow = (panel: number): void => {
+    const lists = [
+      built.homeTracksList,
+      built.homeArtistsList,
+      built.homeRecentList,
+      built.homeDiscoverList,
+    ];
     const parts = partitionHomeRows(ctx.currentHomeItems.value);
-    const groups = [parts.tracks, parts.artists, parts.recent];
+    const groups = [parts.tracks, parts.artists, parts.recent, parts.discover];
     const row = groups[panel]?.[lists[panel]?.getSelectedIndex() ?? 0];
     if (row && opts.onSelectHomeRow) {
       opts.onSelectHomeRow(row);
@@ -167,6 +172,7 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   built.homeTracksList.on(SelectRenderableEvents.ITEM_SELECTED, () => selectHomeRow(0));
   built.homeArtistsList.on(SelectRenderableEvents.ITEM_SELECTED, () => selectHomeRow(1));
   built.homeRecentList.on(SelectRenderableEvents.ITEM_SELECTED, () => selectHomeRow(2));
+  built.homeDiscoverList.on(SelectRenderableEvents.ITEM_SELECTED, () => selectHomeRow(3));
   built.browseList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
     if (opts.onSelectBrowseEntry) {
       opts.onSelectBrowseEntry(idx);

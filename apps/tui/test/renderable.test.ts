@@ -382,8 +382,22 @@ describe('OpenTUI renderables integration', () => {
     expect(kindOf(ui.getRoute())).toBe('home');
     expect(ui.getFocus()).toBe('sidebar');
 
-    // 3. Pressing Enter confirms the selected route ('search') and transitions focus to main
+    // 2b. One step down lands on Browse (sidebar order: Home, Browse, Search, …)
     sendKey('return', '\r');
+    await renderOnce();
+    expect(kindOf(ui.getRoute())).toBe('home');
+    expect(ui.getFocus()).toBe('main');
+
+    // 3. One step down from Browse + Enter confirms 'search'. The render
+    // pass after setFocus matters: focus changes apply on the next frame,
+    // and the first keypress after a programmatic refocus is absorbed
+    // while focus settles, so a settling keypress goes first.
+    ui.setFocus('sidebar');
+    await renderOnce();
+    sendKey('down', '[B');
+    await renderOnce();
+    sendKey('down', '[B');
+    sendKey('return', '');
     await renderOnce();
     expect(kindOf(ui.getRoute())).toBe('search');
     expect(ui.getFocus()).toBe('main');

@@ -6,7 +6,8 @@ export type HomeRow =
   | { kind: 'context'; text: string }
   | { kind: 'header'; text: string }
   | { kind: 'track'; track: CatalogTrackT; playedAt?: string; saved?: boolean }
-  | { kind: 'artist'; artist: CatalogArtistT };
+  | { kind: 'artist'; artist: CatalogArtistT }
+  | { kind: 'discover'; id: string; label: string; description: string };
 
 export function homeRowOptions(
   rows: HomeRow[],
@@ -23,6 +24,8 @@ export function homeRowOptions(
         return { name: `── ${row.text} ──`, description: '' };
       case 'artist':
         return { name: `👤 ${row.artist.name}`, description: 'Enter: open artist' };
+      case 'discover':
+        return { name: `▸ ${row.label}`, description: row.description };
       case 'track': {
         const local = row.playedAt ? ` · ${formatPlayedAt(row.playedAt)}` : '';
         const liked = row.saved ? ' ♥' : '';
@@ -39,18 +42,21 @@ export interface HomePanels {
   tracks: HomeRow[];
   artists: HomeRow[];
   recent: HomeRow[];
+  discover: HomeRow[];
 }
 
 export function partitionHomeRows(rows: HomeRow[]): HomePanels {
   const tracks: HomeRow[] = [];
   const artists: HomeRow[] = [];
   const recent: HomeRow[] = [];
+  const discover: HomeRow[] = [];
   for (const row of rows) {
     if (row.kind === 'artist') artists.push(row);
+    else if (row.kind === 'discover') discover.push(row);
     else if (row.kind === 'track' && row.playedAt) recent.push(row);
     else if (row.kind === 'track') tracks.push(row);
   }
-  return { tracks, artists, recent };
+  return { tracks, artists, recent, discover };
 }
 
 export function formatPlayedAt(iso: string): string {

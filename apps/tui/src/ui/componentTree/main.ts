@@ -27,8 +27,8 @@ export interface MainNodes extends EntityViewNodes {
   homeArtistsList: SelectRenderable;
   homeRecent: BoxRenderable;
   homeRecentList: SelectRenderable;
-  homeNow: BoxRenderable;
-  homeNowText: TextRenderable;
+  homeDiscover: BoxRenderable;
+  homeDiscoverList: SelectRenderable;
   search: BoxRenderable;
   searchInputBox: BoxRenderable;
   searchInput: InputRenderable;
@@ -239,8 +239,8 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     homeArtistsList: homeView.homeArtistsList,
     homeRecent: homeView.homeRecent,
     homeRecentList: homeView.homeRecentList,
-    homeNow: homeView.homeNow,
-    homeNowText: homeView.homeNowText,
+    homeDiscover: homeView.homeDiscover,
+    homeDiscoverList: homeView.homeDiscoverList,
     search,
     searchInputBox,
     searchInput,

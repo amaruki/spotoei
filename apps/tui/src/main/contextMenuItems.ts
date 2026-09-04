@@ -142,6 +142,14 @@ export async function runContextAction(
       ui?.setStatus(`Spotify URI: ${target.uri ?? target.id}`, true);
       return;
     }
+    case 'open': {
+      if (target.kind === 'browse-entry') {
+        ui?.setRoute({ kind: 'home', tab: 'browse', browse: { category: target.id } });
+      } else {
+        ui?.setStatus(`Nothing to open for ${target.name}`, true);
+      }
+      return;
+    }
     default: {
       ui?.setStatus(`Unknown action: ${action}`, true);
     }

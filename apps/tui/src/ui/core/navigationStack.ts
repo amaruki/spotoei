@@ -68,6 +68,8 @@ export function routeFromLegacy(input: string | RouteT): RouteT {
   switch (input) {
     case 'home':
       return { kind: 'home', tab: 'for_you' };
+    case 'browse':
+      return { kind: 'home', tab: 'browse' };
     case 'search':
       return { kind: 'search' };
     case 'library':

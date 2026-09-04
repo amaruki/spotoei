@@ -55,7 +55,7 @@ export function createKeyHandler(
         return;
       }
       if (
-        ['space', 'k', 'n', 'p', '/', 'r', 'u', 'l', 'v', 's'].includes(
+        ['space', 'k', 'n', 'p', '/', 'r', 'u', 'l', 'v', 's', 'b'].includes(
           (key.name ?? '').toLowerCase(),
         ) ||
         isUpperKey(key, 's') ||
@@ -144,6 +144,12 @@ export function createKeyHandler(
     // Settings route with 's' (lowercase)
     if (isLowerKey(key, 's')) {
       if (ui) ui.setRoute('settings');
+      return;
+    }
+
+    // Browse route with 'b' (lowercase)
+    if (isLowerKey(key, 'b')) {
+      if (ui) ui.setRoute('browse');
       return;
     }
 

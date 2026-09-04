@@ -70,11 +70,14 @@ const homeRows = (): HomeRow[] => [
 ];
 
 describe('category panels', () => {
-  it('Tab cycles home panels tracks, artists, recent', async () => {
+  it('Tab cycles home panels tracks, artists, recent, discover', async () => {
     const { ui, renderOnce, sendKey } = await makeUi();
     await renderOnce();
     ui.setRoute({ kind: 'home', tab: 'for_you' });
-    ui.setHomeItems(homeRows());
+    ui.setHomeItems([
+      ...homeRows(),
+      { kind: 'discover', id: 'moods', label: 'Moods', description: '3 sections' },
+    ]);
     await renderOnce();
 
     expect(ui.getContextTarget()).toMatchObject({ kind: 'track', id: 't1' });
@@ -82,6 +85,8 @@ describe('category panels', () => {
     expect(ui.getContextTarget()).toMatchObject({ kind: 'artist', id: 'a1' });
     sendKey('tab', '\t');
     expect(ui.getContextTarget()).toMatchObject({ kind: 'track', id: 'r1' });
+    sendKey('tab', '\t');
+    expect(ui.getContextTarget()).toMatchObject({ kind: 'browse-entry', id: 'moods' });
     sendKey('tab', '\t');
     expect(ui.getContextTarget()).toMatchObject({ kind: 'track', id: 't1' });
     await ui.shutdown();
@@ -145,7 +150,7 @@ describe('category panels', () => {
     ui.setHomeItems(homeRows(), { rangeLabel: '6 months' });
     await renderOnce();
     const frame = captureCharFrame();
-    for (const title of ['Top Tracks', 'Top Artists', 'Recently Played', 'Now Playing']) {
+    for (const title of ['Top Tracks', 'Top Artists', 'Recently Played', 'Discover']) {
       expect(frame).toContain(title);
     }
     expect(frame).toContain('6 months');
@@ -174,6 +179,7 @@ describe('category panels', () => {
     expect(frame).toContain('(no top tracks yet)');
     expect(frame).toContain('(no top artists yet)');
     expect(frame).toContain('(nothing played recently)');
+    expect(frame).toContain('(no categories)');
     await ui.shutdown();
   });
 

@@ -1,5 +1,4 @@
-import { BoxRenderable, type CliRenderer, TextRenderable, fg, t } from '@opentui/core';
-import { COLOR_BORDER, COLOR_DIM, COLOR_PANEL_BG } from '../theme';
+import { BoxRenderable, type CliRenderer } from '@opentui/core';
 import { homeRowOptions } from '../views/homeRows';
 import { makeGridColumn, makeListPanel, type PanelNodes } from './panels';
 
@@ -11,12 +10,12 @@ export interface HomeViewNodes {
   homeArtistsList: PanelNodes['list'];
   homeRecent: BoxRenderable;
   homeRecentList: PanelNodes['list'];
-  homeNow: BoxRenderable;
-  homeNowText: TextRenderable;
+  homeDiscover: BoxRenderable;
+  homeDiscoverList: PanelNodes['list'];
 }
 
 // Home 2x2 grid: Top Tracks | Top Artists on the first row, Recently
-// Played | Now Playing on the second. Narrow terminals stack vertically.
+// Played | Discover on the second. Narrow terminals stack vertically.
 export function buildHomeView(renderer: CliRenderer): HomeViewNodes {
   const homeRow = new BoxRenderable(renderer, {
     id: 'home-row',
@@ -29,29 +28,11 @@ export function buildHomeView(renderer: CliRenderer): HomeViewNodes {
   const tracks = makeListPanel(renderer, 'home-tracks', 'Top Tracks', homeRowOptions([]));
   const recent = makeListPanel(renderer, 'home-recent', 'Recently Played', homeRowOptions([]));
   const artists = makeListPanel(renderer, 'home-artists', 'Top Artists', homeRowOptions([]));
-  const homeNow = new BoxRenderable(renderer, {
-    id: 'home-now',
-    flexGrow: 1,
-    flexShrink: 1,
-    borderStyle: 'single',
-    borderColor: COLOR_BORDER,
-    backgroundColor: COLOR_PANEL_BG,
-    title: 'Now Playing',
-    flexDirection: 'column',
-    paddingLeft: 1,
-    paddingRight: 1,
-  });
-  const homeNowText = new TextRenderable(renderer, {
-    id: 'home-now-text',
-    content: t`${fg(COLOR_DIM)('Nothing playing')}`,
-    wrapMode: 'word',
-    width: '100%',
-  });
-  homeNow.add(homeNowText);
+  const discover = makeListPanel(renderer, 'home-discover', 'Discover', homeRowOptions([]));
   colLeft.add(tracks.box);
   colLeft.add(recent.box);
   colRight.add(artists.box);
-  colRight.add(homeNow);
+  colRight.add(discover.box);
   homeRow.add(colLeft);
   homeRow.add(colRight);
   return {
@@ -62,7 +43,7 @@ export function buildHomeView(renderer: CliRenderer): HomeViewNodes {
     homeArtistsList: artists.list,
     homeRecent: recent.box,
     homeRecentList: recent.list,
-    homeNow,
-    homeNowText,
+    homeDiscover: discover.box,
+    homeDiscoverList: discover.list,
   };
 }

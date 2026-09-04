@@ -183,6 +183,8 @@ export async function initUi(
         void actions.ensureAutoplayTracks();
       } else if (row.kind === 'artist') {
         getUi()?.setRoute({ kind: 'artist', id: row.artist.id });
+      } else if (row.kind === 'discover') {
+        getUi()?.setRoute({ kind: 'home', tab: 'browse', browse: { category: row.id } });
       }
     },
     onRouteChange: (route) => {

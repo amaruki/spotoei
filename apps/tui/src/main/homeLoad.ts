@@ -1,4 +1,6 @@
 import type { CatalogArtistT, CatalogTrackT, TimeRangeT } from 'spotoei-protocol';
+import { buildBrowseCategories } from '../browse';
+import { getBrowseConfig } from '../config';
 import type { EntityManager } from '../entities';
 import type { HomeManager } from '../home';
 import { initialHomeTabs, setForYouError, setRecentError } from '../home/tabs';
@@ -24,8 +26,24 @@ const RANGE_LABEL: Record<TimeRangeT, string> = {
   long_term: 'All time',
 };
 
-// Load the active Home tab. Cached rows render instantly; scope errors
-// stay tab-local with a reauthorization hint; failures never block playback.
+// Static Discover rows from the browse registry. No API involved, so the
+// Discover panel always has content — even offline or on first paint.
+export function discoverRows(): HomeRow[] {
+  const rows: HomeRow[] = [];
+  for (const category of buildBrowseCategories(getBrowseConfig())) {
+    rows.push({
+      kind: 'discover',
+      id: category.id,
+      label: category.label,
+      description: `${category.entries.length} sections`,
+    });
+  }
+  return rows;
+}
+
+// Load the active Home tab. Discover rows paint instantly so the page
+// always has content; cached rows render instantly; scope errors stay
+// tab-local with a reauthorization hint; failures never block playback.
 export async function ensureHomeTab(
   deps: HomeLoaderDeps,
   tab: string,
@@ -36,6 +54,8 @@ export async function ensureHomeTab(
   if (!ui) return;
   const tabs = tabsOf(state);
   if (tab === 'for_you') {
+    ui.setHomeItems([...discoverRows()], { rangeLabel: RANGE_LABEL[tabs.range] });
+    ui.setStatus('Loading For You…');
     try {
       const data = await homeManager.loadForYou(tabs.range, force);
       state.homeTabs = setForYouError(tabs, undefined);
@@ -47,6 +67,7 @@ export async function ensureHomeTab(
           kind: 'artist',
           artist: a,
         })),
+        ...discoverRows(),
       ];
       ui.setHomeItems(rows, { rangeLabel: RANGE_LABEL[data.range] ?? data.range });
     } catch (err) {
@@ -57,6 +78,8 @@ export async function ensureHomeTab(
     return;
   }
   if (tab === 'recently_played') {
+    ui.setHomeItems([...discoverRows()]);
+    ui.setStatus('Loading Recently Played…');
     try {
       const data = await homeManager.loadRecentlyPlayed(force);
       state.homeTabs = setRecentError(tabs, undefined);
@@ -85,6 +108,7 @@ export async function ensureHomeTab(
             saved: typeof t.uri === 'string' && saved.has(t.uri),
           };
         }),
+        ...discoverRows(),
       ];
       ui.setHomeItems(rows);
     } catch (err) {

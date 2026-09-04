@@ -1,5 +1,5 @@
 import { bold, fg, t } from '@opentui/core';
-import { formatArtists, formatTime } from '../formatters';
+import { formatArtists } from '../formatters';
 import { COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
 import { getOnboardingContent } from '../views/onboarding';
 import { getSettingsContent } from '../views/settings';
@@ -8,6 +8,11 @@ import { routeKind } from './navigationStack';
 import type { UiCoreContext } from './types';
 // Build the live status / progress / footer / header surface. Each
 // closure mutates `ctx.state` and refreshes the matching renderable.
+function refreshHomePanels(): void {
+  // Home panels are data-driven through setHomeItems only; playback
+  // state lives in the persistent playback bar, not on this page.
+}
+
 export function createPlaybackBarHelpers(ctx: UiCoreContext) {
   const { built, focus, route, state, statusTimer } = ctx;
 
@@ -47,20 +52,7 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
   };
 
   const refreshHome = (): void => {
-    // Update the Now Playing home panel from live playback state.
-    // Never fetches: panel rows arrive through setHomeItems only.
-    const pb = state.playback;
-    const track = pb?.track;
-    if (!track) {
-      built.homeNowText.content = t`${fg(COLOR_DIM)('Nothing playing — pick a track from any panel')}`;
-      return;
-    }
-    const pos = formatTime(pb?.positionMs ?? 0);
-    const dur = formatTime(pb?.durationMs ?? track.durationMs ?? 0);
-    const vol = Math.round((pb?.volume ?? 1) * 100);
-    built.homeNowText.content = t`${fg(COLOR_TEXT)(bold(track.name || 'Untitled'))}
-${fg(COLOR_TEXT)(formatArtists(track.artists))}${track.album ? fg(COLOR_DIM)(` — ${track.album}`) : ''}
-${fg(COLOR_DIM)(`${pb?.state ?? 'idle'} · ${pos} / ${dur} · vol ${vol}% · shuffle ${pb?.shuffle ? 'on' : 'off'} · repeat ${pb?.repeat ?? 'off'}`)}`;
+    refreshHomePanels();
   };
 
   const refreshSettings = (): void => {

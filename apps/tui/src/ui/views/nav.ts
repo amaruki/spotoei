@@ -5,6 +5,7 @@ export function getNavOptions(isAuthenticated: boolean) {
   if (!isAuthenticated) {
     return [
       { name: '🔒 Home', description: 'Requires login', value: 'home' },
+      { name: '🔒 Browse', description: 'Requires login', value: 'browse' },
       { name: '🔒 Search', description: 'Requires login', value: 'search' },
       { name: '🔒 Library', description: 'Requires login', value: 'library' },
       { name: '🔒 Queue', description: 'Requires login', value: 'queue' },
@@ -12,7 +13,8 @@ export function getNavOptions(isAuthenticated: boolean) {
     ];
   }
   return [
-    { name: 'Home', description: 'Now playing', value: 'home' },
+    { name: 'Home', description: 'For you', value: 'home' },
+    { name: 'Browse', description: 'Discover', value: 'browse' },
     { name: 'Search', description: 'Find music', value: 'search' },
     { name: 'Library', description: 'Saved tracks', value: 'library' },
     { name: 'Queue', description: 'Upcoming', value: 'queue' },
