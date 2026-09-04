@@ -97,9 +97,9 @@ describe('auth protocol schemas', () => {
     const l = makeAuthLogout('req-3');
     expect(l.command).toBe('auth.logout');
 
-    const sc = makeAuthSetClientId('req-4', 'my-client-id');
+    const sc = makeAuthSetClientId('req-4', '0123456789abcdef0123456789abcdef');
     expect(sc.command).toBe('auth.set_client_id');
-    expect(sc.data).toEqual({ clientId: 'my-client-id' });
+    expect(sc.data).toEqual({ clientId: '0123456789abcdef0123456789abcdef' });
     expect(AuthSetClientIdData.safeParse(sc.data).success).toBe(true);
   });
 

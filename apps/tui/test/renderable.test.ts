@@ -414,16 +414,14 @@ describe('OpenTUI renderables integration', () => {
     sendKey('return', '\r');
     expect(submittedSearches).toEqual(['cold']);
 
-    // 6. Pressing Tab or Escape returns focus to sidebar
+    // 6. Pressing Escape pops navigation (FSD 8.4) or returns focus
     sendKey('escape', '\u001b');
     await renderOnce();
-    expect(ui.getFocus()).toBe('sidebar');
-
-    // 7. Pressing Tab in sidebar enters main context
+    expect(ui.getFocus()).toBe('main');
+    // 7. Pressing Tab from main enters sidebar
     sendKey('tab', '\t');
     await renderOnce();
-    expect(ui.getFocus()).toBe('main');
-
+    expect(ui.getFocus()).toBe('sidebar');
     await ui.shutdown();
   });
 

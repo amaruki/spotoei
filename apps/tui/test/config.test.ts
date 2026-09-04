@@ -69,19 +69,20 @@ describe('configuration and client ID resolution', () => {
   });
 
   it('saves client ID to config.json and resolves it', () => {
-    const res = saveClientId('my-new-spotify-client-id-12345');
+    const validId = '0123456789abcdef0123456789abcdef';
+    const res = saveClientId(validId);
     expect(res.source).toBe('config');
-    expect(res.clientId).toBe('my-new-spotify-client-id-12345');
+    expect(res.clientId).toBe(validId);
     expect(existsSync(res.configPath)).toBe(true);
 
     const content = JSON.parse(readFileSync(res.configPath, 'utf8'));
-    expect(content.spotify?.clientId).toBe('my-new-spotify-client-id-12345');
+    expect(content.spotify?.clientId).toBe(validId);
 
     // delete env to ensure reading from config works
     delete process.env.SPOTOEI_CLIENT_ID;
     const resolved = resolveClientId();
     expect(resolved.source).toBe('config');
-    expect(resolved.clientId).toBe('my-new-spotify-client-id-12345');
+    expect(resolved.clientId).toBe(validId);
   });
 
   it('resolves default redirect port 8989 and constructs redirect URI', () => {

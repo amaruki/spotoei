@@ -128,7 +128,7 @@ describe('VisualizerController unit tests', () => {
     ctrl.stop();
   });
 
-  test('cycleMode rotates spectrum -> winamp -> oscilloscope -> spectrum', () => {
+  test('cycleMode rotates spectrum -> winamp -> oscilloscope -> off -> spectrum', () => {
     const { child } = makeMockChild();
     const ctrl = new VisualizerController({ child, initialMode: 'spectrum' });
 
@@ -137,6 +137,8 @@ describe('VisualizerController unit tests', () => {
     expect(ctrl.getMode()).toBe('winamp');
     expect(ctrl.cycleMode()).toBe('oscilloscope');
     expect(ctrl.getMode()).toBe('oscilloscope');
+    expect(ctrl.cycleMode()).toBe('off');
+    expect(ctrl.getMode()).toBe('off');
     expect(ctrl.cycleMode()).toBe('spectrum');
     expect(ctrl.getMode()).toBe('spectrum');
   });
@@ -183,8 +185,6 @@ describe('VisualizerController unit tests', () => {
     expect(frames[0]).toEqual([0.3, 0.4]);
 
     ctrl.stop();
-  });
-
   test('downgrades from 60 to 30 FPS after 10 slow frames and upgrades back after 60 fast frames at 30', async () => {
     const { child, stdout } = makeMockChild();
     const ctrl = new VisualizerController({ child, initialMode: 'spectrum' });
@@ -206,7 +206,8 @@ describe('VisualizerController unit tests', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(ctrl.getCurrentFps()).toBe(30);
 
-    // Now feed 70 fast frames (<=36ms) at 30 FPS to recover back to 60.
+    // With windowed hysteresis (15s cooldown, 10s stable), 70 fast frames
+    // over ~700ms are insufficient to recover. Expect to remain at 30.
     for (let i = 0; i < 70; i++) {
       stdout.write(
         JSON.stringify({
@@ -221,7 +222,7 @@ describe('VisualizerController unit tests', () => {
       await new Promise((r) => setTimeout(r, 10));
     }
     await new Promise((r) => setTimeout(r, 50));
-    expect(ctrl.getCurrentFps()).toBe(60);
+    expect(ctrl.getCurrentFps()).toBe(30);
 
     ctrl.stop();
   });
