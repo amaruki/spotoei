@@ -9,7 +9,7 @@ import { initialHomeTabs } from '../home/tabs';
 import { createLyricsClient } from '../lyrics';
 import { createPlaybackClient } from '../playback';
 import { LibraryManager } from '../library';
-import { locatePlayer, startPlayer, stopPlayer } from '../player';
+import { locatePlayer, restartPlayer, startPlayer, stopPlayer } from '../player';
 import { QueueManager } from '../queue';
 import { createSearchClient } from '../search';
 import type { Ui, UiViewState } from '../ui';
@@ -101,14 +101,31 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
     child = handshake.child;
     ctx.child = handshake.child;
 
-    child.once('exit', (code, signal) => {
-      if (ui) {
-        ui.setStatus(
-          `Player sidecar exited unexpectedly (code ${code ?? 'none'}, sig ${signal ?? 'none'})`,
-          true,
-        );
+    const onPlayerExit = async (code: number | null, _signal: NodeJS.Signals | null): Promise<void> => {
+      const now = Date.now();
+      restartTimestamps = restartTimestamps.filter((t) => now - t < 60_000);
+      restartTimestamps.push(now);
+      if (restartTimestamps.length > 3) {
+        if (ui) ui.setStatus('Player unavailable: restart limit exceeded (3/60s)', true);
+        else process.stderr.write('Player unavailable: restart limit exceeded (3/60s)\n');
+        return;
       }
-    });
+      if (ui) ui.setStatus(`Player exited (code ${code ?? 'none'}), restarting...`, true);
+      try {
+        const crashed = child;
+        if (!crashed) return;
+        const next = await restartPlayer(crashed, playerBin, extraEnv, restartTimestamps.length - 1);
+        child = next.child;
+        ctx.child = next.child;
+        child.on('exit', onPlayerExit);
+        if (ui) ui.setStatus('Player restarted', false);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (ui) ui.setStatus(`Player unavailable: ${msg}`, true);
+        else process.stderr.write(`Player unavailable: ${msg}\n`);
+      }
+    };
+    child.on('exit', onPlayerExit);
 
     const auth = createAuthClient({ child });
     const playback = createPlaybackClient({ child });
