@@ -13,6 +13,7 @@ import type {
   SearchResponseT,
   VisualizerModeT,
 } from 'spotoei-protocol';
+import type { HomeRow } from './views/homeRows';
 export type FocusArea = 'sidebar' | 'main';
 
 export interface LibraryItemT {
@@ -104,6 +105,7 @@ export interface Ui {
   setLibraryLoading(loading: boolean): void;
   setLibraryLines(lines: string[], empty: boolean): void;
   setQueueSnapshot(snap: QueueSnapshotT): void;
+  setHomeItems(rows: HomeRow[], meta?: { error?: string }): void;
   setArtistAlbums(
     items: Array<{
       id: string;
@@ -175,6 +177,7 @@ export interface UiOptions {
   onSelectArtistAlbum?: (albumId: string) => void;
   onSelectEntityTrack?: (trackUri: string, title: string) => void;
   onEntityListEnd?: (kind: 'artist' | 'album' | 'playlist') => void;
+  onSelectHomeRow?: (row: HomeRow) => void;
   onSaveClientId?: (clientId: string) => void | Promise<void>;
   onAuthenticate?: () => void | Promise<void>;
   onRouteChange?: (route: Route) => void;

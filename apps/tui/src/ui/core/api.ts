@@ -11,6 +11,7 @@ import { COLOR_DIM } from '../theme';
 import { resolveContextTarget } from './contextMenu';
 import { browseCategoryOptions, browseEntryOptions } from '../views/browseView';
 import { albumTrackOptions, artistAlbumOptions, playlistTrackOptions } from '../views/entities';
+import { homeRowOptions } from '../views/homeRows';
 import { libraryItemOptions } from '../views/library';
 import { renderLyricsContent } from '../views/lyrics';
 import { searchHitOptions } from '../views/search';
@@ -108,6 +109,18 @@ export function createUiApi(ctx: UiCoreContext): Ui {
           description: '',
         }));
       }
+    },
+    setHomeItems(rows, meta?: { error?: string }): void {
+      ctx.currentHomeItems.value = rows;
+      const options = homeRowOptions(rows as never);
+      if (meta?.error) {
+        options.push({
+          name: `⚠ ${meta.error}`,
+          description: 'Tab-local error — other tabs unaffected',
+        });
+      }
+      built.homeList.options = options;
+      restoreListPosition(ctx, built.homeList);
     },
     setQueueSnapshot(snap: QueueSnapshotT): void {
       const items: { name: string; description: string }[] = [];

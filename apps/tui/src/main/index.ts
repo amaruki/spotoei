@@ -4,6 +4,8 @@ import { createAuthClient } from '../auth';
 import { Cache } from '../cache';
 import { resolveClientId } from '../config';
 import { EntityManager } from '../entities';
+import { HomeManager } from '../home';
+import { initialHomeTabs } from '../home/tabs';
 import { createLyricsClient } from '../lyrics';
 import { createPlaybackClient } from '../playback';
 import { LibraryManager } from '../library';
@@ -135,6 +137,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
       accountId: initialAuth.accountId ?? 'anonymous',
     });
     const entityManager = new EntityManager(webApi, cache, initialAuth.accountId ?? 'anonymous');
+    const homeManager = new HomeManager(webApi, cache, initialAuth.accountId ?? 'anonymous');
     const queueManager = new QueueManager({ webApi });
     const visualizer = createVisualizerController({ child });
     const lyrics = createLyricsClient({ child });
@@ -145,6 +148,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
       webApi,
       searchClient,
       entityManager,
+      homeManager,
       libraryManager,
       queueManager,
       visualizer,
@@ -175,6 +179,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
       libraryItems: [],
       librarySection: 'saved_tracks',
       entityPages: {},
+      homeTabs: initialHomeTabs(),
       activePlaylistTracks: [],
       currentSearchHits: [],
       artistGenreCache: new Map(),

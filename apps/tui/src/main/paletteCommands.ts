@@ -1,7 +1,9 @@
-import type { ArtistReleaseGroupT } from 'spotoei-protocol';
+import type { ArtistReleaseGroupT, HomeTabT, TimeRangeT } from 'spotoei-protocol';
 import { routeKind } from '../ui/core/navigationStack';
+import { setHomeRange } from '../home/tabs';
 import type { ContextTarget, Ui } from '../ui/types';
 import { switchArtistGroup } from './entityLoaders';
+import { ensureHomeTab } from './homeLoad';
 import { contextActionCommands } from './paletteContextActions';
 import type { AppContext } from './types';
 
@@ -62,6 +64,60 @@ export function buildPaletteCommands(
       action: () => getUi()?.setRoute({ kind: 'library', section: 'playlists' }),
     },
     { name: 'Queue', description: 'u', action: () => getUi()?.setRoute('queue') },
+    ...(['for_you', 'browse', 'recently_played'] as HomeTabT[]).map((tab) => ({
+      name: `Home tab: ${tab}`,
+      description: 'home tab',
+      action: () => getUi()?.setRoute({ kind: 'home', tab }),
+    })),
+    ...(
+      [
+        ['4 weeks', 'short_term'],
+        ['6 months', 'medium_term'],
+        ['All time', 'long_term'],
+      ] as Array<[string, TimeRangeT]>
+    ).map(([label, range]) => ({
+      name: `Home range: ${label}`,
+      description: 'for you range',
+      action: () => {
+        ctx.state.homeTabs = setHomeRange(ctx.state.homeTabs, range);
+        const u = getUi();
+        const r = u?.getRoute();
+        if (u && r?.kind === 'home' && r.tab === 'for_you') {
+          void ensureHomeTab(
+            {
+              homeManager: ctx.clients.homeManager,
+              entityManager: ctx.clients.entityManager,
+              getUi,
+              state: ctx.state,
+            },
+            'for_you',
+            true,
+          );
+        } else {
+          u?.setRoute({ kind: 'home', tab: 'for_you' });
+        }
+      },
+    })),
+    {
+      name: 'Reload Home',
+      description: 'refresh active home tab',
+      action: () => {
+        const u = getUi();
+        const r = u?.getRoute();
+        if (u && r?.kind === 'home' && r.tab !== 'browse') {
+          void ensureHomeTab(
+            {
+              homeManager: ctx.clients.homeManager,
+              entityManager: ctx.clients.entityManager,
+              getUi,
+              state: ctx.state,
+            },
+            r.tab,
+            true,
+          );
+        }
+      },
+    },
     ...(['album', 'single', 'appears_on', 'compilation'] as ArtistReleaseGroupT[]).map((group) => ({
       name: `Artist releases: ${group}`,
       description: 'release group tab',

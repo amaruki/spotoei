@@ -13,6 +13,7 @@ import type {
 
 import type { ViewPositionStore } from '../../navigation/viewPositions';
 import type { BuiltUi } from '../componentTree';
+import type { TimeRangeT } from 'spotoei-protocol';
 import type {
   ContextMenuItem,
   FocusArea,
@@ -24,6 +25,7 @@ import type {
   UiViewState,
   VisualizerFrame,
 } from '../types';
+import type { HomeRow } from '../views/homeRows';
 
 export interface UiCoreContext {
   renderer: CliRenderer;
@@ -39,6 +41,8 @@ export interface UiCoreContext {
   currentLibraryItems: { value: LibraryItemT[] };
   currentSearchHits: { value: SearchHitT[] };
   currentRouteItems: { value: unknown[] };
+  currentHomeItems: { value: HomeRow[] };
+  homeRange: { current: TimeRangeT };
   manualLyricsScroll: { value: boolean };
   menu: {
     open: boolean;

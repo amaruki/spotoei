@@ -40,6 +40,8 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   const currentSearchHits = { value: [] as unknown[] as never };
   const currentLibraryItems = { value: [] as never };
   const currentRouteItems: { value: unknown[] } = { value: [] };
+  const currentHomeItems: UiCoreContext['currentHomeItems'] = { value: [] };
+  const homeRange: UiCoreContext['homeRange'] = { current: 'medium_term' };
   const menu: { open: boolean; prevFocus: FocusArea; items: ContextMenuItem[] } = {
     open: false,
     prevFocus: 'sidebar',
@@ -68,6 +70,8 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     currentSearchHits: currentSearchHits as unknown as UiCoreContext['currentSearchHits'],
     currentLibraryItems: currentLibraryItems as unknown as UiCoreContext['currentLibraryItems'],
     currentRouteItems,
+    currentHomeItems,
+    homeRange,
     manualLyricsScroll,
     menu,
     palette,
@@ -114,6 +118,12 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   });
   built.queueList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
     opts.onSelectQueue(idx);
+  });
+  built.homeList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
+    const row = ctx.currentHomeItems.value[idx];
+    if (row && opts.onSelectHomeRow) {
+      opts.onSelectHomeRow(row);
+    }
   });
   built.artistList.on(SelectRenderableEvents.ITEM_SELECTED, () => {
     const item = ctx.currentRouteItems.value[built.artistList.getSelectedIndex()] as unknown as

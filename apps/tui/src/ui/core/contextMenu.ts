@@ -71,6 +71,28 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
     const targetKind = kind === 'artist' ? 'album' : 'track';
     return { kind: targetKind, id: entity.id, uri: entity.uri, name: entity.name ?? entity.id };
   }
+  if (kind === 'home' && (route.current as { browse?: unknown }).browse === undefined) {
+    const row = ctx.currentHomeItems.value[built.homeList.getSelectedIndex()] as
+      | { kind: string; track?: EntityLike; artist?: EntityLike }
+      | undefined;
+    if (row?.kind === 'track' && row.track?.id) {
+      return {
+        kind: 'track',
+        id: row.track.id,
+        uri: row.track.uri,
+        name: row.track.name ?? row.track.id,
+      };
+    }
+    if (row?.kind === 'artist' && row.artist?.id) {
+      return {
+        kind: 'artist',
+        id: row.artist.id,
+        uri: row.artist.uri,
+        name: row.artist.name ?? row.artist.id,
+      };
+    }
+    return null;
+  }
   if (kind === 'home' && (route.current as { browse?: unknown }).browse !== undefined) {
     const entry = asEntity(ctx.currentRouteItems.value[built.browseList.getSelectedIndex()]) as
       | (EntityLike & { label?: string })

@@ -6,6 +6,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
   const { built, focus, manualLyricsScroll, opts, route, state, visualizerVisible } = ctx;
   const listForRoute = (r: Route) => {
     const kind = routeKind(r);
+    if (kind === 'home' && (r as { browse?: unknown }).browse === undefined) return built.homeList;
     if (kind === 'search') return built.searchResults;
     if (kind === 'library') return built.libraryList;
     if (kind === 'queue') return built.queueList;
@@ -99,6 +100,11 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       } else {
         built.queueList.blur();
       }
+      if (finalKind === 'home' && !isHomeBrowse) {
+        built.homeList.focus();
+      } else {
+        built.homeList.blur();
+      }
       for (const [viewKind, list] of [
         ['artist', built.artistList],
         ['album', built.albumList],
@@ -117,6 +123,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
         }
       }
     } else {
+      built.homeList.blur();
       built.searchInput.blur();
       built.searchResults.blur();
       built.clientIdInput.blur();
@@ -164,6 +171,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     const curKind = routeKind(route.current);
 
     if (next === 'sidebar') {
+      built.homeList.blur();
       built.searchInput.blur();
       built.searchResults.blur();
       built.clientIdInput.blur();
@@ -176,7 +184,9 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       built.nav.focus();
     } else {
       built.nav.blur();
-      if (curKind === 'search') {
+      if (curKind === 'home' && (route.current as { browse?: unknown }).browse === undefined) {
+        built.homeList.focus();
+      } else if (curKind === 'search') {
         built.searchResults.blur();
         built.searchInput.focus();
         ctx.helpers.updateSearchFocusVisuals(true);

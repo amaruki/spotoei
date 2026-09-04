@@ -6,7 +6,7 @@ export * from './types';
 export * from './theme';
 export * from './formatters';
 export * from './visualizerCanvas';
-export * from './views/home';
+export * from './views/homeRows';
 export * from './views/nav';
 export * from './views/settings';
 export * from './views/lyrics';

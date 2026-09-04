@@ -5,6 +5,7 @@ import type { ContextTarget } from '../ui/types';
 import { routeKind } from '../ui/core/navigationStack';
 import { runContextAction } from './contextMenuItems';
 import { ensureEntityRoute, loadMoreEntityItems } from './entityLoaders';
+import { ensureHomeTab } from './homeLoad';
 import { handleSearchHitSelect, routeForLibraryItem } from './entitySelect';
 import { buildPaletteCommands } from './paletteCommands';
 import type { AppContext } from './types';
@@ -155,8 +156,29 @@ export async function initUi(
         void actions.ensureAutoplayTracks();
       }
     },
+    onSelectHomeRow: (row) => {
+      if (row.kind === 'track') {
+        void actions.playTrackOrContext({ trackUri: row.track.uri, title: row.track.name });
+        void actions.updateQueueView();
+        void actions.ensureAutoplayTracks();
+      } else if (row.kind === 'artist') {
+        getUi()?.setRoute({ kind: 'artist', id: row.artist.id });
+      }
+    },
     onRouteChange: (route) => {
       const curKind = routeKind(route);
+      if (curKind === 'home' && route.kind === 'home' && route.tab !== 'browse') {
+        state.homeTabs.activeTab = route.tab;
+        void ensureHomeTab(
+          {
+            homeManager: clients.homeManager,
+            entityManager: clients.entityManager,
+            getUi,
+            state,
+          },
+          route.tab,
+        );
+      }
       if (curKind === 'library') {
         const section = route.kind === 'library' ? route.section : state.librarySection;
         if (state.libraryItems.length === 0 || state.librarySection !== section) {

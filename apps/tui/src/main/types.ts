@@ -9,6 +9,8 @@ import type {
 import type { createAuthClient } from '../auth';
 import type { Cache } from '../cache';
 import type { EntityManager } from '../entities';
+import type { HomeManager } from '../home';
+import type { HomeTabState } from '../home/tabs';
 import type { LibraryManager } from '../library';
 import type { createLyricsClient } from '../lyrics';
 import type { createPlaybackClient } from '../playback';
@@ -29,6 +31,7 @@ export interface AppClients {
   webApi: WebApiClient;
   searchClient: ReturnType<typeof createSearchClient>;
   entityManager: EntityManager;
+  homeManager: HomeManager;
   libraryManager: LibraryManager;
   queueManager: QueueManager;
   visualizer: ReturnType<typeof createVisualizerController>;
@@ -45,6 +48,7 @@ export interface AppState {
     string,
     { items: unknown[]; nextOffset: number; hasMore: boolean; group: string }
   >;
+  homeTabs: HomeTabState;
   activePlaylistTracks: CatalogTrackT[];
   currentSearchHits: SearchResponseT['hits'];
   artistGenreCache: Map<string, string>;

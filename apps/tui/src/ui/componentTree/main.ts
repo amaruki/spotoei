@@ -11,7 +11,7 @@ import {
 } from '@opentui/core';
 import { COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_DIM, COLOR_PANEL_BG } from '../theme';
 import type { UiViewState } from '../types';
-import { getHomeContent } from '../views/home';
+import { homeRowOptions } from '../views/homeRows';
 import { getSettingsContent } from '../views/settings';
 import { buildEntityViews, type EntityViewNodes } from './entityViews';
 import { buildVisualizer, type VisualizerNodes } from './visualizer';
@@ -20,7 +20,7 @@ export interface MainNodes extends VisualizerNodes, EntityViewNodes {
   center: BoxRenderable;
   main: BoxRenderable;
   home: BoxRenderable;
-  homeText: TextRenderable;
+  homeList: SelectRenderable;
   search: BoxRenderable;
   searchInputBox: BoxRenderable;
   searchInput: InputRenderable;
@@ -68,11 +68,16 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     flexGrow: 1,
     flexDirection: 'column',
   });
-  const homeText = new TextRenderable(renderer, {
-    id: 'home-text',
-    content: getHomeContent(state),
+  const homeList = new SelectRenderable(renderer, {
+    id: 'home-list',
+    options: homeRowOptions([]),
+    showScrollIndicator: true,
+    showDescription: true,
+    width: '100%',
+    height: '100%',
+    flexGrow: 1,
   });
-  home.add(homeText);
+  home.add(homeList);
   main.add(home);
 
   // Search view
@@ -263,7 +268,7 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     center,
     main,
     home,
-    homeText,
+    homeList,
     search,
     searchInputBox,
     searchInput,

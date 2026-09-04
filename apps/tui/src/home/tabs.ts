@@ -25,3 +25,7 @@ export function setForYouError(state: HomeTabState, message?: string): HomeTabSt
 export function setRecentError(state: HomeTabState, message?: string): HomeTabState {
   return { ...state, recentError: message };
 }
+
+export function setHomeRange(state: HomeTabState, range: TimeRangeT): HomeTabState {
+  return { ...state, range };
+}

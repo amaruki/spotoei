@@ -1,7 +1,7 @@
 import { bold, fg, t } from '@opentui/core';
 import { formatArtists } from '../formatters';
 import { COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
-import { getHomeContent } from '../views/home';
+import { contextLine, homeRowOptions } from '../views/homeRows';
 import { getSettingsContent } from '../views/settings';
 import { buildPlaybackBarContent } from '../playbackBarView';
 import { routeKind } from './navigationStack';
@@ -41,7 +41,19 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
   };
 
   const refreshHome = (): void => {
-    built.homeText.content = getHomeContent(state);
+    // Re-render loaded home rows with the live playback context line.
+    // Never fetches: data arrives through setHomeItems only.
+    const rows = ctx.currentHomeItems.value;
+    if (rows.length === 0) return;
+    const pb = state.playback;
+    const line = contextLine(pb?.track?.name, pb?.track?.artists, pb?.state);
+    const withoutContext = rows.filter((r) => r.kind !== 'context');
+    const next =
+      line !== null
+        ? [{ kind: 'context', text: line } as const, ...withoutContext]
+        : withoutContext;
+    ctx.currentHomeItems.value = next;
+    built.homeList.options = homeRowOptions(next as never);
   };
 
   const refreshSettings = (): void => {
