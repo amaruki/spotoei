@@ -418,10 +418,10 @@ describe('OpenTUI renderables integration', () => {
     sendKey('escape', '\u001b');
     await renderOnce();
     expect(ui.getFocus()).toBe('main');
-    // 7. Pressing Tab from main enters sidebar
+    // 7. Pressing Tab cycles home panels, staying in main
     sendKey('tab', '\t');
     await renderOnce();
-    expect(ui.getFocus()).toBe('sidebar');
+    expect(ui.getFocus()).toBe('main');
     await ui.shutdown();
   });
 

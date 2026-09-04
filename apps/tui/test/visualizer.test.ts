@@ -185,6 +185,8 @@ describe('VisualizerController unit tests', () => {
     expect(frames[0]).toEqual([0.3, 0.4]);
 
     ctrl.stop();
+  });
+
   test('downgrades from 60 to 30 FPS after 10 slow frames and upgrades back after 60 fast frames at 30', async () => {
     const { child, stdout } = makeMockChild();
     const ctrl = new VisualizerController({ child, initialMode: 'spectrum' });
@@ -207,7 +209,7 @@ describe('VisualizerController unit tests', () => {
     expect(ctrl.getCurrentFps()).toBe(30);
 
     // With windowed hysteresis (15s cooldown, 10s stable), 70 fast frames
-    // over ~700ms are insufficient to recover. Expect to remain at 30.
+    // over ~700ms are insufficient to recover; remain at 30 FPS.
     for (let i = 0; i < 70; i++) {
       stdout.write(
         JSON.stringify({
