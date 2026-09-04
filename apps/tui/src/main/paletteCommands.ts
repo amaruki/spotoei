@@ -1,5 +1,7 @@
+import type { ArtistReleaseGroupT } from 'spotoei-protocol';
 import { routeKind } from '../ui/core/navigationStack';
 import type { ContextTarget, Ui } from '../ui/types';
+import { switchArtistGroup } from './entityLoaders';
 import { contextActionCommands } from './paletteContextActions';
 import type { AppContext } from './types';
 
@@ -60,6 +62,23 @@ export function buildPaletteCommands(
       action: () => getUi()?.setRoute({ kind: 'library', section: 'playlists' }),
     },
     { name: 'Queue', description: 'u', action: () => getUi()?.setRoute('queue') },
+    ...(['album', 'single', 'appears_on', 'compilation'] as ArtistReleaseGroupT[]).map((group) => ({
+      name: `Artist releases: ${group}`,
+      description: 'release group tab',
+      action: () => {
+        const u = getUi();
+        const r = u?.getRoute();
+        if (r?.kind === 'artist') {
+          void switchArtistGroup(
+            { entityManager: ctx.clients.entityManager, getUi, state: ctx.state },
+            r.id,
+            group,
+          );
+        } else {
+          u?.setStatus('Open an artist page first, then switch release groups');
+        }
+      },
+    })),
     {
       name: 'Toggle Lyrics View',
       description: 'l',

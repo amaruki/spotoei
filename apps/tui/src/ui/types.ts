@@ -112,6 +112,7 @@ export interface Ui {
       artists: Array<{ id?: string; name: string; uri?: string }>;
       releaseDate?: string;
     }>,
+    opts?: { append?: boolean },
   ): void;
   setAlbumTracks(
     items: Array<{
@@ -121,6 +122,7 @@ export interface Ui {
       artists: Array<{ id?: string; name: string; uri?: string }>;
       durationMs: number;
     }>,
+    opts?: { append?: boolean },
   ): void;
   setPlaylistTracks(
     items: Array<{
@@ -130,6 +132,7 @@ export interface Ui {
       artists: Array<{ id?: string; name: string; uri?: string }>;
       durationMs: number;
     }>,
+    opts?: { append?: boolean },
   ): void;
   setBrowseCategories(cats: Array<{ id: string; label: string; entries: unknown[] }>): void;
   setBrowseEntries(
@@ -171,6 +174,7 @@ export interface UiOptions {
   onSelectQueue: (idx: number) => void;
   onSelectArtistAlbum?: (albumId: string) => void;
   onSelectEntityTrack?: (trackUri: string, title: string) => void;
+  onEntityListEnd?: (kind: 'artist' | 'album' | 'playlist') => void;
   onSaveClientId?: (clientId: string) => void | Promise<void>;
   onAuthenticate?: () => void | Promise<void>;
   onRouteChange?: (route: Route) => void;

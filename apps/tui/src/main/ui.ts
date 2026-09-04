@@ -4,6 +4,7 @@ import { createUi, type Ui } from '../ui';
 import type { ContextTarget } from '../ui/types';
 import { routeKind } from '../ui/core/navigationStack';
 import { runContextAction } from './contextMenuItems';
+import { ensureEntityRoute, loadMoreEntityItems } from './entityLoaders';
 import { handleSearchHitSelect, routeForLibraryItem } from './entitySelect';
 import { buildPaletteCommands } from './paletteCommands';
 import type { AppContext } from './types';
@@ -126,6 +127,17 @@ export async function initUi(
       void actions.updateQueueView();
       void actions.ensureAutoplayTracks();
     },
+    onEntityListEnd: (kind) => {
+      const u = getUi();
+      const r = u?.getRoute();
+      if (r && r.kind === kind && 'id' in r && typeof r.id === 'string') {
+        void loadMoreEntityItems(
+          { entityManager: clients.entityManager, getUi, state },
+          kind,
+          r.id,
+        );
+      }
+    },
     onSelectQueue: (idx) => {
       const snap = clients.queueManager.getSnapshot();
       const hasCurrent = Boolean(snap.current);
@@ -159,6 +171,9 @@ export async function initUi(
       }
       if (curKind === 'lyrics') {
         void actions.loadCurrentLyrics();
+      }
+      if (curKind === 'artist' || curKind === 'album' || curKind === 'playlist') {
+        void ensureEntityRoute({ entityManager: clients.entityManager, getUi, state }, route);
       }
     },
     onSaveClientId: actions.handleSaveClientId,

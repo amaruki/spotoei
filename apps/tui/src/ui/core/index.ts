@@ -20,7 +20,7 @@ import { createPaletteHelpers } from './palette';
 import { createPlaybackBarHelpers } from './playbackBar';
 import { createRouteHelpers } from './route';
 import { createVisualizerHelpers } from './visualizer';
-import type { UiCoreContext } from './types';
+import type { AnySelect, UiCoreContext } from './types';
 
 // Build the entire controller: state bag, helpers, listeners, dispatcher,
 // renderer, and the public `Ui` API. Splitting was forced by the < 300 LoC
@@ -137,6 +137,17 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   built.playlistList.on(SelectRenderableEvents.ITEM_SELECTED, () => {
     playSelectedEntityTrack(built.playlistList);
   });
+  // Paging trigger: reaching the last row loads the next page in place.
+  const watchListEnd = (kind: 'artist' | 'album' | 'playlist', list: AnySelect): void => {
+    list.on(SelectRenderableEvents.SELECTION_CHANGED, (idx: number) => {
+      if (idx >= list.options.length - 1 && opts.onEntityListEnd) {
+        opts.onEntityListEnd(kind);
+      }
+    });
+  };
+  watchListEnd('artist', built.artistList);
+  watchListEnd('album', built.albumList);
+  watchListEnd('playlist', built.playlistList);
   built.paletteInput.on(InputRenderableEvents.CHANGE, (value: string) => {
     ctx.helpers.updatePaletteList(value);
   });

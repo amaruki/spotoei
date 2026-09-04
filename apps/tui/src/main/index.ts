@@ -3,6 +3,7 @@ import type { ChildProcess } from 'node:child_process';
 import { createAuthClient } from '../auth';
 import { Cache } from '../cache';
 import { resolveClientId } from '../config';
+import { EntityManager } from '../entities';
 import { createLyricsClient } from '../lyrics';
 import { createPlaybackClient } from '../playback';
 import { LibraryManager } from '../library';
@@ -133,6 +134,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
       cache,
       accountId: initialAuth.accountId ?? 'anonymous',
     });
+    const entityManager = new EntityManager(webApi, cache, initialAuth.accountId ?? 'anonymous');
     const queueManager = new QueueManager({ webApi });
     const visualizer = createVisualizerController({ child });
     const lyrics = createLyricsClient({ child });
@@ -142,6 +144,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
       playback,
       webApi,
       searchClient,
+      entityManager,
       libraryManager,
       queueManager,
       visualizer,
@@ -171,6 +174,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
       activeFocus: 'main',
       libraryItems: [],
       librarySection: 'saved_tracks',
+      entityPages: {},
       activePlaylistTracks: [],
       currentSearchHits: [],
       artistGenreCache: new Map(),

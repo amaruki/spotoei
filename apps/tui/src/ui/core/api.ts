@@ -28,6 +28,16 @@ import type {
 } from './types';
 // Creates the public `Ui` API handle that consumers use to update state.
 // All setters propagate through `ctx.helpers` and trigger granular repaints.
+function restoreListPosition(
+  ctx: UiCoreContext,
+  list: { options: unknown[]; setSelectedIndex: (idx: number) => void },
+): void {
+  // Async loads arrive after showRoute, so re-apply the saved position here.
+  const pos = ctx.positions.restore(ctx.route.current);
+  const max = Math.max(0, list.options.length - 1);
+  list.setSelectedIndex(Math.min(Math.max(0, pos.selected), max));
+}
+
 export function createUiApi(ctx: UiCoreContext): Ui {
   const {
     built,
@@ -78,11 +88,7 @@ export function createUiApi(ctx: UiCoreContext): Ui {
     setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }): void {
       ctx.currentLibraryItems.value = items;
       built.libraryList.options = libraryItemOptions(items, error);
-      // Re-apply the saved per-section position: async loads arrive after
-      // showRoute, so the restore there runs against stale options.
-      const pos = ctx.positions.restore(route.current);
-      const max = Math.max(0, built.libraryList.options.length - 1);
-      built.libraryList.setSelectedIndex(Math.min(Math.max(0, pos.selected), max));
+      restoreListPosition(ctx, built.libraryList);
     },
     setLibraryLoading(loading: boolean): void {
       if (loading) {
@@ -127,20 +133,38 @@ export function createUiApi(ctx: UiCoreContext): Ui {
         built.queueList.setSelectedIndex(0);
       }
     },
-    setArtistAlbums(items): void {
-      ctx.currentRouteItems.value = items as unknown[];
-      built.artistList.options = artistAlbumOptions(items as never);
-      built.artistList.setSelectedIndex(0);
+    setArtistAlbums(items, opts?: { append?: boolean }): void {
+      const rows = artistAlbumOptions(items as never);
+      if (opts?.append) {
+        ctx.currentRouteItems.value = [...ctx.currentRouteItems.value, ...(items as unknown[])];
+        built.artistList.options = [...built.artistList.options, ...rows];
+      } else {
+        ctx.currentRouteItems.value = items as unknown[];
+        built.artistList.options = rows;
+        restoreListPosition(ctx, built.artistList);
+      }
     },
-    setAlbumTracks(items): void {
-      ctx.currentRouteItems.value = items as unknown[];
-      built.albumList.options = albumTrackOptions(items as never);
-      built.albumList.setSelectedIndex(0);
+    setAlbumTracks(items, opts?: { append?: boolean }): void {
+      const rows = albumTrackOptions(items as never);
+      if (opts?.append) {
+        ctx.currentRouteItems.value = [...ctx.currentRouteItems.value, ...(items as unknown[])];
+        built.albumList.options = [...built.albumList.options, ...rows];
+      } else {
+        ctx.currentRouteItems.value = items as unknown[];
+        built.albumList.options = rows;
+        restoreListPosition(ctx, built.albumList);
+      }
     },
-    setPlaylistTracks(items): void {
-      ctx.currentRouteItems.value = items as unknown[];
-      built.playlistList.options = playlistTrackOptions(items as never);
-      built.playlistList.setSelectedIndex(0);
+    setPlaylistTracks(items, opts?: { append?: boolean }): void {
+      const rows = playlistTrackOptions(items as never);
+      if (opts?.append) {
+        ctx.currentRouteItems.value = [...ctx.currentRouteItems.value, ...(items as unknown[])];
+        built.playlistList.options = [...built.playlistList.options, ...rows];
+      } else {
+        ctx.currentRouteItems.value = items as unknown[];
+        built.playlistList.options = rows;
+        restoreListPosition(ctx, built.playlistList);
+      }
     },
     setBrowseCategories(cats): void {
       ctx.currentRouteItems.value = cats as unknown[];
