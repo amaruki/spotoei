@@ -17,20 +17,29 @@ export class CatalogEndpoints {
       'playlist',
     ],
     limit = 10,
+    signal?: AbortSignal,
   ): Promise<SearchResponseT> {
     if (!query.trim()) {
       return { query, hits: [] };
     }
 
-    // Spotify restricts search limit to max 10; values > 10 return 400 Bad Request ("Invalid limit")
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+
     const safeLimit = Math.min(Math.max(1, limit), 10);
 
     try {
-      const json = await this.transport.request('/search', {
-        q: query,
-        type: types.join(','),
-        limit: String(safeLimit),
-      });
+      const json = await this.transport.request(
+        '/search',
+        {
+          q: query,
+          type: types.join(','),
+          limit: String(safeLimit),
+        },
+        'GET',
+        signal,
+      );
 
       const root = toSearchResponse(json);
       const hits: SearchResponseT['hits'] = [];
@@ -62,6 +71,8 @@ export class CatalogEndpoints {
 
       return { query, hits };
     } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') throw err;
+      if (err instanceof Error && err.name === 'AbortError') throw err;
       const msg = err instanceof Error ? err.message : String(err);
       const code = msg.startsWith('RATE_LIMITED')
         ? 'RATE_LIMITED'

@@ -18,6 +18,7 @@ export class Transport {
     path: string,
     paramsOrBody: unknown = {},
     method: HttpMethod = 'GET',
+    signal?: AbortSignal,
   ): Promise<unknown> {
     const isGet = method === 'GET';
     let urlStr = path.startsWith('http') ? path : `${this.baseUrl}${path}`;
@@ -45,6 +46,9 @@ export class Transport {
     }
 
     const doFetch = async (retryCount = 0): Promise<unknown> => {
+      if (signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
       const token = await this.tokenProvider.getAccessToken();
       const headers: Record<string, string> = {
         Authorization: `Bearer ${token}`,
@@ -54,11 +58,18 @@ export class Transport {
         headers['Content-Type'] = 'application/json';
       }
 
+      const timeoutSignal = AbortSignal.timeout(10000);
+      const combinedSignal = signal
+        ? typeof AbortSignal.any === 'function'
+          ? AbortSignal.any([timeoutSignal, signal])
+          : signal
+        : timeoutSignal;
+
       const res = await fetch(urlStr, {
         method,
         headers,
         ...(bodyStr ? { body: bodyStr } : {}),
-        signal: AbortSignal.timeout(10000),
+        signal: combinedSignal,
       });
 
       if (!res.ok) {

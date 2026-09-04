@@ -35,6 +35,10 @@ export class EntityManager {
       if (cached) return cached;
     }
     const view = await this.client.getArtistView(id);
+    if (view.completeness !== 'complete') {
+      this.putCached(key, view, 60_000);
+      return view;
+    }
     this.putCached(key, view, 24 * 60 * 60_000);
     return view;
   }
@@ -65,6 +69,10 @@ export class EntityManager {
       if (cached) return cached;
     }
     const view = await this.client.getAlbumView(id);
+    if (view.completeness !== 'complete') {
+      this.putCached(key, view, 60_000);
+      return view;
+    }
     this.putCached(key, view, 24 * 60 * 60_000);
     return view;
   }
@@ -94,6 +102,10 @@ export class EntityManager {
       if (cached) return cached;
     }
     const view = await this.client.getPlaylistView(id);
+    if (view.completeness !== 'complete') {
+      this.putCached(key, view, 60_000);
+      return view;
+    }
     this.putCached(key, view, 5 * 60_000);
     return view;
   }

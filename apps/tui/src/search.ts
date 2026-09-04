@@ -1,7 +1,8 @@
 // Search client with debounce + cancellation, plus a stale-while-revalidate
 // read strategy through the SQLite cache. Cancellation is race-safe: a stale
 // query's promise resolves with an empty response or is replaced cleanly
-// without cross-query resolver pollution.
+// without cross-query resolver pollution. AbortController aborts stale
+// network fetches so the server does not waste quota.
 
 import { Cache } from './cache';
 import { WebApiClient } from './webApi';
@@ -43,9 +44,9 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
   let activeQueryId = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending: PendingQuery | null = null;
+  let abortCtrl: AbortController | null = null;
 
   const flush = async (pq: PendingQuery): Promise<void> => {
-    // If a newer query has already become active, drop this execution.
     if (pq.id < activeQueryId) {
       pq.resolve({ query: pq.query, hits: [] });
       return;
@@ -53,7 +54,6 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
 
     const cacheKey = makeKey(pq.query, pq.types);
 
-    // 1. Cache lookup
     const cached = opts.cache.getQuery<SearchResponseT>(opts.accountId, cacheKey);
     if (cached) {
       const expired = cached.expiresAt !== null && cached.expiresAt < Date.now();
@@ -67,21 +67,29 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
       }
     }
 
-    // 2. Network fetch
+    abortCtrl?.abort();
+    abortCtrl = new AbortController();
+    const signal = abortCtrl.signal;
+
     try {
-      const fresh = await opts.webApi.search(pq.query, pq.types);
+      const fresh = await opts.webApi.search(pq.query, pq.types, signal);
+      if (signal.aborted || pq.id < activeQueryId) {
+        pq.resolve({ query: pq.query, hits: [] });
+        return;
+      }
       if (pq.id === activeQueryId) {
-        // Do not cache error responses to prevent sensitive details or transient
-        // errors from polluting SQLite.
         if (!fresh.error) {
           opts.cache.putQuery(opts.accountId, cacheKey, fresh, cacheTtlMs);
         }
         pq.resolve(fresh);
       } else {
-        // Stale query superseded by newer one
         pq.resolve({ query: pq.query, hits: [] });
       }
     } catch (err: unknown) {
+      if (signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
+        pq.resolve({ query: pq.query, hits: [] });
+        return;
+      }
       if (pq.id === activeQueryId) {
         pq.resolve({
           query: pq.query,
@@ -95,6 +103,8 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
       } else {
         pq.resolve({ query: pq.query, hits: [] });
       }
+    } finally {
+      if (abortCtrl?.signal === signal) abortCtrl = null;
     }
   };
 
@@ -113,7 +123,6 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
         return { query: trimmed, hits: [] };
       }
 
-      // Cancel previous pending timer and resolve previous superseded pending query
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;
@@ -123,6 +132,7 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
         pending = null;
         superseded.resolve({ query: superseded.query, hits: [] });
       }
+      abortCtrl?.abort();
 
       const id = ++querySequence;
       activeQueryId = id;
@@ -153,6 +163,8 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
         pending = null;
         superseded.resolve({ query: superseded.query, hits: [] });
       }
+      abortCtrl?.abort();
+      abortCtrl = null;
     },
   };
 }
