@@ -33,7 +33,7 @@ export function handleSearchKeys(
       ctx.helpers.setFocusArea('sidebar');
       return true;
     }
-    if (e.name === 'down') {
+    if (e.name === 'down' || e.name === 'j') {
       built.searchInput.blur();
       focusSearchPanel(ctx, ctx.searchPanel.value);
       ctx.helpers.updateSearchFocusVisuals(false);
@@ -70,7 +70,7 @@ export function handleSearchKeys(
       ctx.helpers.setFocusArea('sidebar');
       return true;
     }
-    if (e.name === 'up' && searchList.getSelectedIndex() === 0) {
+    if ((e.name === 'up' || e.name === 'k') && searchList.getSelectedIndex() === 0) {
       searchList.blur();
       built.searchInput.focus();
       ctx.helpers.updateSearchFocusVisuals(true);
@@ -82,7 +82,7 @@ export function handleSearchKeys(
       ctx.helpers.updateSearchFocusVisuals(true);
       return true;
     }
-    if (['up', 'down', 'return', 'pageup', 'pagedown', 'home', 'end'].includes(e.name)) {
+    if (['up', 'down', 'j', 'k', 'return', 'pageup', 'pagedown', 'home', 'end'].includes(e.name)) {
       // Let SelectRenderable handle arrow/enter events for playing tracks
       return true;
     }
