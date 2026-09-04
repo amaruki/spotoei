@@ -2,10 +2,10 @@ import { routeKind } from './navigationStack';
 import type { KeyDispatch, UiCoreContext } from './types';
 
 // Library / queue list focus handling extracted to respect the 300 LoC cap.
-// Returns true when the key was consumed.
+// Returns true when the key was consumed, false to let navigateBack handle Esc.
 export function handleLibraryQueueKeys(
   ctx: UiCoreContext,
-  e: { name: string; ctrl: boolean },
+  e: { name: string; ctrl: boolean; shift?: boolean },
   key: Parameters<KeyDispatch>[0],
 ): boolean {
   const { focus, opts, route } = ctx;
@@ -16,7 +16,19 @@ export function handleLibraryQueueKeys(
     opts.onKey(key);
     return true;
   }
-  if (e.name === 'escape' || e.name === 'tab' || e.name === 'left') {
+  if (e.name === 'escape') {
+    return false;
+  }
+  if (e.name === 'tab') {
+    // Shift+Tab reverse traversal
+    if (e.shift) {
+      ctx.helpers.setFocusArea('sidebar');
+      return true;
+    }
+    ctx.helpers.setFocusArea('sidebar');
+    return true;
+  }
+  if (e.name === 'left') {
     ctx.helpers.setFocusArea('sidebar');
     return true;
   }

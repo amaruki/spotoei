@@ -1,4 +1,4 @@
-import { cycleSearchPanel, focusedSearchList, focusSearchPanel } from './categoryPanels';
+import { SEARCH_PANELS, cycleSearchPanel, focusedSearchList, focusSearchPanel } from './categoryPanels';
 import { routeKind } from './navigationStack';
 import type { KeyDispatch, UiCoreContext } from './types';
 
@@ -23,8 +23,13 @@ export function handleSearchKeys(
       opts.onKey(key);
       return true;
     }
-    if (e.name === 'escape' || e.name === 'tab') {
+    if (e.name === 'escape') {
+      return false;
+    }
+    if (e.name === 'tab') {
       built.searchInput.blur();
+      // Shift+Tab reverse: keep sidebar focus but distinguish direction
+      void e.shift;
       ctx.helpers.setFocusArea('sidebar');
       return true;
     }
@@ -48,10 +53,19 @@ export function handleSearchKeys(
       return true;
     }
     if (e.name === 'tab') {
-      cycleSearchPanel(ctx);
+      if (e.shift) {
+        const len = SEARCH_PANELS.length;
+        const prev = (ctx.searchPanel.value - 1 + len) % len;
+        focusSearchPanel(ctx, prev);
+      } else {
+        cycleSearchPanel(ctx);
+      }
       return true;
     }
-    if (e.name === 'escape' || e.name === 'left') {
+    if (e.name === 'escape') {
+      return false;
+    }
+    if (e.name === 'left') {
       searchList.blur();
       ctx.helpers.setFocusArea('sidebar');
       return true;

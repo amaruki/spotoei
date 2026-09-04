@@ -1,6 +1,6 @@
 import { resolveBackAction } from '../../navigation/backBehavior';
 import { resolveClientId } from '../../config';
-import { cycleHomePanel, focusedHomeList } from './categoryPanels';
+import { HOME_PANELS, cycleHomePanel, focusedHomeList, focusHomePanel } from './categoryPanels';
 import { handleEntityBrowseKeys } from './keyboardEntity';
 import { handleLibraryQueueKeys } from './keyboardLists';
 import { handleSearchKeys } from './keyboardSearch';
@@ -33,12 +33,12 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         ctx.helpers.setPaletteOpen(false);
         return;
       }
-      if (e.name === 'up') {
+      if (e.name === 'up' || e.name === 'k') {
         const cur = built.paletteList.getSelectedIndex();
         built.paletteList.setSelectedIndex(Math.max(0, cur - 1));
         return;
       }
-      if (e.name === 'down') {
+      if (e.name === 'down' || e.name === 'j') {
         const cur = built.paletteList.getSelectedIndex();
         const max = Math.max(0, built.paletteList.options.length - 1);
         built.paletteList.setSelectedIndex(Math.min(max, cur + 1));
@@ -68,12 +68,12 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         ctx.helpers.closeContextMenu();
         return;
       }
-      if (e.name === 'up') {
+      if (e.name === 'up' || e.name === 'k') {
         const cur = built.menuList.getSelectedIndex();
         built.menuList.setSelectedIndex(Math.max(0, cur - 1));
         return;
       }
-      if (e.name === 'down') {
+      if (e.name === 'down' || e.name === 'j') {
         const cur = built.menuList.getSelectedIndex();
         const max = Math.max(0, built.menuList.options.length - 1);
         built.menuList.setSelectedIndex(Math.min(max, cur + 1));
@@ -163,7 +163,7 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         ctx.helpers.setFocusArea('main');
         return;
       }
-      if (e.name === 'up' || e.name === 'down' || e.name === 'return') {
+      if (e.name === 'up' || e.name === 'k' || e.name === 'down' || e.name === 'j' || e.name === 'return') {
         // SelectRenderable handles up/down navigation and return selection
         return;
       }
@@ -186,11 +186,17 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
       focus.current === 'main'
     ) {
       if (e.name === 'tab') {
-        cycleHomePanel(ctx);
+        if (e.shift) {
+          const len = HOME_PANELS.length;
+          const prev = (ctx.homePanel.value - 1 + len) % len;
+          focusHomePanel(ctx, prev);
+        } else {
+          cycleHomePanel(ctx);
+        }
         return;
       }
       const homeList = focusedHomeList(ctx);
-      if (['up', 'down', 'return', 'pageup', 'pagedown', 'home', 'end'].includes(e.name)) {
+      if (['up', 'down', 'j', 'k', 'return', 'pageup', 'pagedown', 'home', 'end'].includes(e.name)) {
         void homeList;
         return;
       }
