@@ -1,4 +1,5 @@
 import {
+  ASCIIFontRenderable,
   BoxRenderable,
   type CliRenderer,
   InputRenderable,
@@ -7,14 +8,20 @@ import {
   fg,
   t,
 } from '@opentui/core';
-import { COLOR_BORDER_FOCUS, COLOR_DIM, COLOR_PANEL_BG } from '../theme';
+import { COLOR_ACCENT, COLOR_BORDER_FOCUS, COLOR_DIM, COLOR_PANEL_BG } from '../theme';
 
 export interface OnboardingViewNodes {
   onboarding: BoxRenderable;
+  onboardingHero: ASCIIFontRenderable;
+  onboardingHeroSmall: ASCIIFontRenderable;
   onboardingText: TextRenderable;
   clientIdBox: BoxRenderable;
   clientIdInput: InputRenderable;
 }
+
+// Width threshold for the full block-font hero; narrower terminals get
+// the compact tiny-font hero so the logo never clips.
+export const HERO_WIDE_BREAKPOINT = 90;
 
 // Full-screen onboarding flow. Owns the Client ID input (moved out of
 // Settings): authentication lives here, Settings is account-only.
@@ -26,7 +33,7 @@ export function buildOnboardingView(renderer: CliRenderer): OnboardingViewNodes 
     borderStyle: 'double',
     borderColor: COLOR_BORDER_FOCUS,
     backgroundColor: COLOR_PANEL_BG,
-    title: 'Welcome to Spotoei',
+    title: '',
     flexDirection: 'column',
     alignItems: 'center',
     paddingLeft: 2,
@@ -34,6 +41,21 @@ export function buildOnboardingView(renderer: CliRenderer): OnboardingViewNodes 
     paddingTop: 1,
     visible: false,
   });
+  const onboardingHero = new ASCIIFontRenderable(renderer, {
+    id: 'onboarding-hero',
+    text: 'SPOTOEI',
+    font: 'block',
+    color: COLOR_ACCENT,
+  });
+  onboarding.add(onboardingHero);
+  const onboardingHeroSmall = new ASCIIFontRenderable(renderer, {
+    id: 'onboarding-hero-small',
+    text: 'SPOTOEI',
+    font: 'tiny',
+    color: COLOR_ACCENT,
+    visible: false,
+  });
+  onboarding.add(onboardingHeroSmall);
   const onboardingText = new TextRenderable(renderer, {
     id: 'onboarding-text',
     content: '',
@@ -66,5 +88,12 @@ export function buildOnboardingView(renderer: CliRenderer): OnboardingViewNodes 
   clientIdBox.add(clientIdHelp);
   onboarding.add(clientIdBox);
 
-  return { onboarding, onboardingText, clientIdBox, clientIdInput };
+  return {
+    onboarding,
+    onboardingHero,
+    onboardingHeroSmall,
+    onboardingText,
+    clientIdBox,
+    clientIdInput,
+  };
 }

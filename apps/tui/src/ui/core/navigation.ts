@@ -1,3 +1,4 @@
+import { HERO_WIDE_BREAKPOINT } from '../componentTree/onboardingView';
 import { resolveClientId } from '../../config';
 import { panelPositionKey } from '../../navigation/viewPositions';
 import {
@@ -87,6 +88,10 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     built.lyrics.visible = finalKind === 'lyrics';
     built.settings.visible = finalKind === 'settings';
     built.onboarding.visible = finalKind === 'onboarding';
+    // Hero size follows terminal width so the ASCII logo never clips.
+    const wideHero = ctx.termWidth.value >= HERO_WIDE_BREAKPOINT;
+    built.onboardingHero.visible = finalKind === 'onboarding' && wideHero;
+    built.onboardingHeroSmall.visible = finalKind === 'onboarding' && !wideHero;
     built.artist.visible = finalKind === 'artist';
     built.album.visible = finalKind === 'album';
     built.playlist.visible = finalKind === 'playlist';

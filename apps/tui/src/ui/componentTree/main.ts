@@ -1,4 +1,5 @@
 import {
+  ASCIIFontRenderable,
   BoxRenderable,
   type CliRenderer,
   InputRenderable,
@@ -51,6 +52,8 @@ export interface MainNodes extends EntityViewNodes {
   settings: BoxRenderable;
   settingsText: TextRenderable;
   onboarding: BoxRenderable;
+  onboardingHero: ASCIIFontRenderable;
+  onboardingHeroSmall: ASCIIFontRenderable;
   onboardingText: TextRenderable;
   clientIdBox: BoxRenderable;
   clientIdInput: InputRenderable;
@@ -261,6 +264,8 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     settings,
     settingsText,
     onboarding: onboardingView.onboarding,
+    onboardingHero: onboardingView.onboardingHero,
+    onboardingHeroSmall: onboardingView.onboardingHeroSmall,
     onboardingText: onboardingView.onboardingText,
     clientIdBox: onboardingView.clientIdBox,
     clientIdInput: onboardingView.clientIdInput,

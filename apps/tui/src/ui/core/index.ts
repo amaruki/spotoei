@@ -36,7 +36,12 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   const routeStack: Route[] = [];
   const positions = new ViewPositionStore();
   const focus = { current: 'sidebar' as FocusArea };
-  const termWidth = { value: 120 };
+  const termWidth = {
+    value:
+      typeof (renderer as unknown as { terminalWidth?: unknown }).terminalWidth === 'number'
+        ? (renderer as unknown as { terminalWidth: number }).terminalWidth
+        : 120,
+  };
   const sidebarPinned = { value: true };
   const latestVizFrame: { value: VisualizerFrame | null } = { value: null };
   const currentSearchHits = { value: [] as unknown[] as never };

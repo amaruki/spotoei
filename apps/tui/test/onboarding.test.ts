@@ -53,6 +53,47 @@ describe('onboarding steps', () => {
   });
 });
 
+describe('onboarding hero and page isolation', () => {
+  it('renders block ASCII hero and hides all app chrome when logged out', async () => {
+    const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({
+      width: 120,
+      height: 40,
+    });
+    const ui = createUiCore(renderer, stateWith('unauthenticated'), {
+      onKey: () => {},
+      onSearchSubmit: () => {},
+      onSelectLibrary: () => {},
+      onSelectQueue: () => {},
+    });
+    await renderOnce();
+    expect(routeKind(ui.getRoute())).toBe('onboarding');
+    const frame = captureCharFrame();
+    expect(frame).toContain('███████╗');
+    expect(frame).not.toContain('Navigation');
+    expect(frame).not.toContain('Playback');
+    await ui.shutdown();
+  });
+
+  it('renders compact hero without clipping on narrow terminals', async () => {
+    const { renderer, renderOnce, captureCharFrame } = await createTestRenderer({
+      width: 70,
+      height: 40,
+    });
+    const ui = createUiCore(renderer, stateWith('unauthenticated'), {
+      onKey: () => {},
+      onSearchSubmit: () => {},
+      onSelectLibrary: () => {},
+      onSelectQueue: () => {},
+    });
+    await renderOnce();
+    const frame = captureCharFrame();
+    expect(frame).not.toContain('███████╗');
+    expect(frame).toContain('█');
+    expect(frame).not.toContain('Navigation');
+    await ui.shutdown();
+  });
+});
+
 describe('onboarding route flow', () => {
   it('logout returns to onboarding, login routes home', async () => {
     const { renderer, renderOnce } = await createTestRenderer({ width: 120, height: 40 });
