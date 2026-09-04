@@ -63,6 +63,16 @@ const PANEL_CAPS: Record<PanelKey, number> = {
   discover: 6,
 };
 
+function headerPanel(text: string): PanelKey | 'all' | null {
+  const t = text.toLowerCase();
+  if (t.startsWith('top tracks')) return 'tracks';
+  if (t.startsWith('top artists')) return 'artists';
+  if (t.startsWith('recently played')) return 'recent';
+  if (t.startsWith('discover')) return 'discover';
+  if (t.startsWith('loading')) return 'all';
+  return null;
+}
+
 // Explicit section routing: headers claim the panel for subsequent rows,
 // so Top Tracks never starve Recently Played and preview tracks never
 // leak into Top Artists. Content rows without a preceding header fall
@@ -73,16 +83,6 @@ export function partitionHomeRows(rows: HomeRow[]): HomePanels {
   const panels: HomePanels = { tracks: [], artists: [], recent: [], discover: [] };
   const contentCount: Record<PanelKey, number> = { tracks: 0, artists: 0, recent: 0, discover: 0 };
   let current: PanelKey | null = null;
-
-  const headerPanel = (text: string): PanelKey | 'all' | null => {
-    const t = text.toLowerCase();
-    if (t.startsWith('top tracks')) return 'tracks';
-    if (t.startsWith('top artists')) return 'artists';
-    if (t.startsWith('recently played')) return 'recent';
-    if (t.startsWith('discover')) return 'discover';
-    if (t.startsWith('loading')) return 'all';
-    return null;
-  };
 
   const naturalPanel = (row: HomeRow): PanelKey => {
     if (row.kind === 'artist') return 'artists';

@@ -235,13 +235,15 @@ describe('OpenTUI renderables integration', () => {
     // Verify quick numeric shortcuts for navigation
     ui.setRoute({ kind: 'home', tab: 'for_you' });
     expect(kindOf(ui.getRoute())).toBe('home');
-    sendKey('3', '3');
-    expect(kindOf(ui.getRoute())).toBe('library');
+    sendKey('2', '2');
+    expect(kindOf(ui.getRoute())).toBe('browse');
     sendKey('4', '4');
-    expect(kindOf(ui.getRoute())).toBe('queue');
+    expect(kindOf(ui.getRoute())).toBe('library');
     sendKey('5', '5');
-    expect(kindOf(ui.getRoute())).toBe('lyrics');
+    expect(kindOf(ui.getRoute())).toBe('queue');
     sendKey('6', '6');
+    expect(kindOf(ui.getRoute())).toBe('lyrics');
+    sendKey('7', '7');
     expect(kindOf(ui.getRoute())).toBe('settings');
     sendKey('1', '1');
     expect(kindOf(ui.getRoute())).toBe('home');
@@ -385,16 +387,12 @@ describe('OpenTUI renderables integration', () => {
     // 2b. One step down lands on Browse (sidebar order: Home, Browse, Search, …)
     sendKey('return', '\r');
     await renderOnce();
-    expect(kindOf(ui.getRoute())).toBe('home');
+    expect(kindOf(ui.getRoute())).toBe('browse');
     expect(ui.getFocus()).toBe('main');
 
     // 3. One step down from Browse + Enter confirms 'search'. The render
-    // pass after setFocus matters: focus changes apply on the next frame,
-    // and the first keypress after a programmatic refocus is absorbed
-    // while focus settles, so a settling keypress goes first.
+    // pass after setFocus matters: focus changes apply on the next frame.
     ui.setFocus('sidebar');
-    await renderOnce();
-    sendKey('down', '\u001b[B');
     await renderOnce();
     sendKey('down', '\u001b[B');
     sendKey('return', '\r');
@@ -418,7 +416,9 @@ describe('OpenTUI renderables integration', () => {
     sendKey('escape', '\u001b');
     await renderOnce();
     expect(ui.getFocus()).toBe('main');
-    // 7. Pressing Tab cycles home panels, staying in main
+    // 7. Pressing Tab on Home cycles panels, staying in main
+    ui.setRoute({ kind: 'home', tab: 'for_you' });
+    await renderOnce();
     sendKey('tab', '\t');
     await renderOnce();
     expect(ui.getFocus()).toBe('main');
