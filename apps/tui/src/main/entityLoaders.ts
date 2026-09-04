@@ -42,6 +42,7 @@ export async function ensureEntityRoute(deps: EntityLoaderDeps, route: unknown):
       ui.setArtistAlbums(pagesOf(state)[key]?.items as CatalogAlbumT[]);
       return;
     }
+    ui.setStatus('Loading artist releases…');
     try {
       const page = await entityManager.loadArtistAlbums(r.id, group, 0, PAGE_SIZE);
       const items = page.items as CatalogAlbumT[];
@@ -63,6 +64,7 @@ export async function ensureEntityRoute(deps: EntityLoaderDeps, route: unknown):
       ui.setAlbumTracks(pagesOf(state)[key]?.items as CatalogTrackT[]);
       return;
     }
+    ui.setStatus('Loading album tracks…');
     try {
       const page = await entityManager.loadAlbumTracks(r.id, 0, PAGE_SIZE);
       const items = page.items as CatalogTrackT[];
@@ -84,6 +86,7 @@ export async function ensureEntityRoute(deps: EntityLoaderDeps, route: unknown):
       ui.setPlaylistTracks(pagesOf(state)[key]?.items as CatalogTrackT[]);
       return;
     }
+    ui.setStatus('Loading playlist tracks…');
     try {
       const page = await entityManager.loadPlaylistTracks(r.id, 0, 100);
       const items = page.items as CatalogTrackT[];

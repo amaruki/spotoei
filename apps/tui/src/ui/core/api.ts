@@ -109,6 +109,14 @@ export function createUiApi(ctx: UiCoreContext): Ui {
     },
     setLibraryLoading(loading: boolean): void {
       if (loading) {
+        // Stale-refreshing: keep cached rows visible, announce refresh in status.
+        const hasRows = built.libraryList.options.some(
+          (o) => !o.name.startsWith('Loading') && !o.name.startsWith('(library empty)'),
+        );
+        if (hasRows) {
+          built.statusText.content = t`${fg(COLOR_DIM)('refreshing library…')}`;
+          return;
+        }
         built.statusText.content = t`${fg(COLOR_DIM)('loading library…')}`;
         built.libraryList.options = [
           { name: 'Loading Library…', description: 'Fetching your saved tracks from Spotify' },
@@ -190,6 +198,8 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       built.lyricsText.content = renderLyricsContent(state);
     },
     setSearchLoading(loading: boolean): void {
+      // A new query wipes stale hits; background refreshes never call this,
+      // so prior results stay visible until setSearchResults arrives.
       if (loading) {
         built.statusText.content = t`${fg(COLOR_DIM)('searching Spotify…')}`;
         built.searchResults.options = [

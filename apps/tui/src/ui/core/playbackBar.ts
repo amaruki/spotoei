@@ -29,13 +29,22 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
       if (built.searchInput.focused) {
         return 'Enter: search Spotify  ↓: results  Tab/Esc: navigation  q: quit';
       }
-      return '↑/↓: select track  Enter: play  ↑ at top: edit search  Tab/Esc: navigation  q: quit';
+      return '↑/↓: select  Enter: play/open  x: actions  ↑ at top: edit search  q: quit';
     }
     if (curKind === 'library' || curKind === 'queue') {
-      return '↑/↓: browse list  Enter: play  Tab/Esc: navigation  q: quit';
+      return '↑/↓: browse list  Enter: play/open  x: actions  r: refresh  q: quit';
     }
     if (curKind === 'lyrics') {
       return '↑/↓: scroll  l/Esc: close lyrics  L: reload lyrics  q: quit';
+    }
+    if (curKind === 'artist' || curKind === 'album' || curKind === 'playlist') {
+      return '↑/↓: browse  Enter: play/open  x: actions  Esc: back  q: quit';
+    }
+    if (curKind === 'visualizer') {
+      return 'V/Esc: back  m: mode  Space: play/pause  q: quit';
+    }
+    if (curKind === 'home') {
+      return '↑/↓: browse  Enter: play/open  x: actions  Tab/Esc: navigation  q: quit';
     }
     return 'Space: play/pause  n: next  p: prev  l: lyrics  S: shuffle  R: repeat  A: autoplay  +/-: vol  Tab: nav  q: quit';
   };

@@ -111,6 +111,6 @@ describe('entity loaders', () => {
       { entityManager: manager, getUi: () => ui, state },
       { kind: 'album', id: 'x' },
     );
-    expect(statuses[0]).toContain('Album tracks failed');
+    expect(statuses[statuses.length - 1]).toContain('Album tracks failed');
   });
 });
