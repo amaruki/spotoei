@@ -38,18 +38,44 @@ pub fn session_file_path() -> std::path::PathBuf {
 }
 
 pub async fn load_session() -> Result<Option<AccessToken>, AuthError> {
-    // Keyring is the only durable store for refresh tokens. The legacy
-    // plaintext session.json fallback was removed for privacy (FSD 9.4,
-    // TSD02 5.1). If it exists on disk from an old build, remove it
-    // opportunistically but never read secrets from it.
-    let path = session_file_path();
-    if path.exists() {
-        let _ = std::fs::remove_file(&path);
-    }
     match load_from_keyring("default").await {
-        Ok(v) => Ok(v),
-        Err(e) => Err(e),
+        Ok(Some(at)) => {
+            // Remove stale dev file if keyring now works
+            if cfg!(debug_assertions) {
+                let _ = std::fs::remove_file(session_file_path());
+            }
+            return Ok(Some(at));
+        }
+        Ok(None) => {
+            if cfg!(debug_assertions) {
+                if let Some(at) = try_load_dev_file() {
+                    return Ok(Some(at));
+                }
+            }
+            return Ok(None);
+        }
+        Err(e) => {
+            if cfg!(debug_assertions) {
+                if let Some(at) = try_load_dev_file() {
+                    warn!("keyring unavailable, using dev file fallback");
+                    return Ok(Some(at));
+                }
+            }
+            return Err(e);
+        }
     }
+}
+
+#[cfg(debug_assertions)]
+fn try_load_dev_file() -> Option<AccessToken> {
+    let path = session_file_path();
+    let content = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str::<AccessToken>(&content).ok()
+}
+
+#[cfg(not(debug_assertions))]
+fn try_load_dev_file() -> Option<AccessToken> {
+    None
 }
 
 pub async fn save_to_keyring_account(account_id: &str, at: &AccessToken) -> Result<(), AuthError> {
@@ -68,12 +94,47 @@ pub async fn save_session(at: &AccessToken) -> Result<(), AuthError> {
         let _ = std::fs::remove_file(path);
         return Ok(());
     }
+    if cfg!(debug_assertions) {
+        if try_save_dev_file(at).is_ok() {
+            warn!("keyring unavailable, persisted dev fallback to session.json");
+            return Ok(());
+        }
+    }
     // No durable store available — keep credentials in memory only and
     // let the caller surface Storage::Memory to the UI. Never write
-    // refresh_token to session.json.
+    // refresh_token to session.json in release.
     Err(AuthError::KeyringUnavailable(
         "keyring unavailable for all accounts; credentials will be in-memory only".into(),
     ))
+}
+
+#[cfg(debug_assertions)]
+fn try_save_dev_file(at: &AccessToken) -> Result<(), AuthError> {
+    let path = session_file_path();
+    let s = serde_json::to_string_pretty(at).map_err(|e| AuthError::Config(e.to_string()))?;
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true).mode(0o600);
+        let mut file = options
+            .open(&path)
+            .map_err(|e| AuthError::Config(format!("open {}: {e}", path.display())))?;
+        file.write_all(s.as_bytes())
+            .map_err(|e| AuthError::Config(format!("write {}: {e}", path.display())))?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&path, s.as_bytes())
+            .map_err(|e| AuthError::Config(format!("write {}: {e}", path.display())))?;
+    }
+    Ok(())
+}
+
+#[cfg(not(debug_assertions))]
+fn try_save_dev_file(_at: &AccessToken) -> Result<(), AuthError> {
+    Err(AuthError::KeyringUnavailable("dev fallback disabled in release".into()))
 }
 
 pub async fn delete_from_keyring(account_id: &str) -> Result<(), AuthError> {
