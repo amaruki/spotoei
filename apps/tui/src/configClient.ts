@@ -84,8 +84,8 @@ export function saveClientId(rawId: string): ClientIdResolution {
   const configPath = getConfigPath();
   const configDir = getConfigDir();
 
-  if (!cleanId) {
-    throw new Error('Client ID cannot be empty');
+  if (!/^[0-9a-f]{32}$/i.test(cleanId)) {
+    throw new Error('Spotify Client ID must be 32 hex characters (found in Spotify Dashboard)');
   }
 
   if (!existsSync(configDir)) {

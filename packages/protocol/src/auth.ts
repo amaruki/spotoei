@@ -73,6 +73,6 @@ export type AuthChangedEventDataT = AuthStatusDataT;
 
 // `auth.set_client_id` request payload.
 export const AuthSetClientIdData = z.object({
-  clientId: z.string().min(1),
+  clientId: z.string().regex(/^[0-9a-f]{32}$/i, 'Spotify Client ID must be 32 hex characters'),
 });
 export type AuthSetClientIdDataT = z.infer<typeof AuthSetClientIdData>;

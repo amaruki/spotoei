@@ -1,6 +1,6 @@
 import { bold, fg, t } from '@opentui/core';
 import { getRedirectUri, resolveClientId } from '../../config';
-import { COLOR_ACCENT, COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT } from '../theme';
+import { COLOR_ACCENT, COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
 import type { UiViewState } from '../types';
 
 export type OnboardingStep = 'client-id' | 'authenticate' | 'authenticating';
@@ -15,9 +15,13 @@ export function getOnboardingContent(state: UiViewState) {
   const clientRes = resolveClientId();
   const redirectUri = getRedirectUri();
   const step = onboardingStep(state);
+  const keyringWarning =
+    state.auth.storage !== 'keyring' && state.auth.storage !== null && state.auth.storage !== undefined
+      ? t`\n${fg(COLOR_WARN)('⚠ OS keyring unavailable — login will not persist after quit')}`
+      : t``;
 
   if (step === 'client-id') {
-    return t`${bold('== Welcome to Spotoei — Step 1 of 2: Spotify Client ID ==')}
+    return t`${bold('== Welcome to Spotoei — Step 1 of 2: Spotify Client ID ==')}${keyringWarning}
 ${fg(COLOR_TEXT)('Spotoei needs a Spotify app of yours to talk to the Web API.')}
 
 1. Create a free app at: ${fg(COLOR_ACCENT)('https://developer.spotify.com/dashboard')}
@@ -26,7 +30,7 @@ ${fg(COLOR_TEXT)('Spotoei needs a Spotify app of yours to talk to the Web API.')
 3. Paste your Client ID below and press ${bold('Enter')}.`;
   }
   if (step === 'authenticating') {
-    return t`${bold('== Step 2 of 2: Authenticating ==')}
+    return t`${bold('== Step 2 of 2: Authenticating ==')}${keyringWarning}
 ${fg(COLOR_ACCENT)(bold('Browser opened for authentication!'))}
 ${fg(COLOR_TEXT)('Complete the login in your browser window.')}
 
@@ -36,7 +40,7 @@ ${fg(COLOR_SUCCESS)(redirectUri)}
 ${fg(COLOR_DIM)('Waiting for Spotify login callback…')}
 ${fg(COLOR_DIM)('Press [A] to re-open browser  •  Press [C] to edit Client ID')}`;
   }
-  return t`${bold('== Welcome to Spotoei — Step 2 of 2: Authenticate ==')}
+  return t`${bold('== Welcome to Spotoei — Step 2 of 2: Authenticate ==')}${keyringWarning}
 ${fg(COLOR_SUCCESS)('✔ Client ID configured')} (${fg(COLOR_DIM)(clientRes.source ?? '')})
 ${fg(COLOR_DIM)(`Redirect URI: ${redirectUri}`)}
 
