@@ -23,9 +23,12 @@ function renderSearchResults(ctx: UiCoreContext): void {
   const results = ctx.lastSearch.value;
   if (!results) return;
   if (results.error) {
+    const isQuota = results.error.code === 'QUOTA_EXCEEDED';
     const row = {
       name: `⚠ ${results.error.code}`,
-      description: results.error.message,
+      description: isQuota
+        ? 'Quota exceeded — Spotify API limit reached. Try again tomorrow.'
+        : results.error.message,
     };
     for (const list of [
       ctx.built.searchTracksList,

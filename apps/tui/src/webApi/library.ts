@@ -47,13 +47,15 @@ export class LibraryEndpoints {
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      const code = msg.startsWith('RATE_LIMITED')
-        ? 'RATE_LIMITED'
-        : msg.startsWith('AUTH_EXPIRED')
-          ? 'AUTH_EXPIRED'
-          : msg.startsWith('FORBIDDEN')
-            ? 'FORBIDDEN'
-            : 'NETWORK_ERROR';
+      const code = msg.startsWith('QUOTA_EXCEEDED')
+        ? 'QUOTA_EXCEEDED'
+        : msg.startsWith('RATE_LIMITED')
+          ? 'RATE_LIMITED'
+          : msg.startsWith('AUTH_EXPIRED')
+            ? 'AUTH_EXPIRED'
+            : msg.startsWith('FORBIDDEN')
+              ? 'FORBIDDEN'
+              : 'NETWORK_ERROR';
       return {
         collection,
         items: [],
@@ -64,7 +66,7 @@ export class LibraryEndpoints {
         error: {
           code,
           message: msg,
-          retryable: code !== 'AUTH_EXPIRED' && code !== 'FORBIDDEN',
+          retryable: code !== 'AUTH_EXPIRED' && code !== 'FORBIDDEN' && code !== 'QUOTA_EXCEEDED',
         },
       };
     }

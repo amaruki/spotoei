@@ -76,9 +76,11 @@ export class Transport {
         const errBody = await res.text().catch(() => '');
         let detail = res.statusText;
         try {
-          const parsed = JSON.parse(errBody) as { error?: { message?: string } | string };
+          const parsed = JSON.parse(errBody) as { error?: { message?: string; reason?: string } | string };
           if (typeof parsed?.error === 'object' && parsed.error?.message) {
             detail = parsed.error.message;
+          } else if (typeof parsed?.error === 'object' && parsed.error?.reason) {
+            detail = parsed.error.reason;
           } else if (typeof parsed?.error === 'string') {
             detail = parsed.error;
           } else if (errBody.trim()) {
@@ -90,7 +92,11 @@ export class Transport {
           }
         }
 
-        // 401 Unauthorized: invalidate token and retry once
+        const isQuota = /quota/i.test(errBody) || /quota/i.test(detail);
+        if (isQuota) {
+          throw new Error(`QUOTA_EXCEEDED: 429 Quota exceeded (${detail})`);
+        }
+
         if (res.status === 401 && retryCount === 0) {
           this.tokenProvider.invalidateToken?.();
           return doFetch(retryCount + 1);
@@ -99,7 +105,6 @@ export class Transport {
           throw new Error(`AUTH_EXPIRED: 401 Unauthorized (${detail})`);
         }
 
-        // 429 Too Many Requests: wait Retry-After seconds and retry once
         if (res.status === 429 && retryCount === 0) {
           const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10);
           const baseWaitMs = Math.min(
