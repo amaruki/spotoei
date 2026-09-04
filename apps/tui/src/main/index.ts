@@ -100,7 +100,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
     const handshake = await startPlayer(playerBin, extraEnv);
     child = handshake.child;
     ctx.child = handshake.child;
-
+    let restartTimestamps: number[] = [];
     const onPlayerExit = async (code: number | null, _signal: NodeJS.Signals | null): Promise<void> => {
       const now = Date.now();
       restartTimestamps = restartTimestamps.filter((t) => now - t < 60_000);

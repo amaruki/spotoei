@@ -17,8 +17,8 @@ export function getOnboardingContent(state: UiViewState) {
   const step = onboardingStep(state);
   const keyringWarning =
     state.auth.storage !== 'keyring' && state.auth.storage !== null && state.auth.storage !== undefined
-      ? t`\n${fg(COLOR_WARN)('⚠ OS keyring unavailable — login will not persist after quit')}`
-      : t``;
+      ? `\n${fg(COLOR_WARN)('⚠ OS keyring unavailable — login will not persist after quit')}`
+      : '';
 
   if (step === 'client-id') {
     return t`${bold('== Welcome to Spotoei — Step 1 of 2: Spotify Client ID ==')}${keyringWarning}

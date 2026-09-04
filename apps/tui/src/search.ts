@@ -72,7 +72,7 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
     const signal = abortCtrl.signal;
 
     try {
-      const fresh = await opts.webApi.search(pq.query, pq.types, signal);
+      const fresh = await opts.webApi.search(pq.query, pq.types, 10, signal);
       if (signal.aborted || pq.id < activeQueryId) {
         pq.resolve({ query: pq.query, hits: [] });
         return;
