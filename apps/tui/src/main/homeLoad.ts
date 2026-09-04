@@ -1,6 +1,4 @@
 import type { CatalogArtistT, CatalogTrackT, TimeRangeT } from 'spotoei-protocol';
-import { buildBrowseCategories } from '../browse';
-import { getBrowseConfig } from '../config';
 import type { EntityManager } from '../entities';
 import type { HomeManager } from '../home';
 import { initialHomeTabs, setForYouError, setRecentError } from '../home/tabs';
@@ -26,97 +24,164 @@ const RANGE_LABEL: Record<TimeRangeT, string> = {
   long_term: 'All time',
 };
 
-// Static Discover rows from the browse registry. No API involved, so the
-// Discover panel always has content — even offline or on first paint.
-export function discoverRows(): HomeRow[] {
-  const rows: HomeRow[] = [];
-  for (const category of buildBrowseCategories(getBrowseConfig())) {
-    rows.push({
-      kind: 'discover',
-      id: category.id,
-      label: category.label,
-      description: `${category.entries.length} sections`,
-    });
+// Discover preview: real playable tracks, fetched immediately alongside
+// the other panels. New releases resolve to album tracks (never albums
+// masquerading as tracks); recommendations fill gaps; the already-loaded
+// Top Tracks are the offline last resort so the panel is never empty
+// when data exists elsewhere.
+async function loadDiscoverPreview(
+  entityManager: EntityManager,
+  seedTracks: CatalogTrackT[],
+): Promise<CatalogTrackT[]> {
+  try {
+    const albums = await entityManager.loadNewReleases(6);
+    const perAlbum = await Promise.all(
+      albums.slice(0, 4).map((a) =>
+        entityManager.loadAlbumTracks(a.id, 0, 2).catch(() => null),
+      ),
+    );
+    const tracks = perAlbum.flatMap((p) => p?.items ?? []).slice(0, 6);
+    if (tracks.length > 0) return tracks;
+  } catch {
+    // Fall through to recommendations
   }
-  return rows;
+  try {
+    const recs = await entityManager.loadRecommendations({
+      limit: 8,
+      seedTracks: seedTracks
+        .map((t) => t.id)
+        .filter((id) => !id.startsWith('sk'))
+        .slice(0, 5),
+    });
+    if (recs.length > 0) return recs.slice(0, 6);
+  } catch {
+    // Fall through to seed fallback
+  }
+  return seedTracks.slice(0, 6);
 }
 
-// Load the active Home tab. Discover rows paint instantly so the page
-// always has content; cached rows render instantly; scope errors stay
-// tab-local with a reauthorization hint; failures never block playback.
+// Non-selectable loading markers. Skeletons are headers only — never fake
+// tracks/artists — so Enter can never play a `Loading…` row.
+function loadingRows(): HomeRow[] {
+  return [
+    { kind: 'header', text: 'Loading…' },
+    { kind: 'header', text: 'Loading…' },
+    { kind: 'header', text: 'Loading…' },
+    { kind: 'header', text: 'Loading…' },
+  ];
+}
+
+// Load the active Home tab. All four panels fetch immediately in parallel
+// and compose per-section: one scope failure degrades its own panel with
+// a reauthorization hint while the other panels still paint. Failures
+// never block playback and never wipe the whole page.
 export async function ensureHomeTab(
   deps: HomeLoaderDeps,
   tab: string,
   force = false,
 ): Promise<void> {
-  const { homeManager, getUi, state } = deps;
+  const { homeManager, entityManager, getUi, state } = deps;
   const ui = getUi();
   if (!ui) return;
   const tabs = tabsOf(state);
+  if (tab !== 'for_you' && tab !== 'recently_played') return;
+
+  ui.setHomeItems(loadingRows(), { rangeLabel: RANGE_LABEL[tabs.range] });
+  ui.setStatus(tab === 'for_you' ? 'Loading For You…' : 'Loading Recently Played…');
+
+  const [forYou, recent] = await Promise.all([
+    homeManager.loadForYou(tabs.range, force).then(
+      (d) => ({ ok: true as const, data: d }),
+      (err: unknown) => ({ ok: false as const, error: err }),
+    ),
+    homeManager.loadRecentlyPlayed(force).then(
+      (d) => ({ ok: true as const, data: d }),
+      (err: unknown) => ({ ok: false as const, error: err }),
+    ),
+  ]);
+
   if (tab === 'for_you') {
-    ui.setHomeItems([...discoverRows()], { rangeLabel: RANGE_LABEL[tabs.range] });
-    ui.setStatus('Loading For You…');
-    try {
-      const data = await homeManager.loadForYou(tabs.range, force);
-      state.homeTabs = setForYouError(tabs, undefined);
-      const rows: HomeRow[] = [
-        { kind: 'header', text: `Top Tracks · ${RANGE_LABEL[data.range] ?? data.range}` },
-        ...(data.topTracks as CatalogTrackT[]).map((t): HomeRow => ({ kind: 'track', track: t })),
-        { kind: 'header', text: 'Top Artists' },
-        ...(data.topArtists as CatalogArtistT[]).map((a): HomeRow => ({
-          kind: 'artist',
-          artist: a,
-        })),
-        ...discoverRows(),
-      ];
-      ui.setHomeItems(rows, { rangeLabel: RANGE_LABEL[data.range] ?? data.range });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      state.homeTabs = setForYouError(tabs, msg);
-      ui.setHomeItems([], { error: `For You unavailable (${msg}) — press A to reauthorize` });
-    }
-    return;
+    state.homeTabs = setForYouError(
+      tabs,
+      forYou.ok ? undefined : forYou.error instanceof Error ? forYou.error.message : String(forYou.error),
+    );
+  } else {
+    state.homeTabs = setRecentError(
+      tabs,
+      recent.ok ? undefined : recent.error instanceof Error ? recent.error.message : String(recent.error),
+    );
   }
-  if (tab === 'recently_played') {
-    ui.setHomeItems([...discoverRows()]);
-    ui.setStatus('Loading Recently Played…');
+
+  const topTracks: CatalogTrackT[] = forYou.ok ? (forYou.data.topTracks as CatalogTrackT[]) : [];
+  const topArtists: CatalogTrackT[] | CatalogArtistT[] = forYou.ok
+    ? (forYou.data.topArtists as CatalogArtistT[])
+    : [];
+
+  // Saved-state for visible recent tracks (at most 40 URIs); a
+  // membership failure degrades to unmarked rows, never an error.
+  const saved = new Set<string>();
+  if (recent.ok && recent.data.items.length > 0) {
+    const uris = recent.data.items
+      .map((i) => (i.track as CatalogTrackT).uri)
+      .filter((u): u is string => typeof u === 'string')
+      .slice(0, 40);
     try {
-      const data = await homeManager.loadRecentlyPlayed(force);
-      state.homeTabs = setRecentError(tabs, undefined);
-      // Batch saved-state for visible tracks (at most 40 URIs); a
-      // membership failure degrades to unmarked rows, never an error.
-      const uris = data.items
-        .map((i) => (i.track as CatalogTrackT).uri)
-        .filter((u): u is string => typeof u === 'string')
-        .slice(0, 40);
-      const saved = new Set<string>();
-      try {
-        for (const m of await deps.entityManager.checkMembership(uris)) {
-          if (m.state === 'saved') saved.add(m.uri);
-        }
-      } catch {
-        // Degrade gracefully
+      for (const m of await entityManager.checkMembership(uris)) {
+        if (m.state === 'saved') saved.add(m.uri);
       }
-      const rows: HomeRow[] = [
-        { kind: 'header', text: 'Recently Played' },
-        ...data.items.map((i): HomeRow => {
-          const t = i.track as CatalogTrackT;
-          return {
-            kind: 'track',
-            track: t,
-            playedAt: i.playedAt,
-            saved: typeof t.uri === 'string' && saved.has(t.uri),
-          };
-        }),
-        ...discoverRows(),
-      ];
-      ui.setHomeItems(rows);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      state.homeTabs = setRecentError(tabs, msg);
-      ui.setHomeItems([], {
-        error: `Recently Played unavailable (${msg}) — press A to reauthorize`,
-      });
+    } catch {
+      // Degrade gracefully
     }
   }
+
+  const recentItems = recent.ok ? recent.data.items : [];
+  const recentSeed: CatalogTrackT[] =
+    recentItems.length > 0
+      ? recentItems.slice(0, 6).map((i) => i.track as CatalogTrackT)
+      : topTracks.slice(0, 6);
+  const preview = await loadDiscoverPreview(entityManager, recentSeed.length > 0 ? recentSeed : topTracks);
+
+  const rows: HomeRow[] = [];
+  const rangeSuffix = forYou.ok ? (RANGE_LABEL[forYou.data.range] ?? forYou.data.range) : RANGE_LABEL[tabs.range];
+  if (topTracks.length > 0) {
+    rows.push({ kind: 'header', text: `Top Tracks · ${rangeSuffix}` });
+    rows.push(...topTracks.slice(0, 8).map((t): HomeRow => ({ kind: 'track', track: t })));
+  } else if (!forYou.ok) {
+    const msg = forYou.error instanceof Error ? forYou.error.message : String(forYou.error);
+    rows.push({ kind: 'header', text: `Top Tracks unavailable (${msg}) — press A to reauthorize` });
+  }
+  if ((topArtists as CatalogArtistT[]).length > 0) {
+    rows.push({ kind: 'header', text: 'Top Artists' });
+    rows.push(
+      ...(topArtists as CatalogArtistT[])
+        .slice(0, 6)
+        .map((a): HomeRow => ({ kind: 'artist', artist: a })),
+    );
+  }
+  if (recentItems.length > 0) {
+    rows.push({ kind: 'header', text: 'Recently Played' });
+    rows.push(
+      ...recentItems.slice(0, 6).map((i): HomeRow => {
+        const t = i.track as CatalogTrackT;
+        return {
+          kind: 'track',
+          track: t,
+          playedAt: i.playedAt,
+          saved: typeof t.uri === 'string' && saved.has(t.uri),
+        };
+      }),
+    );
+  } else if (!recent.ok) {
+    const msg = recent.error instanceof Error ? recent.error.message : String(recent.error);
+    rows.push({ kind: 'header', text: `Recently Played unavailable (${msg}) — press A to reauthorize` });
+  } else if (topTracks.length > 0) {
+    rows.push({ kind: 'header', text: 'Recently Played' });
+    rows.push(...topTracks.slice(0, 6).map((t): HomeRow => ({ kind: 'track', track: t })));
+  }
+  if (preview.length > 0) {
+    rows.push({ kind: 'header', text: 'Discover · New & Recommended' });
+    rows.push(...preview.map((t): HomeRow => ({ kind: 'track', track: t })));
+  }
+
+  ui.setHomeItems(rows, { rangeLabel: rangeSuffix });
 }

@@ -36,6 +36,9 @@ function setup(opts?: { forYouError?: string; recentError?: string }) {
   const entityManager = {
     checkMembership: async (uris: string[]) =>
       uris.map((uri) => ({ uri, kind: 'track', state: 'saved' })),
+    loadNewReleases: async () => [],
+    loadAlbumTracks: async () => ({ items: [], total: 0 }),
+    loadRecommendations: async () => [track('d1')],
   } as unknown as EntityManager;
   let rows: unknown[] = [];
   let meta: { error?: string } | undefined;
@@ -70,10 +73,27 @@ describe('home loaders', () => {
   });
 
   it('keeps scope failures tab-local with reauth hints', async () => {
-    const { deps, meta, state } = setup({ forYouError: 'missing user-top-read' });
+    const { deps, rows, state } = setup({ forYouError: 'missing user-top-read' });
     await ensureHomeTab(deps, 'for_you');
-    expect(meta()?.error).toContain('reauthorize');
+    const options = homeRowOptions(rows() as never);
+    // For You failure degrades its own section; other panels still paint.
+    expect(options.some((o) => o.name.includes('reauthorize'))).toBe(true);
+    expect(options.some((o) => o.name.includes('Recently Played'))).toBe(true);
+    expect(options.some((o) => o.name.includes('Discover'))).toBe(true);
     expect(state().homeTabs.forYouError).toContain('user-top-read');
     expect(state().homeTabs.recentError).toBeUndefined();
+  });
+
+  it('paints all four panels with real tracks on start', async () => {
+    const { deps, rows } = setup();
+    await ensureHomeTab(deps, 'for_you');
+    const flat = rows() as Array<{ kind: string; track?: { uri: string } }>;
+    const tracks = flat.filter((r) => r.kind === 'track');
+    // Top Tracks + Recently Played + Discover preview, all playable.
+    expect(tracks.length).toBeGreaterThanOrEqual(3);
+    for (const t of tracks) {
+      expect(t.track?.uri.startsWith('spotify:track:')).toBe(true);
+    }
+    expect(flat.some((r) => r.kind === 'artist')).toBe(true);
   });
 });
