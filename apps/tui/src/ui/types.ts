@@ -108,7 +108,7 @@ export interface Ui {
   setLibraryLoading(loading: boolean): void;
   setLibraryLines(lines: string[], empty: boolean): void;
   setQueueSnapshot(snap: QueueSnapshotT): void;
-  setHomeItems(rows: HomeRow[], meta?: { error?: string }): void;
+  setHomeItems(rows: HomeRow[], meta?: { error?: string; rangeLabel?: string }): void;
   setArtistAlbums(
     items: Array<{
       id: string;

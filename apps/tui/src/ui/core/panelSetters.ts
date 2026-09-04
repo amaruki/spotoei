@@ -81,24 +81,40 @@ export function createPanelSetters(ctx: UiCoreContext) {
     },
     setHomeItems(
       rows: Parameters<import('../types').Ui['setHomeItems']>[0],
-      meta?: { error?: string },
+      meta?: { error?: string; rangeLabel?: string },
     ): void {
       ctx.currentHomeItems.value = rows;
-      const parts = partitionHomeRows(rows as never);
+      if (meta?.rangeLabel) {
+        built.homeTracks.title = `Top Tracks · ${meta.rangeLabel}`;
+      }
       const panels = [
-        { key: 'tracks', list: built.homeTracksList, rows: parts.tracks },
-        { key: 'artists', list: built.homeArtistsList, rows: parts.artists },
-        { key: 'recent', list: built.homeRecentList, rows: parts.recent },
+        {
+          key: 'tracks',
+          list: built.homeTracksList,
+          empty: '(no top tracks yet)',
+        },
+        {
+          key: 'artists',
+          list: built.homeArtistsList,
+          empty: '(no top artists yet)',
+        },
+        {
+          key: 'recent',
+          list: built.homeRecentList,
+          empty: '(nothing played recently)',
+        },
       ] as const;
+      const parts = partitionHomeRows(rows as never);
+      const byKey = { tracks: parts.tracks, artists: parts.artists, recent: parts.recent };
       for (const panel of panels) {
-        const options = homeRowOptions(panel.rows as never);
+        const options = homeRowOptions(byKey[panel.key] as never, panel.empty);
         if (meta?.error && panel.key === 'tracks') {
           options.push({
             name: `⚠ ${meta.error}`,
             description: 'Tab-local error — other tabs unaffected',
           });
         }
-        panel.list.options = options.length > 0 ? options : homeRowOptions([]);
+        panel.list.options = options;
         const saved = ctx.positions.restoreKey(
           panelPositionKey(ctx.route.current, 'home', panel.key),
         );

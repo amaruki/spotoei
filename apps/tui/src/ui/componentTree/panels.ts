@@ -18,6 +18,8 @@ export function makeListPanel(
     id,
     flexGrow: 1,
     flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
     borderStyle: 'single',
     borderColor: COLOR_BORDER,
     backgroundColor: COLOR_PANEL_BG,
@@ -43,6 +45,8 @@ export function makeGridColumn(renderer: CliRenderer, id: string): BoxRenderable
     id,
     flexGrow: 1,
     flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
     flexDirection: 'column',
   });
 }

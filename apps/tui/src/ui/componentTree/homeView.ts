@@ -44,6 +44,8 @@ export function buildHomeView(renderer: CliRenderer): HomeViewNodes {
   const homeNowText = new TextRenderable(renderer, {
     id: 'home-now-text',
     content: t`${fg(COLOR_DIM)('Nothing playing')}`,
+    wrapMode: 'word',
+    width: '100%',
   });
   homeNow.add(homeNowText);
   colLeft.add(tracks.box);

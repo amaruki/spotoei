@@ -48,7 +48,7 @@ export async function ensureHomeTab(
           artist: a,
         })),
       ];
-      ui.setHomeItems(rows);
+      ui.setHomeItems(rows, { rangeLabel: RANGE_LABEL[data.range] ?? data.range });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       state.homeTabs = setForYouError(tabs, msg);

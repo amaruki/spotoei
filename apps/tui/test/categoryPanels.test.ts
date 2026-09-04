@@ -39,24 +39,26 @@ const artist = (id: string): CatalogArtistT => ({
 });
 
 function makeUi() {
-  return createTestRenderer({ width: 120, height: 40 }).then(({ renderer, renderOnce }) => {
-    const ui = createUiCore(renderer, baseState, {
-      onKey: () => {},
-      onSearchSubmit: () => {},
-      onSelectLibrary: () => {},
-      onSelectQueue: () => {},
-    });
-    const sendKey = (name: string, sequence: string) => {
-      renderer.keyInput.emit('keypress', {
-        name,
-        sequence,
-        ctrl: false,
-        shift: false,
-        meta: false,
-      } as unknown as KeyEvent);
-    };
-    return { ui, renderOnce, sendKey };
-  });
+  return createTestRenderer({ width: 120, height: 40 }).then(
+    ({ renderer, renderOnce, captureCharFrame }) => {
+      const ui = createUiCore(renderer, baseState, {
+        onKey: () => {},
+        onSearchSubmit: () => {},
+        onSelectLibrary: () => {},
+        onSelectQueue: () => {},
+      });
+      const sendKey = (name: string, sequence: string) => {
+        renderer.keyInput.emit('keypress', {
+          name,
+          sequence,
+          ctrl: false,
+          shift: false,
+          meta: false,
+        } as unknown as KeyEvent);
+      };
+      return { ui, renderOnce, sendKey, captureCharFrame };
+    },
+  );
 }
 
 const homeRows = (): HomeRow[] => [
@@ -133,6 +135,45 @@ describe('category panels', () => {
     ui.setHomeItems(homeRows());
     await renderOnce();
     expect(ui.getContextTarget()).toMatchObject({ kind: 'artist', id: 'a2' });
+    await ui.shutdown();
+  });
+
+  it('renders four titled home panels with even columns', async () => {
+    const { ui, renderOnce, captureCharFrame } = await makeUi();
+    await renderOnce();
+    ui.setRoute({ kind: 'home', tab: 'for_you' });
+    ui.setHomeItems(homeRows(), { rangeLabel: '6 months' });
+    await renderOnce();
+    const frame = captureCharFrame();
+    for (const title of ['Top Tracks', 'Top Artists', 'Recently Played', 'Now Playing']) {
+      expect(frame).toContain(title);
+    }
+    expect(frame).toContain('6 months');
+    const row = frame
+      .split('\n')
+      .find((line) => line.includes('Top Tracks') && line.includes('Top Artists'));
+    expect(row).toBeDefined();
+    // Equal columns: both panel boxes have the same width.
+    const firstBox = row?.indexOf('┌─Top Tracks') ?? -1;
+    const secondBox = row?.indexOf('┌─Top Artists') ?? -1;
+    expect(firstBox).toBeGreaterThanOrEqual(0);
+    expect(secondBox).toBeGreaterThan(firstBox);
+    const firstWidth = secondBox - firstBox;
+    const secondWidth = (row?.length ?? 0) - secondBox - 2;
+    expect(Math.abs(firstWidth - secondWidth)).toBeLessThanOrEqual(2);
+    await ui.shutdown();
+  });
+
+  it('shows per-panel empty states instead of blank panels', async () => {
+    const { ui, renderOnce, captureCharFrame } = await makeUi();
+    await renderOnce();
+    ui.setRoute({ kind: 'home', tab: 'for_you' });
+    ui.setHomeItems([]);
+    await renderOnce();
+    const frame = captureCharFrame();
+    expect(frame).toContain('(no top tracks yet)');
+    expect(frame).toContain('(no top artists yet)');
+    expect(frame).toContain('(nothing played recently)');
     await ui.shutdown();
   });
 

@@ -8,9 +8,12 @@ export type HomeRow =
   | { kind: 'track'; track: CatalogTrackT; playedAt?: string; saved?: boolean }
   | { kind: 'artist'; artist: CatalogArtistT };
 
-export function homeRowOptions(rows: HomeRow[]): Array<{ name: string; description: string }> {
+export function homeRowOptions(
+  rows: HomeRow[],
+  emptyLabel = '(nothing here yet)',
+): Array<{ name: string; description: string }> {
   if (rows.length === 0) {
-    return [{ name: '(nothing here yet)', description: 'Try another Home tab' }];
+    return [{ name: emptyLabel, description: 'Try another Home tab' }];
   }
   return rows.map((row) => {
     switch (row.kind) {

@@ -76,9 +76,7 @@ ${fg(COLOR_DIM)(`${pb?.state ?? 'idle'} · ${pos} / ${dur} · vol ${vol}% · shu
       pb?.state === 'playing' ? 'playing' : pb?.state === 'paused' ? 'paused' : 'idle';
 
     const authIndicator =
-      state.auth.state === 'authenticated'
-        ? fg(COLOR_SUCCESS)('● Online')
-        : fg(COLOR_WARN)('○ Offline / Login Required');
+      state.auth.state === 'authenticated' ? '● Online' : '○ Offline / Login Required';
 
     built.playbackBar.title = `Playback [${pbState.toUpperCase()}]  •  Spotoei ${authIndicator}`;
 
