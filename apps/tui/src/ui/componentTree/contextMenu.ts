@@ -15,12 +15,18 @@ export interface ContextMenuNodes {
 }
 
 export function buildContextMenu(renderer: CliRenderer): ContextMenuNodes {
+  // Responsive width: cap at 44 but never exceed terminal width - 2 to avoid clipping.
+  const termW =
+    typeof (renderer as unknown as { terminalWidth?: unknown }).terminalWidth === 'number'
+      ? (renderer as unknown as { terminalWidth: number }).terminalWidth
+      : 80;
+  const menuWidth = Math.min(44, termW - 2);
   const menu = new BoxRenderable(renderer, {
     id: 'context-menu',
     position: 'absolute',
     top: 6,
     left: 10,
-    width: 44,
+    width: menuWidth,
     borderStyle: 'single',
     borderColor: COLOR_BORDER_FOCUS,
     backgroundColor: COLOR_PANEL_BG,

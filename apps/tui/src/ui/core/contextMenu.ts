@@ -137,6 +137,12 @@ export function createContextMenuHelpers(ctx: UiCoreContext) {
     ctx.menu.open = true;
     ctx.menu.prevFocus = focus.current;
     ctx.menu.items = items;
+    // Responsive sizing: use min(44, w-2) so narrow terminals don't clip.
+    const w = ctx.termWidth.value;
+    const rw = Math.min(44, w - 2);
+    if (typeof (built.menu as unknown as { width?: unknown }).width !== 'undefined') {
+      (built.menu as unknown as { width: number }).width = rw > 0 ? rw : 20;
+    }
     built.menuTitle.content = t`${fg(COLOR_TEXT)(title)}`;
     built.menuList.options = items.map((item) => ({
       name: item.disabled ? `○ ${item.label}` : `• ${item.label}`,

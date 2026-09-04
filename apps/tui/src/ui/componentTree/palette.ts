@@ -16,12 +16,18 @@ export interface PaletteNodes {
   paletteStatus: TextRenderable;
 }
 export function buildPalette(renderer: CliRenderer): PaletteNodes {
+  // Responsive width: cap at 60 but never exceed terminal width - 2 to avoid clipping on narrow terminals.
+  const termW =
+    typeof (renderer as unknown as { terminalWidth?: unknown }).terminalWidth === 'number'
+      ? (renderer as unknown as { terminalWidth: number }).terminalWidth
+      : 80;
+  const paletteWidth = Math.min(60, termW - 2);
   const palette = new BoxRenderable(renderer, {
     id: 'palette',
     position: 'absolute',
     top: 4,
     left: 6,
-    width: 60,
+    width: paletteWidth,
     borderStyle: 'double',
     borderColor: COLOR_BORDER_FOCUS,
     backgroundColor: COLOR_PANEL_BG,

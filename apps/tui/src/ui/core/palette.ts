@@ -36,6 +36,12 @@ export function createPaletteHelpers(ctx: UiCoreContext) {
 
   const setPaletteOpen = (open: boolean): void => {
     palette.open = open;
+    // Responsive sizing: use min(60, w-2) so narrow terminals don't clip.
+    const w = ctx.termWidth.value;
+    const rw = Math.min(60, w - 2);
+    if (typeof (built.palette as unknown as { width?: unknown }).width !== 'undefined') {
+      (built.palette as unknown as { width: number }).width = rw > 0 ? rw : 20;
+    }
     built.palette.visible = open;
     if (open) {
       palette.prevFocus = focus.current;

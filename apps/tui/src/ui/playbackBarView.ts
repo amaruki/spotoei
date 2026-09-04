@@ -4,6 +4,12 @@
 
 import { formatTime } from './formatters';
 
+function truncate(text: string, max: number): string {
+  if (text.length <= max) return text;
+  if (max <= 3) return text.slice(0, max);
+  return `${text.slice(0, max - 1)}…`;
+}
+
 export interface PlaybackBarInput {
   state: 'playing' | 'paused' | 'idle';
   title: string;
@@ -34,8 +40,12 @@ export function buildPlaybackBarContent(input: PlaybackBarInput): PlaybackBarCon
   const icon = input.state === 'playing' ? '▶' : input.state === 'paused' ? '⏸' : '■';
   const pos = formatTime(input.positionMs);
   const dur = formatTime(input.durationMs);
-  const title = input.title || '(no track)';
-  const artist = input.artist || '—';
+  const rawTitle = input.title || '(no track)';
+  const rawArtist = input.artist || '—';
+  // Cap raw title/artist to avoid clipping on narrow terminals.
+  const capLen = Math.max(10, input.width - 30);
+  const title = truncate(rawTitle, capLen);
+  const artist = truncate(rawArtist, Math.max(8, capLen - 5));
   if (input.width < NARROW_BREAKPOINT) {
     return {
       variant: 'narrow',
@@ -50,7 +60,7 @@ export function buildPlaybackBarContent(input: PlaybackBarInput): PlaybackBarCon
       line2: `Shuf ${input.shuffle ? 'on' : 'off'} Rep ${input.repeat} Q:${input.queueCount} · Space Pause · n Next`,
     };
   }
-  const album = input.album ? `\n    Album ${input.album}` : '';
+  const album = input.album ? `\n    Album ${truncate(input.album, Math.max(10, input.width - 40))}` : '';
   return {
     variant: 'wide',
     line1: `${icon} ${title} — ${artist}  Shuffle ${input.shuffle ? 'on' : 'off'} Repeat ${input.repeat} Queue: ${input.queueCount}${album}`,

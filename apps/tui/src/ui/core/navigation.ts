@@ -101,10 +101,10 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     // Login-only mode: unauthenticated users see the settings login page
     // with no sidebar, side panel, or playback bar — like a logged-out web route.
     const loginMode = state.auth.state !== 'authenticated';
-    // Responsive tiers: >=100 sidebar visible, 80–99 collapsible via
+    // Responsive tiers: >=120 sidebar visible, 80–119 collapsible via
     // Toggle Sidebar (default visible), <80 drawer (hidden, palette nav).
     const w = ctx.termWidth.value;
-    const sidebarByWidth = w >= 100 ? true : w >= 80 ? ctx.sidebarPinned.value : false;
+    const sidebarByWidth = w >= 120 ? true : w >= 80 ? ctx.sidebarPinned.value : false;
     built.sidebar.visible = !loginMode && !isVizFull && sidebarByWidth;
     built.playbackBar.visible = !loginMode;
 
