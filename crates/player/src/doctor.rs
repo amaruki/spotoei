@@ -11,11 +11,11 @@ pub async fn run_doctor(args: &[String]) -> ExitCode {
     let sub = args.first().map(|s| s.as_str()).unwrap_or("all");
     let mut problems = 0u32;
 
-    if sub == "all" || sub == "version" {
+    if sub == "all" || sub == "version" || sub == "system" {
         println!("[ok] SPOTOEI version: player={}", PLAYER_VERSION);
     }
 
-    if sub == "all" || sub == "audio" {
+    if sub == "all" || sub == "audio" || sub == "system" {
         let client_id = resolve_client_id();
         let (tx, _rx) = mpsc::channel::<String>(8);
         let auth = Arc::new(AuthManager::new(client_id, tx));
@@ -30,7 +30,7 @@ pub async fn run_doctor(args: &[String]) -> ExitCode {
         }
     }
 
-    if sub == "all" || sub == "sidecar" {
+    if sub == "all" || sub == "sidecar" || sub == "system" {
         // We are the sidecar; confirm we can emit a hello response.
         println!(
             "[ok] player sidecar present (protocol={})",
@@ -38,7 +38,7 @@ pub async fn run_doctor(args: &[String]) -> ExitCode {
         );
     }
 
-    if sub == "all" || sub == "config" {
+    if sub == "all" || sub == "config" || sub == "db" || sub == "system" {
         let id = resolve_client_id();
         if !id.is_empty() {
             println!("[ok] config readable (client_id=<set>)");
@@ -48,7 +48,7 @@ pub async fn run_doctor(args: &[String]) -> ExitCode {
         }
     }
 
-    if sub == "all" || sub == "auth" {
+    if sub == "all" || sub == "auth" || sub == "network" || sub == "system" || sub == "keyring" {
         let client_id = resolve_client_id();
         let (tx, _rx) = mpsc::channel::<String>(8);
         let auth = AuthManager::new(client_id.clone(), tx);
@@ -100,7 +100,7 @@ pub async fn run_doctor(args: &[String]) -> ExitCode {
         }
     }
 
-    if sub == "all" || sub == "cache" {
+    if sub == "all" || sub == "cache" || sub == "db" || sub == "system" {
         // Cache is owned by the UI; here we just confirm the directory is writable
         // so the UI can create its SQLite file.
         let cache_path = std::env::var("XDG_CACHE_HOME")
@@ -127,7 +127,7 @@ pub async fn run_doctor(args: &[String]) -> ExitCode {
         }
     }
 
-    if sub == "all" || sub == "browser" {
+    if sub == "all" || sub == "browser" || sub == "system" {
         // Best-effort check: the Spotify OAuth flow opens a browser. We look
         // for `xdg-open` (Linux), `open` (macOS), or `start` (Windows).
         let candidates: &[&str] = if cfg!(target_os = "macos") {
