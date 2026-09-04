@@ -80,7 +80,9 @@ impl super::LibrespotEngine {
 
         let session = librespot::core::session::Session::new(session_config, Some(cache));
 
+        // Fallback sink selection: try default backend first, then pulseaudio.
         let sink_builder = librespot::playback::audio_backend::find(None)
+            .or_else(|| librespot::playback::audio_backend::find(Some("pulseaudio".to_string())))
             .ok_or_else(|| "No audio sink backend found for current platform".to_string())?;
 
         let mixer = Arc::new(
@@ -92,14 +94,23 @@ impl super::LibrespotEngine {
         let volume_getter = mixer.get_soft_volume();
 
         let pcm_tx = self.pcm_sender.clone();
-        let player_config = librespot::playback::config::PlayerConfig::default();
+        let mut player_config = librespot::playback::config::PlayerConfig::default();
+        // Enforce high-quality audio defaults: 320 kbps, gapless, normalization.
+        player_config.bitrate = librespot::playback::config::Bitrate::Bitrate320;
+        player_config.gapless = true;
+        player_config.normalisation = true;
         let player = librespot::playback::player::Player::new(
             player_config,
             session.clone(),
             volume_getter,
             move || {
-                let actual =
-                    sink_builder(None, librespot::playback::config::AudioFormat::default());
+                // Fallback inside sink creation: if default format panics, fall back to S16.
+                let actual = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    sink_builder(None, librespot::playback::config::AudioFormat::default())
+                }))
+                .unwrap_or_else(|_| {
+                    sink_builder(None, librespot::playback::config::AudioFormat::S16)
+                });
                 Box::new(VisualizerSink {
                     inner: actual,
                     pcm_sender: pcm_tx.clone(),
