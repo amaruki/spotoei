@@ -28,15 +28,22 @@ pub fn load_client_id_from_config() -> String {
 }
 
 pub fn resolve_client_id() -> String {
-    match std::env::var("SPOTOEI_CLIENT_ID") {
-        Ok(v) if !v.trim().is_empty() => v.trim().to_string(),
-        _ => {
-            let from_config = load_client_id_from_config();
-            if !from_config.is_empty() {
-                from_config
-            } else {
-                auth::KEYMASTER_CLIENT_ID.to_string()
-            }
+    if let Ok(v) = std::env::var("SPOTOEI_CLIENT_ID") {
+        if !v.trim().is_empty() {
+            return v.trim().to_string();
         }
     }
+    let from_config = load_client_id_from_config();
+    if !from_config.is_empty() {
+        return from_config;
+    }
+    // No shared default. BYO Client ID is required. The former
+    // KEYMASTER fallback is only available in debug builds when
+    // explicitly opted in via SPOTOEI_ALLOW_KEYMASTER=1.
+    if cfg!(debug_assertions) {
+        if std::env::var("SPOTOEI_ALLOW_KEYMASTER").as_deref() == Ok("1") {
+            return auth::KEYMASTER_CLIENT_ID.to_string();
+        }
+    }
+    String::new()
 }
