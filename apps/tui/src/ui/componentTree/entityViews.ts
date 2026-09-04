@@ -1,5 +1,15 @@
-import { BoxRenderable, type CliRenderer, SelectRenderable, TextRenderable } from '@opentui/core';
-import { COLOR_BORDER, COLOR_PANEL_BG } from '../theme';
+import {
+  BoxRenderable,
+  type CliRenderer,
+  FrameBufferRenderable,
+  SelectRenderable,
+  TextRenderable,
+  bold,
+  fg,
+  t,
+} from '@opentui/core';
+import { COLOR_ACCENT, COLOR_BORDER, COLOR_DIM, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
+import type { UiViewState } from '../types';
 
 export interface EntityViewNodes {
   artist: BoxRenderable;
@@ -11,7 +21,8 @@ export interface EntityViewNodes {
   browse: BoxRenderable;
   browseList: SelectRenderable;
   visualizerFull: BoxRenderable;
-  visualizerFullText: TextRenderable;
+  visualizerFullTitle: TextRenderable;
+  visualizerFullFb: FrameBufferRenderable;
 }
 
 function makeListView(
@@ -46,7 +57,7 @@ function makeListView(
   return { box, list };
 }
 
-export function buildEntityViews(renderer: CliRenderer): EntityViewNodes {
+export function buildEntityViews(renderer: CliRenderer, state: UiViewState): EntityViewNodes {
   const artist = makeListView(renderer, 'view-artist', 'Artist (Enter: play, x: actions)');
   const album = makeListView(renderer, 'view-album', 'Album (Enter: play, x: actions)');
   const playlist = makeListView(renderer, 'view-playlist', 'Playlist (Enter: play, x: actions)');
@@ -66,11 +77,21 @@ export function buildEntityViews(renderer: CliRenderer): EntityViewNodes {
     paddingTop: 1,
     visible: false,
   });
-  const visualizerFullText = new TextRenderable(renderer, {
-    id: 'visualizer-full-text',
-    content: '(visualizer fullscreen — press V to exit, m to cycle mode)',
+  // Fullscreen visualizer owns the only pixels. The frame buffer has a
+  // fixed size: @opentui/core 0.5.10 exposes no public fb-resize API, so
+  // per-resize pixel sizing is blocked upstream; drawing adapts to these
+  // dimensions and narrow terminals reduce bar density instead.
+  const visualizerFullTitle = new TextRenderable(renderer, {
+    id: 'visualizer-full-title',
+    content: t`${fg(COLOR_DIM)('mode: ')}${fg(COLOR_ACCENT)(bold(state.visualizer.mode))}  ${fg(COLOR_DIM)('fps: ')}${fg(COLOR_TEXT)(String(state.visualizer.fps))}`,
   });
-  visualizerFull.add(visualizerFullText);
+  visualizerFull.add(visualizerFullTitle);
+  const visualizerFullFb = new FrameBufferRenderable(renderer, {
+    id: 'visualizer-full-fb',
+    width: 104,
+    height: 20,
+  });
+  visualizerFull.add(visualizerFullFb);
 
   return {
     artist: artist.box,
@@ -82,6 +103,7 @@ export function buildEntityViews(renderer: CliRenderer): EntityViewNodes {
     browse: browse.box,
     browseList: browse.list,
     visualizerFull,
-    visualizerFullText,
+    visualizerFullTitle,
+    visualizerFullFb,
   };
 }

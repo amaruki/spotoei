@@ -503,19 +503,21 @@ describe('OpenTUI renderables integration', () => {
 
     await renderOnce();
 
-    // 1. Visualizer should be hidden by default
-    expect(ui.isVisualizerVisible()).toBe(false);
+    // 1. Visualizer is a fullscreen route, not a side panel: it starts closed
+    expect(routeKind(ui.getRoute())).not.toBe('visualizer');
 
-    // 2. Toggle visualizer
-    const isNowVisible = ui.toggleVisualizer();
-    expect(isNowVisible).toBe(true);
-    expect(ui.isVisualizerVisible()).toBe(true);
+    // 2. Route to the visualizer and back restores the prior route
+    ui.setRoute({ kind: 'visualizer' });
+    expect(routeKind(ui.getRoute())).toBe('visualizer');
+    await renderOnce();
+    ui.setVisualizerFrame({ mode: 'spectrum', data: [0.2, 0.6, 0.4] });
+    await renderOnce();
+    expect(ui.navigateBack()).toBe(true);
+    expect(routeKind(ui.getRoute())).toBe('home');
 
-    const isHiddenAgain = ui.toggleVisualizer();
-    expect(isHiddenAgain).toBe(false);
-    expect(ui.isVisualizerVisible()).toBe(false);
-
-    // 3. Dispatch shifted keys (S, R, A, V) and u
+    // 3. Dispatch shifted keys (S, R, A, V) and u from sidebar focus,
+    // where they fall through to the global onKey handler
+    ui.setFocus('sidebar');
     const sendKey = (name: string, sequence: string, shift = false) => {
       renderer.keyInput.emit('keypress', {
         name,

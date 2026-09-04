@@ -3,19 +3,18 @@ import { COLOR_ACCENT, COLOR_DIM, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
 import { drawBars, drawWave, type OptimizedBufferLike } from '../visualizerCanvas';
 import type { UiCoreContext } from './types';
 
-// Visualizer title painter + visibility toggles. The actual spectrum/wave
-// drawing is in `visualizerCanvas.ts`; this file just wires the helpers to
-// the build tree and the latest frame buffer.
+// Fullscreen visualizer painter. Frame rendering touches only the
+// fullscreen buffer and title; metadata rendering is never triggered here,
+// so slow frames cannot block audio or rerender unrelated screens.
 export function createVisualizerHelpers(ctx: UiCoreContext) {
-  const { built, latestVizFrame, state, visualizerVisible } = ctx;
+  const { built, latestVizFrame, state } = ctx;
 
   const setVizTitle = (): void => {
-    built.visualizerTitle.content = t`${fg(COLOR_DIM)('mode: ')}${fg(COLOR_ACCENT)(bold(state.visualizer.mode))}  ${fg(COLOR_DIM)('fps: ')}${fg(COLOR_TEXT)(String(state.visualizer.fps))}`;
+    built.visualizerFullTitle.content = t`${fg(COLOR_DIM)('mode: ')}${fg(COLOR_ACCENT)(bold(state.visualizer.mode))}  ${fg(COLOR_DIM)('fps: ')}${fg(COLOR_TEXT)(String(state.visualizer.fps))}`;
   };
 
   const paintViz = (): void => {
-    if (!visualizerVisible.value) return;
-    const fb = built.visualizerFb.frameBuffer;
+    const fb = built.visualizerFullFb.frameBuffer;
     if (state.visualizer.mode === 'off' || !latestVizFrame.value) {
       fb.clear(RGBA.fromHex(COLOR_PANEL_BG));
       return;
@@ -29,26 +28,8 @@ export function createVisualizerHelpers(ctx: UiCoreContext) {
     }
   };
 
-  const setVisualizerVisible = (visible: boolean): void => {
-    visualizerVisible.value = visible;
-    built.right.visible = visible;
-    if (visible) {
-      paintViz();
-    }
-  };
-
-  const toggleVisualizer = (): boolean => {
-    setVisualizerVisible(!visualizerVisible.value);
-    return visualizerVisible.value;
-  };
-
-  const isVisualizerVisible = (): boolean => visualizerVisible.value;
-
   return {
     setVizTitle,
     paintViz,
-    setVisualizerVisible,
-    toggleVisualizer,
-    isVisualizerVisible,
   };
 }

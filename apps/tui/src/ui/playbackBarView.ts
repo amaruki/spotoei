@@ -19,12 +19,16 @@ export interface PlaybackBarInput {
 }
 
 export interface PlaybackBarContent {
-  variant: 'wide' | 'narrow';
+  variant: 'wide' | 'medium' | 'narrow';
   line1: string;
   line2: string;
 }
 
-const NARROW_BREAKPOINT = 80;
+// Three tiers per spec §15: >=120 full, 80–119 compact (no album,
+// short hints), <80 minimal. Width must come from the renderer, not
+// process.stdout, so tests and remotes render the right tier.
+export const WIDE_BREAKPOINT = 120;
+export const NARROW_BREAKPOINT = 80;
 
 export function buildPlaybackBarContent(input: PlaybackBarInput): PlaybackBarContent {
   const icon = input.state === 'playing' ? '▶' : input.state === 'paused' ? '⏸' : '■';
@@ -37,6 +41,13 @@ export function buildPlaybackBarContent(input: PlaybackBarInput): PlaybackBarCon
       variant: 'narrow',
       line1: `${icon} ${title} — ${artist}  ${pos} / ${dur}`,
       line2: 'Space Pause · n Next · V Visualizer',
+    };
+  }
+  if (input.width < WIDE_BREAKPOINT) {
+    return {
+      variant: 'medium',
+      line1: `${icon} ${title} — ${artist}  ${pos} ━━━━━━━━ ${dur}`,
+      line2: `Shuf ${input.shuffle ? 'on' : 'off'} Rep ${input.repeat} Q:${input.queueCount} · Space Pause · n Next`,
     };
   }
   const album = input.album ? `\n    Album ${input.album}` : '';

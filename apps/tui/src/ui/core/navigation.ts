@@ -3,7 +3,7 @@ import { defaultRoute, popRoute, pushRoute, routeFromLegacy, routeKind } from '.
 import type { FocusArea, Route, UiCoreContext } from './types';
 
 export function createNavigationHelpers(ctx: UiCoreContext) {
-  const { built, focus, manualLyricsScroll, opts, route, state, visualizerVisible } = ctx;
+  const { built, focus, manualLyricsScroll, opts, route, state } = ctx;
   const listForRoute = (r: Route) => {
     const kind = routeKind(r);
     if (kind === 'home' && (r as { browse?: unknown }).browse === undefined) return built.homeList;
@@ -61,8 +61,11 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     // Login-only mode: unauthenticated users see the settings login page
     // with no sidebar, side panel, or playback bar — like a logged-out web route.
     const loginMode = state.auth.state !== 'authenticated';
-    built.sidebar.visible = !loginMode && !isVizFull;
-    built.right.visible = !loginMode && !isVizFull && visualizerVisible.value;
+    // Responsive tiers: >=100 sidebar visible, 80–99 collapsible via
+    // Toggle Sidebar (default visible), <80 drawer (hidden, palette nav).
+    const w = ctx.termWidth.value;
+    const sidebarByWidth = w >= 100 ? true : w >= 80 ? ctx.sidebarPinned.value : false;
+    built.sidebar.visible = !loginMode && !isVizFull && sidebarByWidth;
     built.playbackBar.visible = !loginMode;
 
     if (finalKind === 'lyrics') {
@@ -217,5 +220,13 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     }
   };
 
-  return { showRoute, navigateBack, setFocusArea };
+  const toggleSidebar = (): void => {
+    ctx.sidebarPinned.value = !ctx.sidebarPinned.value;
+    showRoute(route.current, true, true);
+    if (!built.sidebar.visible && focus.current === 'sidebar') {
+      setFocusArea('main');
+    }
+  };
+
+  return { showRoute, navigateBack, setFocusArea, toggleSidebar };
 }

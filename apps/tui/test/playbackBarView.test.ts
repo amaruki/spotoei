@@ -26,6 +26,15 @@ describe('playback bar responsive variants', () => {
     expect(out.line1).toContain('Pablo Honey');
   });
 
+  it('medium variant keeps title, progress and modes without album', () => {
+    const out = buildPlaybackBarContent({ ...base, width: 100 });
+    expect(out.variant).toBe('medium');
+    expect(out.line1).toContain('Creep');
+    expect(out.line1).toContain('1:24');
+    expect(out.line1).not.toContain('Pablo Honey');
+    expect(out.line2).toContain('Q:12');
+  });
+
   it('narrow variant retains state, title and progress without album or genre', () => {
     const out = buildPlaybackBarContent({ ...base, width: 50 });
     expect(out.variant).toBe('narrow');

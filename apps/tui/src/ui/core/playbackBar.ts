@@ -85,7 +85,7 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
       return;
     }
 
-    const width = process.stdout.columns ?? 120;
+    const width = ctx.termWidth.value;
     const posMs = pb?.positionMs ?? 0;
     const durMs = pb?.durationMs && pb.durationMs > 0 ? pb.durationMs : (track.durationMs ?? 0);
     const content = buildPlaybackBarContent({

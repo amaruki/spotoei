@@ -51,7 +51,6 @@ export function buildRoot({ renderer, state }: BuildArgs): BuiltUi {
 
   const main = buildMain(renderer, state);
   mainArea.add(main.center);
-  mainArea.add(main.right);
 
   const playbackBar = buildPlaybackBar(renderer);
   root.add(playbackBar.playbackBar);

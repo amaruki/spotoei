@@ -228,6 +228,8 @@ export async function initUi(
   });
 
   function cycleVisualizerMode(): void {
+    // Single mode path: the controller owns spectrum/winamp/oscilloscope
+    // cycling; the TUI only syncs state and repaints the fullscreen title.
     const next = clients.visualizer.cycleMode();
     state.currentInfo.visualizer = { mode: next, fps: clients.visualizer.getCurrentFps() };
     const u = getUi();

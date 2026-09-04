@@ -36,7 +36,8 @@ export interface UiCoreContext {
   routeStack: Route[];
   positions: ViewPositionStore;
   focus: { current: FocusArea };
-  visualizerVisible: { value: boolean };
+  termWidth: { value: number };
+  sidebarPinned: { value: boolean };
   latestVizFrame: { value: VisualizerFrame | null };
   currentLibraryItems: { value: LibraryItemT[] };
   currentSearchHits: { value: SearchHitT[] };
@@ -68,6 +69,7 @@ export interface UiCoreContext {
     showRoute: (next: Route | string, force?: boolean, replace?: boolean) => void;
     navigateBack: () => boolean;
     setFocusArea: (next: FocusArea) => void;
+    toggleSidebar: () => void;
     updateFocusVisuals: () => void;
     updateSearchFocusVisuals: (inputFocused: boolean) => void;
     refreshHome: () => void;
@@ -76,9 +78,6 @@ export interface UiCoreContext {
     setHeader: () => void;
     setVizTitle: () => void;
     paintViz: () => void;
-    setVisualizerVisible: (visible: boolean) => void;
-    toggleVisualizer: () => boolean;
-    isVisualizerVisible: () => boolean;
     setPaletteOpen: (open: boolean) => void;
     updatePaletteList: (filter: string) => void;
     openContextMenu: (title: string, items: ContextMenuItem[]) => void;

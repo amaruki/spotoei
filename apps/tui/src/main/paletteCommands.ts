@@ -65,6 +65,14 @@ export function buildPaletteCommands(
       action: () => getUi()?.setRoute({ kind: 'library', section: 'playlists' }),
     },
     { name: 'Queue', description: 'u', action: () => getUi()?.setRoute('queue') },
+    {
+      name: 'Toggle Sidebar',
+      description: 'collapse at medium widths',
+      action: () => {
+        const u = getUi();
+        if (u) u.toggleSidebar();
+      },
+    },
     ...(['all', 'track', 'artist', 'album', 'playlist'] as SearchFilter[]).map((filter) => ({
       name: `Search filter: ${filter}`,
       description: 'result type filter',
@@ -226,21 +234,6 @@ export function buildPaletteCommands(
       name: 'Toggle Autoplay',
       description: 'A',
       action: () => void actions.toggleAutoplay(),
-    },
-    {
-      name: 'Toggle Visualizer Display',
-      description: 'V',
-      action: () => {
-        const u = getUi();
-        if (u) {
-          const visible = u.toggleVisualizer();
-          u.setStatus(
-            visible
-              ? `Visualizer enabled (${state.currentInfo.visualizer.mode})`
-              : 'Visualizer hidden',
-          );
-        }
-      },
     },
     {
       name: 'Cycle Visualizer Mode',

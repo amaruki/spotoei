@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { createTestRenderer } from '@opentui/core/testing';
+import type { KeyEvent } from '@opentui/core';
 import { PROTOCOL_VERSION } from 'spotoei-protocol';
 import { createUiCore, type UiViewState } from '../src/ui';
 import { routeKind } from '../src/ui/core/navigationStack';
@@ -126,6 +127,38 @@ describe('entity, browse and visualizer routes', () => {
 
     expect(ui.navigateBack()).toBe(true);
     expect(routeKind(ui.getRoute())).toBe('album');
+    await ui.shutdown();
+  });
+
+  it('m cycles visualizer modes and V closes back to the prior route', async () => {
+    const { renderer, renderOnce } = await createTestRenderer({ width: 120, height: 40 });
+    const state: UiViewState = {
+      ...baseState,
+      visualizer: { mode: 'spectrum', fps: 30 },
+    };
+    const ui = createUiCore(renderer, state, {
+      onKey: () => {},
+      onSearchSubmit: () => {},
+      onSelectLibrary: () => {},
+      onSelectQueue: () => {},
+    });
+    await renderOnce();
+    const sendKey = (name: string, sequence: string) => {
+      renderer.keyInput.emit('keypress', {
+        name,
+        sequence,
+        ctrl: false,
+        shift: false,
+        meta: false,
+      } as unknown as KeyEvent);
+    };
+
+    ui.setRoute({ kind: 'search', query: 'q' });
+    ui.setRoute({ kind: 'visualizer' });
+    sendKey('m', 'm');
+    expect(state.visualizer.mode).toBe('winamp');
+    sendKey('V', 'V');
+    expect(routeKind(ui.getRoute())).toBe('search');
     await ui.shutdown();
   });
 

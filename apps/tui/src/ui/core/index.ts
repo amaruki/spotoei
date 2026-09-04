@@ -35,7 +35,8 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   const routeStack: Route[] = [];
   const positions = new ViewPositionStore();
   const focus = { current: 'sidebar' as FocusArea };
-  const visualizerVisible = { value: false };
+  const termWidth = { value: 120 };
+  const sidebarPinned = { value: true };
   const latestVizFrame: { value: VisualizerFrame | null } = { value: null };
   const currentSearchHits = { value: [] as unknown[] as never };
   const currentSearchIndexMap: { value: number[] } = { value: [] };
@@ -68,7 +69,8 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     routeStack,
     positions,
     focus,
-    visualizerVisible,
+    termWidth,
+    sidebarPinned,
     latestVizFrame,
     currentSearchHits: currentSearchHits as unknown as UiCoreContext['currentSearchHits'],
     currentSearchIndexMap,
@@ -188,10 +190,14 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   });
 
   renderer.on('resize', (w: number) => {
-    if (w < 80) {
-      visualizerVisible.value = false;
+    ctx.termWidth.value = w;
+    // Re-apply layout visibility for the new width; migrate focus off a
+    // sidebar that just disappeared.
+    ctx.helpers.showRoute(ctx.route.current, true, true);
+    if (!ctx.built.sidebar.visible && ctx.focus.current === 'sidebar') {
+      ctx.helpers.setFocusArea('main');
     }
-    built.right.visible = w >= 80 && visualizerVisible.value;
+    ctx.helpers.paintViz();
   });
 
   // Mount initial state. Unauthenticated boots route straight to the

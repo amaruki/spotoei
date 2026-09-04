@@ -66,6 +66,9 @@ export function createUiApi(ctx: UiCoreContext): Ui {
     navigateBack(): boolean {
       return helpers.navigateBack();
     },
+    toggleSidebar(): void {
+      helpers.toggleSidebar();
+    },
     getRouteStack(): Route[] {
       return [...ctx.routeStack];
     },
@@ -263,9 +266,6 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       helpers.setFocusArea('main');
       built.clientIdInput.focus();
     },
-    toggleVisualizer: helpers.toggleVisualizer,
-    setVisualizerVisible: helpers.setVisualizerVisible,
-    isVisualizerVisible: helpers.isVisualizerVisible,
     async start(): Promise<void> {
       // Renderer is already started.
     },

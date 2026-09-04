@@ -14,9 +14,8 @@ import type { UiViewState } from '../types';
 import { homeRowOptions } from '../views/homeRows';
 import { getSettingsContent } from '../views/settings';
 import { buildEntityViews, type EntityViewNodes } from './entityViews';
-import { buildVisualizer, type VisualizerNodes } from './visualizer';
 
-export interface MainNodes extends VisualizerNodes, EntityViewNodes {
+export interface MainNodes extends EntityViewNodes {
   center: BoxRenderable;
   main: BoxRenderable;
   home: BoxRenderable;
@@ -256,8 +255,7 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
   settings.add(clientIdBox);
   main.add(settings);
 
-  const viz = buildVisualizer(renderer, state);
-  const entity = buildEntityViews(renderer);
+  const entity = buildEntityViews(renderer, state);
   main.add(entity.artist);
   main.add(entity.album);
   main.add(entity.playlist);
@@ -285,7 +283,6 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     settingsText,
     clientIdBox,
     clientIdInput,
-    ...viz,
     ...entity,
   };
 }

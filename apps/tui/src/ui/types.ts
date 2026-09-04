@@ -94,6 +94,7 @@ export interface ContextMenuItem {
 
 export interface Ui {
   navigateBack(): boolean;
+  toggleSidebar(): void;
   getRouteStack(): Route[];
   setRoute(next: Route | string): void;
   getRoute(): Route;
@@ -162,9 +163,6 @@ export interface Ui {
   setPlaybackPosition(pos: PlaybackPositionDataT): void;
   setAuth(auth: AuthStatusDataT): void;
   focusClientIdInput(): void;
-  toggleVisualizer(): boolean;
-  setVisualizerVisible(visible: boolean): void;
-  isVisualizerVisible(): boolean;
   start(): Promise<void>;
   shutdown(): Promise<void>;
 }
