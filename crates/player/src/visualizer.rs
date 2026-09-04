@@ -13,6 +13,7 @@ pub enum VisualizerMode {
     Spectrum,
     Winamp,
     Oscilloscope,
+    Off,
 }
 
 #[derive(Debug, Clone)]

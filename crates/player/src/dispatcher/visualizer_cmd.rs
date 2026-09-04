@@ -15,12 +15,13 @@ pub async fn configure(cmd: &Command, visualizer_cfg: &Arc<RwLock<VisualizerConf
             "spectrum" => VisualizerMode::Spectrum,
             "winamp" => VisualizerMode::Winamp,
             "oscilloscope" => VisualizerMode::Oscilloscope,
+            "off" => VisualizerMode::Off,
             _ => {
                 return err(
                     &cmd.id,
                     ErrorBody::new(
                         ErrorCode::InvalidRequest,
-                        "mode must be spectrum|winamp|oscilloscope",
+                        "mode must be spectrum|winamp|oscilloscope|off",
                     ),
                 );
             }
@@ -72,7 +73,9 @@ pub async fn configure(cmd: &Command, visualizer_cfg: &Arc<RwLock<VisualizerConf
     };
 
     let mut cfg = visualizer_cfg.write().await;
-    cfg.enabled = enabled;
+    // Off mode implies disabled regardless of explicit enabled flag.
+    let effectiveEnabled = if mode == VisualizerMode::Off { false } else { enabled };
+    cfg.enabled = effectiveEnabled;
     cfg.mode = mode;
     cfg.fps = fps;
     cfg.bands = bands;
@@ -81,6 +84,7 @@ pub async fn configure(cmd: &Command, visualizer_cfg: &Arc<RwLock<VisualizerConf
     let mode_str = match mode {
         VisualizerMode::Winamp => "winamp",
         VisualizerMode::Oscilloscope => "oscilloscope",
+        VisualizerMode::Off => "off",
         VisualizerMode::Spectrum => "spectrum",
     };
 

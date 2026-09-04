@@ -161,18 +161,24 @@ export class VisualizerController {
 
   async setMode(mode: VisualizerModeT): Promise<void> {
     this.mode = mode;
-    this.enabled = true;
+    this.enabled = mode !== 'off';
     await this.syncConfig();
   }
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+    if (!enabled) {
+      this.mode = 'off' as VisualizerModeT;
+    } else if (this.mode === ('off' as VisualizerModeT)) {
+      this.mode = 'spectrum';
+    }
     this.syncConfig().catch(() => {});
   }
 
   cycleMode(): VisualizerModeT {
-    const modes: VisualizerModeT[] = ['spectrum', 'winamp', 'oscilloscope'];
-    const nextIdx = (modes.indexOf(this.mode) + 1) % modes.length;
+    const modes: VisualizerModeT[] = ['spectrum', 'winamp', 'oscilloscope', 'off'];
+    const cur = this.enabled ? this.mode : ('off' as VisualizerModeT);
+    const nextIdx = (modes.indexOf(cur as VisualizerModeT) + 1) % modes.length;
     const next = modes[nextIdx] ?? 'spectrum';
     this.setMode(next).catch(() => {});
     return next;

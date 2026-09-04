@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 
-export const VisualizerMode = z.enum(['spectrum', 'winamp', 'oscilloscope']);
+export const VisualizerMode = z.enum(['spectrum', 'winamp', 'oscilloscope', 'off']);
 export type VisualizerModeT = z.infer<typeof VisualizerMode>;
 
 export const VisualizerConfig = z.object({
