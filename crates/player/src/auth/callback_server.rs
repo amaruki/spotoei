@@ -62,6 +62,15 @@ impl AuthManager {
                         let tx = tx.clone();
                         let expected_state = expected_state.clone();
                         async move {
+                            if req.method() != hyper::Method::GET {
+                                let html = html_error("Method Not Allowed", "Only GET is allowed for the OAuth callback");
+                                let resp = Response::builder()
+                                    .status(405)
+                                    .header(CONTENT_TYPE, "text/html; charset=utf-8")
+                                    .body(Full::new(Bytes::from(html)))
+                                    .unwrap();
+                                return Ok::<_, std::convert::Infallible>(resp);
+                            }
                             if req.uri().path() != REDIRECT_PATH && req.uri().path() != "/login" {
                                 let html = html_error("Not Found", "Invalid callback path");
                                 let resp = Response::builder()
