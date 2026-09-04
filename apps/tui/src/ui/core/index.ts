@@ -38,6 +38,9 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   const visualizerVisible = { value: false };
   const latestVizFrame: { value: VisualizerFrame | null } = { value: null };
   const currentSearchHits = { value: [] as unknown[] as never };
+  const currentSearchIndexMap: { value: number[] } = { value: [] };
+  const lastSearch: UiCoreContext['lastSearch'] = { value: null };
+  const searchFilter: UiCoreContext['searchFilter'] = { current: 'all' };
   const currentLibraryItems = { value: [] as never };
   const currentRouteItems: { value: unknown[] } = { value: [] };
   const currentHomeItems: UiCoreContext['currentHomeItems'] = { value: [] };
@@ -68,6 +71,9 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     visualizerVisible,
     latestVizFrame,
     currentSearchHits: currentSearchHits as unknown as UiCoreContext['currentSearchHits'],
+    currentSearchIndexMap,
+    lastSearch,
+    searchFilter,
     currentLibraryItems: currentLibraryItems as unknown as UiCoreContext['currentLibraryItems'],
     currentRouteItems,
     currentHomeItems,
@@ -104,7 +110,10 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     }
   });
   built.searchResults.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
-    const hit = ctx.currentSearchHits.value[idx];
+    // Group headers map to -1 and are never actionable.
+    const hitIdx = ctx.currentSearchIndexMap.value[idx] ?? idx;
+    if (hitIdx < 0) return;
+    const hit = ctx.currentSearchHits.value[hitIdx];
     if (hit && opts.onSelectSearchHit) {
       opts.onSelectSearchHit(hit);
     }

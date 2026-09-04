@@ -14,6 +14,7 @@ import type {
   VisualizerModeT,
 } from 'spotoei-protocol';
 import type { HomeRow } from './views/homeRows';
+import type { SearchFilter } from './views/search';
 export type FocusArea = 'sidebar' | 'main';
 
 export interface LibraryItemT {
@@ -101,6 +102,7 @@ export interface Ui {
   setStatus(msg: string, persist?: boolean): void;
   setVisualizerFrame(frame: VisualizerFrame | null): void;
   setSearchResults(query: string, results: SearchResponseT): void;
+  setSearchFilter(filter: SearchFilter): void;
   setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }): void;
   setLibraryLoading(loading: boolean): void;
   setLibraryLines(lines: string[], empty: boolean): void;

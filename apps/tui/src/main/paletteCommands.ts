@@ -1,4 +1,5 @@
 import type { ArtistReleaseGroupT, HomeTabT, TimeRangeT } from 'spotoei-protocol';
+import type { SearchFilter } from '../ui/views/search';
 import { routeKind } from '../ui/core/navigationStack';
 import { setHomeRange } from '../home/tabs';
 import type { ContextTarget, Ui } from '../ui/types';
@@ -64,6 +65,11 @@ export function buildPaletteCommands(
       action: () => getUi()?.setRoute({ kind: 'library', section: 'playlists' }),
     },
     { name: 'Queue', description: 'u', action: () => getUi()?.setRoute('queue') },
+    ...(['all', 'track', 'artist', 'album', 'playlist'] as SearchFilter[]).map((filter) => ({
+      name: `Search filter: ${filter}`,
+      description: 'result type filter',
+      action: () => getUi()?.setSearchFilter(filter),
+    })),
     ...(['for_you', 'browse', 'recently_played'] as HomeTabT[]).map((tab) => ({
       name: `Home tab: ${tab}`,
       description: 'home tab',

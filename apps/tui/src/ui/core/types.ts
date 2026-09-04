@@ -40,6 +40,9 @@ export interface UiCoreContext {
   latestVizFrame: { value: VisualizerFrame | null };
   currentLibraryItems: { value: LibraryItemT[] };
   currentSearchHits: { value: SearchHitT[] };
+  currentSearchIndexMap: { value: number[] };
+  lastSearch: { value: import('spotoei-protocol').SearchResponseT | null };
+  searchFilter: { current: import('../views/search').SearchFilter };
   currentRouteItems: { value: unknown[] };
   currentHomeItems: { value: HomeRow[] };
   homeRange: { current: TimeRangeT };

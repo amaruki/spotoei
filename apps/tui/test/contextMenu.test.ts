@@ -90,7 +90,7 @@ describe('context menu overlay', () => {
   });
 
   it('resolves the selected search hit as a context target', async () => {
-    const { ui, renderOnce } = await makeUi();
+    const { ui, renderOnce, sendKey } = await makeUi();
     await renderOnce();
 
     ui.setRoute({ kind: 'search', query: 'cold' });
@@ -109,6 +109,11 @@ describe('context menu overlay', () => {
         },
       ],
     });
+    // Group headers are never actionable: index 0 is the header row.
+    expect(ui.getContextTarget()).toBeNull();
+    sendKey('down', '\u001b[B');
+    sendKey('down', '\u001b[B');
+    await renderOnce();
     const target = ui.getContextTarget();
     expect(target?.kind).toBe('track');
     expect(target?.id).toBe('t1');

@@ -22,7 +22,10 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
   const { built, route } = ctx;
   const kind = routeKind(route.current);
   if (kind === 'search') {
-    const hit = ctx.currentSearchHits.value[built.searchResults.getSelectedIndex()] as
+    const listIdx = built.searchResults.getSelectedIndex();
+    const hitIdx = ctx.currentSearchIndexMap.value[listIdx] ?? listIdx;
+    if (hitIdx < 0) return null;
+    const hit = ctx.currentSearchHits.value[hitIdx] as
       | {
           type: string;
           track?: EntityLike;
