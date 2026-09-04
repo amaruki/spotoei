@@ -87,32 +87,12 @@ export async function startPlayer(
     const handshakeMsg = await new Promise<InboundT>((resolveH, rejectH) => {
       let settled = false;
 
-      const settleReject = (err: Error): void => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        child.kill('SIGKILL');
-        rejectH(err);
-      };
-      const settleResolve = (msg: InboundT): void => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolveH(msg);
-      };
-
-      timer = setTimeout(() => {
-        settleReject(new Error(`handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms`));
-      }, HANDSHAKE_TIMEOUT_MS);
-
-      child.once('error', (err) => {
+      const onError = (err: unknown): void => {
         settleReject(err instanceof Error ? err : new Error(String(err)));
-      });
-
-      child.once('exit', (code) => {
+      };
+      const onExit = (code: number | null): void => {
         settleReject(new Error(`player exited before handshake (code=${code})`));
-      });
-
+      };
       const onLine = (line: string): void => {
         const r = parseInbound(line);
         if (!r.ok) {
@@ -124,6 +104,35 @@ export async function startPlayer(
           settleResolve(msg);
         }
       };
+
+      const settleReject = (err: Error): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        rl.off('line', onLine);
+        child.off('error', onError);
+        child.off('exit', onExit);
+        try {
+          child.kill('SIGKILL');
+        } catch {}
+        rejectH(err);
+      };
+      const settleResolve = (msg: InboundT): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        rl.off('line', onLine);
+        child.off('error', onError);
+        child.off('exit', onExit);
+        resolveH(msg);
+      };
+
+      timer = setTimeout(() => {
+        settleReject(new Error(`handshake timed out after ${HANDSHAKE_TIMEOUT_MS}ms`));
+      }, HANDSHAKE_TIMEOUT_MS);
+
+      child.once('error', onError);
+      child.once('exit', onExit);
 
       // Attach the readline listener BEFORE the hello frame goes out
       // over stdin. The player can reply with `hello` synchronously
