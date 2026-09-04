@@ -35,7 +35,6 @@ export function createUiApi(ctx: UiCoreContext): Ui {
     palette,
     renderer,
     route,
-    routeStack,
     state,
     statusTimer,
   } = ctx;
@@ -46,7 +45,7 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       return helpers.navigateBack();
     },
     getRouteStack(): Route[] {
-      return [...routeStack];
+      return [...ctx.routeStack];
     },
     setRoute(next: Route | string): void {
       const target = routeFromLegacy(next);

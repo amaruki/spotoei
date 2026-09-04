@@ -34,42 +34,39 @@ export function handleEntityBrowseKeys(
   }
 
   if (focus.current === 'main' && !palette.open) {
-    const cur = route.current as unknown as {
-      kind: string;
-      tab?: string;
-      browse?: { category?: string; entry?: string };
-    };
-    if (cur.kind === 'home' && cur.tab === 'browse') {
-      if (e.name === 'escape' && cur.browse?.entry) {
-        ctx.helpers.showRoute({
-          kind: 'home',
-          tab: 'browse',
-          browse: { category: cur.browse.category },
-        });
-        return true;
-      }
-      if (e.name === 'escape' && cur.browse?.category) {
-        ctx.helpers.showRoute({ kind: 'home', tab: 'browse' });
-        return true;
-      }
-    }
+    // Browse Esc levels resolve through the history stack: forward
+    // navigation pushes each level, so generic navigateBack steps one
+    // level per Esc. See resolveBackAction for the documented mapping.
     if ((e.name === 'v' || e.name === 'V') && !built.clientIdInput.focused) {
-      if (cur.kind === 'visualizer') {
-        ctx.helpers.navigateBack();
-      } else {
-        ctx.helpers.showRoute({ kind: 'visualizer' });
-      }
+      toggleVisualizerRoute(ctx);
       return true;
     }
     if (e.name === 'm' || e.name === 'M') {
-      const order = ['spectrum', 'winamp', 'oscilloscope', 'off'] as const;
-      const curMode = state.visualizer.mode as (typeof order)[number];
-      const next = order[(order.indexOf(curMode) + 1) % order.length] ?? 'spectrum';
-      state.visualizer.mode = next as typeof state.visualizer.mode;
-      ctx.helpers.setVizTitle();
-      ctx.helpers.setStatus(`Visualizer mode: ${next}`);
+      if (ctx.opts.onCycleVisualizerMode) {
+        ctx.opts.onCycleVisualizerMode();
+      } else {
+        const order = ['spectrum', 'winamp', 'oscilloscope', 'off'] as const;
+        const curMode = state.visualizer.mode as (typeof order)[number];
+        const next = order[(order.indexOf(curMode) + 1) % order.length] ?? 'spectrum';
+        state.visualizer.mode = next as typeof state.visualizer.mode;
+        ctx.helpers.setVizTitle();
+        ctx.helpers.setStatus(`Visualizer mode: ${next}`);
+      }
       return true;
     }
   }
   return false;
+}
+
+// Single visualizer-route toggle for in-renderer keys. The main-layer
+// handler (main/keys.ts) performs the equivalent Ui calls for keys that
+// arrive via the global onKey fallback (e.g. sidebar focus).
+export function toggleVisualizerRoute(ctx: UiCoreContext): void {
+  if (routeKind(ctx.route.current) === 'visualizer') {
+    ctx.helpers.navigateBack();
+    ctx.helpers.setStatus('Exited visualizer');
+  } else {
+    ctx.helpers.showRoute({ kind: 'visualizer' });
+    ctx.helpers.setStatus(`Visualizer (${ctx.state.visualizer.mode}) — V: close, m: mode`);
+  }
 }

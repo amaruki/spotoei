@@ -3,7 +3,7 @@ import type { CatalogTrackT } from 'spotoei-protocol';
 import { createUi, type Ui } from '../ui';
 import { routeKind } from '../ui/core/navigationStack';
 import { handleSearchHitSelect, routeForLibraryItem } from './entitySelect';
-import { contextActionCommands } from './paletteContextActions';
+import { buildPaletteCommands } from './paletteCommands';
 import type { AppContext } from './types';
 export async function initUi(
   ctx: AppContext,
@@ -145,144 +145,23 @@ export async function initUi(
     },
     onSaveClientId: actions.handleSaveClientId,
     onAuthenticate: actions.triggerAuth,
+    onCycleVisualizerMode: cycleVisualizerMode,
   });
 
-  // Palette command list
-  ui.setPaletteCommands([
-    { name: 'Home View', description: 'Esc', action: () => getUi()?.setRoute('home') },
-    { name: 'Search', description: '/', action: () => getUi()?.setRoute('search') },
-    { name: 'Library', description: 'r', action: () => getUi()?.setRoute('library') },
-    { name: 'Queue', description: 'u', action: () => getUi()?.setRoute('queue') },
-    {
-      name: 'Toggle Lyrics View',
-      description: 'l',
-      action: () => {
-        const u = getUi();
-        if (u) {
-          const curRoute = u.getRoute();
-          if (routeKind(curRoute) === 'lyrics') {
-            u.setRoute(state.lastRouteBeforeLyrics);
-          } else {
-            state.lastRouteBeforeLyrics = curRoute;
-            u.setRoute('lyrics');
-            void actions.loadCurrentLyrics();
-          }
-        }
-      },
-    },
-    { name: 'Settings', description: 's', action: () => getUi()?.setRoute('settings') },
-    ...contextActionCommands(),
-    {
-      name: 'Configure Spotify Client ID',
-      description: 'Set/update Spotify Client ID',
-      action: () => {
-        const u = getUi();
-        if (u) {
-          u.focusClientIdInput();
-          u.setStatus('Paste Spotify Client ID and press Enter to save', true);
-        }
-      },
-    },
-    {
-      name: 'Toggle Play/Pause',
-      description: 'Space / k',
-      action: async () => {
-        const pbState = state.currentInfo.playback?.state ?? 'idle';
-        if (pbState === 'playing') await clients.playback.pause();
-        else await clients.playback.play();
-      },
-    },
-    {
-      name: 'Next Track',
-      description: 'n',
-      action: () => void actions.nextTrack(),
-    },
-    {
-      name: 'Previous Track',
-      description: 'p',
-      action: () => void actions.previousTrack(),
-    },
-    {
-      name: 'Seek Forward 5s',
-      description: '> / .',
-      action: () => void actions.seekRelative(5000),
-    },
-    {
-      name: 'Seek Backward 5s',
-      description: '< / ,',
-      action: () => void actions.seekRelative(-5000),
-    },
-    {
-      name: 'Volume Up (+5%)',
-      description: '+ / =',
-      action: () => void actions.changeVolume(0.05),
-    },
-    {
-      name: 'Volume Down (-5%)',
-      description: '- / _',
-      action: () => void actions.changeVolume(-0.05),
-    },
-    {
-      name: 'Toggle Shuffle',
-      description: 'S',
-      action: () => void actions.toggleShuffle(),
-    },
-    {
-      name: 'Toggle Repeat Mode',
-      description: 'R',
-      action: () => void actions.toggleRepeat(),
-    },
-    {
-      name: 'Toggle Autoplay',
-      description: 'A',
-      action: () => void actions.toggleAutoplay(),
-    },
-    {
-      name: 'Toggle Visualizer Display',
-      description: 'V',
-      action: () => {
-        const u = getUi();
-        if (u) {
-          const visible = u.toggleVisualizer();
-          u.setStatus(
-            visible
-              ? `Visualizer enabled (${state.currentInfo.visualizer.mode})`
-              : 'Visualizer hidden',
-          );
-        }
-      },
-    },
-    {
-      name: 'Cycle Visualizer Mode',
-      description: 'v',
-      action: () => {
-        const u = getUi();
-        if (u && !u.isVisualizerVisible()) {
-          u.setVisualizerVisible(true);
-        } else {
-          const next = clients.visualizer.cycleMode();
-          state.currentInfo.visualizer = { mode: next, fps: clients.visualizer.getCurrentFps() };
-          if (u) {
-            u.setVisualizerFrame(null);
-            u.setStatus(`Visualizer mode: ${next}`);
-          }
-        }
-      },
-    },
-    {
-      name: 'Reload Lyrics',
-      description: 'L',
-      action: () => {
-        void actions.loadCurrentLyrics(true);
-      },
-    },
-    {
-      name: 'Authenticate with Spotify',
-      description: 'OAuth (press A in settings)',
-      action: actions.triggerAuth,
-    },
-    { name: 'Quit Spotoei', description: 'q / Ctrl-C', action: () => void quit() },
-  ]);
+  function cycleVisualizerMode(): void {
+    const next = clients.visualizer.cycleMode();
+    state.currentInfo.visualizer = { mode: next, fps: clients.visualizer.getCurrentFps() };
+    const u = getUi();
+    if (u) {
+      u.setVisualizerFrame(null);
+      u.setStatus(`Visualizer mode: ${next}`);
+    }
+  }
+
+  // Palette command list (split for LoC cap; behavior unchanged)
+  ui.setPaletteCommands(
+    buildPaletteCommands(ctx, { ...actions, cycleVisualizerMode }, getUi, quit),
+  );
 
   return ui;
 }

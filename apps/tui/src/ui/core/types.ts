@@ -11,6 +11,7 @@ import type {
   VisualizerModeT,
 } from 'spotoei-protocol';
 
+import type { ViewPositionStore } from '../../navigation/viewPositions';
 import type { BuiltUi } from '../componentTree';
 import type {
   FocusArea,
@@ -30,6 +31,7 @@ export interface UiCoreContext {
   built: BuiltUi;
   route: { current: Route };
   routeStack: Route[];
+  positions: ViewPositionStore;
   focus: { current: FocusArea };
   visualizerVisible: { value: boolean };
   latestVizFrame: { value: VisualizerFrame | null };
@@ -49,7 +51,7 @@ export interface UiCoreContext {
     setStatus: (msg: string, persist?: boolean) => void;
     refreshNav: () => void;
     setNavSelected: (target: Route) => void;
-    showRoute: (next: Route | string, force?: boolean) => void;
+    showRoute: (next: Route | string, force?: boolean, replace?: boolean) => void;
     navigateBack: () => boolean;
     setFocusArea: (next: FocusArea) => void;
     updateFocusVisuals: () => void;

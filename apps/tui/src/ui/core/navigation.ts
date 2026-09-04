@@ -3,9 +3,20 @@ import { defaultRoute, popRoute, pushRoute, routeFromLegacy, routeKind } from '.
 import type { FocusArea, Route, UiCoreContext } from './types';
 
 export function createNavigationHelpers(ctx: UiCoreContext) {
-  const { built, focus, manualLyricsScroll, opts, route, routeStack, state, visualizerVisible } =
-    ctx;
-  const showRoute = (nextInput: Route | string, force = false): void => {
+  const { built, focus, manualLyricsScroll, opts, route, state, visualizerVisible } = ctx;
+  const listForRoute = (r: Route) => {
+    const kind = routeKind(r);
+    if (kind === 'search') return built.searchResults;
+    if (kind === 'library') return built.libraryList;
+    if (kind === 'queue') return built.queueList;
+    if (kind === 'artist') return built.artistList;
+    if (kind === 'album') return built.albumList;
+    if (kind === 'playlist') return built.playlistList;
+    if (kind === 'home' && (r as { browse?: unknown }).browse !== undefined)
+      return built.browseList;
+    return null;
+  };
+  const showRoute = (nextInput: Route | string, force = false, replace = false): void => {
     let next = routeFromLegacy(nextInput);
     const kind = routeKind(next);
     if (!force && state.auth.state !== 'authenticated' && kind !== 'settings') {
@@ -18,8 +29,15 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       next = { kind: 'settings' };
     }
     const currentKind = routeKind(route.current);
-    if (currentKind !== kind || JSON.stringify(route.current) !== JSON.stringify(next)) {
-      ctx.routeStack = pushRoute(routeStack, route.current, next);
+    if (
+      !replace &&
+      (currentKind !== kind || JSON.stringify(route.current) !== JSON.stringify(next))
+    ) {
+      const curList = listForRoute(route.current);
+      if (curList) {
+        ctx.positions.save(route.current, { selected: curList.getSelectedIndex(), scroll: 0 });
+      }
+      ctx.routeStack = pushRoute(ctx.routeStack, route.current, next);
     }
 
     route.current = next;
@@ -105,6 +123,12 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       built.playlistList.blur();
       built.browseList.blur();
     }
+    const nextList = listForRoute(next);
+    if (nextList) {
+      const pos = ctx.positions.restore(next);
+      const max = Math.max(0, nextList.options.length - 1);
+      nextList.setSelectedIndex(Math.min(Math.max(0, pos.selected), max));
+    }
     if (opts.onRouteChange) {
       opts.onRouteChange(next);
     }
@@ -114,14 +138,15 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     const { stack, popped } = popRoute(ctx.routeStack);
     ctx.routeStack = stack;
     if (popped) {
-      showRoute(popped, true);
+      showRoute(popped, true, true);
       return true;
     }
     // If stack was empty, navigate to Home
     if (routeKind(route.current) !== 'home') {
-      showRoute(defaultRoute(), true);
+      showRoute(defaultRoute(), true, true);
       return true;
     }
+    ctx.helpers.setStatus('Already at Home — press a number key or Tab to navigate');
     return false;
   };
 

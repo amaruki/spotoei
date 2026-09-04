@@ -151,4 +151,5 @@ export interface UiOptions {
   onSaveClientId?: (clientId: string) => void | Promise<void>;
   onAuthenticate?: () => void | Promise<void>;
   onRouteChange?: (route: Route) => void;
+  onCycleVisualizerMode?: () => void;
 }

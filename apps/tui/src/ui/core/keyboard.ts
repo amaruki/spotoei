@@ -1,5 +1,7 @@
+import { resolveBackAction } from '../../navigation/backBehavior';
 import { resolveClientId } from '../../config';
 import { handleEntityBrowseKeys } from './keyboardEntity';
+import { handleLibraryQueueKeys } from './keyboardLists';
 import { routeKind } from './navigationStack';
 import type { Route, UiCoreContext } from './types';
 // Key dispatcher for the full TUI. Implements focus isolation: when an
@@ -192,40 +194,9 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
       }
     }
 
-    // 4b. Library view focus handling
-    if (routeKind(route.current) === 'library' && focus.current === 'main') {
-      if (e.ctrl && e.name === 'c') {
-        opts.onKey(key);
-        return;
-      }
-      if (e.name === 'escape' || e.name === 'tab' || e.name === 'left') {
-        ctx.helpers.setFocusArea('sidebar');
-        return;
-      }
-      if (e.name === 'r' || e.name === 'R') {
-        opts.onKey(key);
-        return;
-      }
-      if (e.name === 'up' || e.name === 'down' || e.name === 'return') {
-        // SelectRenderable handles list scrolling and enter selection
-        return;
-      }
-    }
-
-    // 4c. Queue view focus handling
-    if (routeKind(route.current) === 'queue' && focus.current === 'main') {
-      if (e.ctrl && e.name === 'c') {
-        opts.onKey(key);
-        return;
-      }
-      if (e.name === 'escape' || e.name === 'tab' || e.name === 'left') {
-        ctx.helpers.setFocusArea('sidebar');
-        return;
-      }
-      if (e.name === 'up' || e.name === 'down' || e.name === 'return') {
-        // SelectRenderable handles list scrolling and enter selection
-        return;
-      }
+    // 4b-4c. Library / queue list focus handling (split for LoC cap)
+    if (handleLibraryQueueKeys(ctx, e, key)) {
+      return;
     }
 
     // 4d. Entity / browse / visualizer keys (split for LoC cap)
@@ -233,11 +204,25 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
       return;
     }
 
-    // 5. Context exit keys (Esc/Tab/Left to return to sidebar or exit lyrics)
+    // 5. Context exit keys. Esc resolves through resolveBackAction:
+    // overlay closes first, browse/entity/lyrics/visualizer pop one
+    // history level per Esc (forward nav pushes each level).
     if (focus.current === 'main') {
       if (e.name === 'escape' || e.name === 'left') {
-        if (ctx.helpers.navigateBack) {
-          ctx.helpers.navigateBack();
+        const cur = route.current as unknown as {
+          kind: string;
+          browse?: { category?: string; entry?: string };
+        };
+        const action = resolveBackAction({
+          route: route.current,
+          browse: cur.browse ?? {},
+          paletteOpen: palette.open,
+        });
+        if (action === 'close_overlay') {
+          ctx.helpers.setPaletteOpen(false);
+          return;
+        }
+        if (ctx.helpers.navigateBack()) {
           return;
         }
         ctx.helpers.setFocusArea('sidebar');

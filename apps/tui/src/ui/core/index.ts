@@ -1,6 +1,7 @@
 import type { CliRenderer } from '@opentui/core';
 import { InputRenderableEvents, SelectRenderableEvents } from '@opentui/core';
 
+import { ViewPositionStore } from '../../navigation/viewPositions';
 import { buildRoot } from '../componentTree';
 import type { FocusArea, Route, Ui, UiOptions, UiViewState, VisualizerFrame } from '../types';
 import { createUiApi } from './api';
@@ -23,6 +24,7 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   // without React-style setter plumbing).
   const route = { current: { kind: 'home', tab: 'for_you' } as Route };
   const routeStack: Route[] = [];
+  const positions = new ViewPositionStore();
   const focus = { current: 'sidebar' as FocusArea };
   const visualizerVisible = { value: false };
   const latestVizFrame: { value: VisualizerFrame | null } = { value: null };
@@ -44,6 +46,7 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     built,
     route,
     routeStack,
+    positions,
     focus,
     visualizerVisible,
     latestVizFrame,
