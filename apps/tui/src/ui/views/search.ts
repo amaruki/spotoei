@@ -1,9 +1,9 @@
 import { formatArtists } from '../formatters';
-import type { SearchResponseT } from 'spotoei-protocol';
+import type { SearchHitT, SearchResponseT } from 'spotoei-protocol';
 
-// Map a `SearchResponseT` to grouped rows in the results SelectRenderable.
-// Group headers carry indexMap -1 so selection handlers never mistake them
-// for hits. Errors and empty results yield a single explanatory row.
+// Search results render as one panel per category (Tracks / Artists /
+// Albums / Playlists). Partitioning keeps the original hit index so
+// selection handlers map panel rows back to hits.
 export type SearchFilter = 'all' | 'track' | 'artist' | 'album' | 'playlist';
 
 export interface SearchListRow {
@@ -11,57 +11,35 @@ export interface SearchListRow {
   description: string;
 }
 
-function fail(rows: SearchListRow[]): { options: SearchListRow[]; indexMap: number[] } {
-  return { options: rows, indexMap: rows.map(() => -1) };
+export interface SearchHitRef {
+  hit: SearchHitT;
+  index: number;
 }
 
-export function searchHitOptions(
-  results: SearchResponseT,
+export interface SearchPanels {
+  tracks: SearchHitRef[];
+  artists: SearchHitRef[];
+  albums: SearchHitRef[];
+  playlists: SearchHitRef[];
+}
+
+export function partitionSearchHits(
+  hits: SearchResponseT['hits'],
   filter: SearchFilter = 'all',
-): { options: SearchListRow[]; indexMap: number[] } {
-  if (results.error) {
-    return fail([
-      {
-        name: `⚠ ${results.error.code}`,
-        description: results.error.message,
-      },
-    ]);
-  }
-  const hits = results.hits
-    .map((h, i) => ({ h, i }))
-    .filter(({ h }) => filter === 'all' || h.type === filter);
-  if (hits.length === 0) {
-    return fail([
-      {
-        name: '(no results)',
-        description: 'No Spotify matches',
-      },
-    ]);
-  }
-  const options: SearchListRow[] = [];
-  const indexMap: number[] = [];
-  const groups: Array<{ type: string; title: string }> = [
-    { type: 'track', title: 'Tracks' },
-    { type: 'artist', title: 'Artists' },
-    { type: 'album', title: 'Albums' },
-    { type: 'playlist', title: 'Playlists' },
-  ];
-  for (const group of groups) {
-    const members = hits.filter(({ h }) => h.type === group.type);
-    if (members.length === 0) continue;
-    if (filter === 'all') {
-      options.push({ name: `── ${group.title} ──`, description: '' });
-      indexMap.push(-1);
-    }
-    for (const { h, i } of members) {
-      options.push(renderHit(h));
-      indexMap.push(i);
-    }
-  }
-  return { options, indexMap };
+): SearchPanels {
+  const panels: SearchPanels = { tracks: [], artists: [], albums: [], playlists: [] };
+  hits.forEach((h, index) => {
+    if (filter !== 'all' && h.type !== filter) return;
+    const ref = { hit: h, index };
+    if (h.type === 'track') panels.tracks.push(ref);
+    else if (h.type === 'artist') panels.artists.push(ref);
+    else if (h.type === 'album') panels.albums.push(ref);
+    else panels.playlists.push(ref);
+  });
+  return panels;
 }
 
-function renderHit(h: SearchResponseT['hits'][number]): SearchListRow {
+export function renderHit(h: SearchHitT): SearchListRow {
   if (h.type === 'track') {
     const artists = formatArtists(h.track.artists);
     const album = h.track.albumName ? ` — ${h.track.albumName}` : '';

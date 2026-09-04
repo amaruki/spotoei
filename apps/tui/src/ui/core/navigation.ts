@@ -1,13 +1,50 @@
 import { resolveClientId } from '../../config';
+import { panelPositionKey } from '../../navigation/viewPositions';
+import {
+  blurAllPanels,
+  focusedHomeList,
+  focusedSearchList,
+  focusHomePanel,
+  HOME_PANELS,
+  homePanelLists,
+  SEARCH_PANELS,
+  searchPanelLists,
+} from './categoryPanels';
 import { defaultRoute, popRoute, pushRoute, routeFromLegacy, routeKind } from './navigationStack';
 import type { FocusArea, Route, UiCoreContext } from './types';
 
 export function createNavigationHelpers(ctx: UiCoreContext) {
   const { built, focus, manualLyricsScroll, opts, route, state } = ctx;
+  const saveRoutePosition = (r: Route): void => {
+    const kind = routeKind(r);
+    if (kind === 'home' && (r as { browse?: unknown }).browse === undefined) {
+      homePanelLists(built).forEach((list, i) => {
+        ctx.positions.saveKey(panelPositionKey(r, 'home', HOME_PANELS[i] ?? String(i)), {
+          selected: list.getSelectedIndex(),
+          scroll: 0,
+        });
+      });
+      return;
+    }
+    if (kind === 'search') {
+      searchPanelLists(built).forEach((list, i) => {
+        ctx.positions.saveKey(panelPositionKey(r, 'search', SEARCH_PANELS[i] ?? String(i)), {
+          selected: list.getSelectedIndex(),
+          scroll: 0,
+        });
+      });
+      return;
+    }
+    const list = listForRoute(r);
+    if (list) {
+      ctx.positions.save(r, { selected: list.getSelectedIndex(), scroll: 0 });
+    }
+  };
   const listForRoute = (r: Route) => {
     const kind = routeKind(r);
-    if (kind === 'home' && (r as { browse?: unknown }).browse === undefined) return built.homeList;
-    if (kind === 'search') return built.searchResults;
+    if (kind === 'home' && (r as { browse?: unknown }).browse === undefined)
+      return focusedHomeList(ctx);
+    if (kind === 'search') return focusedSearchList(ctx);
     if (kind === 'library') return built.libraryList;
     if (kind === 'queue') return built.queueList;
     if (kind === 'artist') return built.artistList;
@@ -34,10 +71,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       !replace &&
       (currentKind !== kind || JSON.stringify(route.current) !== JSON.stringify(next))
     ) {
-      const curList = listForRoute(route.current);
-      if (curList) {
-        ctx.positions.save(route.current, { selected: curList.getSelectedIndex(), scroll: 0 });
-      }
+      saveRoutePosition(route.current);
       ctx.routeStack = pushRoute(ctx.routeStack, route.current, next);
     }
 
@@ -73,14 +107,23 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     }
     ctx.helpers.setNavSelected(next);
 
+    // Narrow terminals stack the 2x2 grids vertically.
+    const narrow = ctx.termWidth.value < 80;
+    built.homeRow.flexDirection = narrow ? 'column' : 'row';
+    built.searchRow.flexDirection = narrow ? 'column' : 'row';
+
     if (focus.current === 'main') {
       if (finalKind === 'search') {
-        built.searchResults.blur();
+        blurAllPanels(built);
         built.searchInput.focus();
         ctx.helpers.updateSearchFocusVisuals(true);
       } else {
         built.searchInput.blur();
-        built.searchResults.blur();
+        if (finalKind === 'home' && !isHomeBrowse) {
+          focusHomePanel(ctx, ctx.homePanel.value);
+        } else {
+          blurAllPanels(built);
+        }
       }
       if (finalKind === 'settings') {
         ctx.helpers.refreshSettings();
@@ -103,11 +146,6 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       } else {
         built.queueList.blur();
       }
-      if (finalKind === 'home' && !isHomeBrowse) {
-        built.homeList.focus();
-      } else {
-        built.homeList.blur();
-      }
       for (const [viewKind, list] of [
         ['artist', built.artistList],
         ['album', built.albumList],
@@ -126,9 +164,8 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
         }
       }
     } else {
-      built.homeList.blur();
+      blurAllPanels(built);
       built.searchInput.blur();
-      built.searchResults.blur();
       built.clientIdInput.blur();
       built.libraryList.blur();
       built.queueList.blur();
@@ -139,9 +176,17 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     }
     const nextList = listForRoute(next);
     if (nextList) {
-      const pos = ctx.positions.restore(next);
-      const max = Math.max(0, nextList.options.length - 1);
-      nextList.setSelectedIndex(Math.min(Math.max(0, pos.selected), max));
+      // Home/search panels restore per-panel in their setters; single
+      // lists restore here against current options.
+      const nextKind = routeKind(next);
+      const isPanelView =
+        (nextKind === 'home' && (next as { browse?: unknown }).browse === undefined) ||
+        nextKind === 'search';
+      if (!isPanelView) {
+        const pos = ctx.positions.restore(next);
+        const max = Math.max(0, nextList.options.length - 1);
+        nextList.setSelectedIndex(Math.min(Math.max(0, pos.selected), max));
+      }
     }
     if (opts.onRouteChange) {
       opts.onRouteChange(next);
@@ -174,9 +219,8 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     const curKind = routeKind(route.current);
 
     if (next === 'sidebar') {
-      built.homeList.blur();
+      blurAllPanels(built);
       built.searchInput.blur();
-      built.searchResults.blur();
       built.clientIdInput.blur();
       built.libraryList.blur();
       built.queueList.blur();
@@ -188,9 +232,9 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     } else {
       built.nav.blur();
       if (curKind === 'home' && (route.current as { browse?: unknown }).browse === undefined) {
-        built.homeList.focus();
+        focusHomePanel(ctx, ctx.homePanel.value);
       } else if (curKind === 'search') {
-        built.searchResults.blur();
+        blurAllPanels(built);
         built.searchInput.focus();
         ctx.helpers.updateSearchFocusVisuals(true);
       } else if (curKind === 'settings') {

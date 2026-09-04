@@ -12,6 +12,7 @@ import type {
   UiViewState,
   VisualizerFrame,
 } from '../types';
+import { partitionHomeRows } from '../views/homeRows';
 import { createUiApi } from './api';
 import { createContextMenuHelpers } from './contextMenu';
 import { createKeyDispatcher } from './keyboard';
@@ -39,13 +40,17 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   const sidebarPinned = { value: true };
   const latestVizFrame: { value: VisualizerFrame | null } = { value: null };
   const currentSearchHits = { value: [] as unknown[] as never };
-  const currentSearchIndexMap: { value: number[] } = { value: [] };
   const lastSearch: UiCoreContext['lastSearch'] = { value: null };
   const searchFilter: UiCoreContext['searchFilter'] = { current: 'all' };
   const currentLibraryItems = { value: [] as never };
   const currentRouteItems: { value: unknown[] } = { value: [] };
   const currentHomeItems: UiCoreContext['currentHomeItems'] = { value: [] };
   const homeRange: UiCoreContext['homeRange'] = { current: 'medium_term' };
+  const homePanel = { value: 0 };
+  const searchPanel = { value: 0 };
+  const searchPanelMaps: UiCoreContext['searchPanelMaps'] = {
+    value: { tracks: [], artists: [], albums: [], playlists: [] },
+  };
   const menu: { open: boolean; prevFocus: FocusArea; items: ContextMenuItem[] } = {
     open: false,
     prevFocus: 'sidebar',
@@ -73,13 +78,15 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     sidebarPinned,
     latestVizFrame,
     currentSearchHits: currentSearchHits as unknown as UiCoreContext['currentSearchHits'],
-    currentSearchIndexMap,
     lastSearch,
     searchFilter,
     currentLibraryItems: currentLibraryItems as unknown as UiCoreContext['currentLibraryItems'],
     currentRouteItems,
     currentHomeItems,
     homeRange,
+    homePanel,
+    searchPanel,
+    searchPanelMaps,
     manualLyricsScroll,
     menu,
     palette,
@@ -111,15 +118,28 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
       opts.onSearchSubmit(q);
     }
   });
-  built.searchResults.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
-    // Group headers map to -1 and are never actionable.
-    const hitIdx = ctx.currentSearchIndexMap.value[idx] ?? idx;
-    if (hitIdx < 0) return;
+  const selectSearchHit = (panel: keyof UiCoreContext['searchPanelMaps']['value']): void => {
+    const lists: Record<string, { getSelectedIndex: () => number }> = {
+      tracks: built.searchTracksList,
+      artists: built.searchArtistsList,
+      albums: built.searchAlbumsList,
+      playlists: built.searchPlaylistsList,
+    };
+    const hitIdx = ctx.searchPanelMaps.value[panel][lists[panel]?.getSelectedIndex() ?? 0];
+    if (hitIdx === undefined) return;
     const hit = ctx.currentSearchHits.value[hitIdx];
     if (hit && opts.onSelectSearchHit) {
       opts.onSelectSearchHit(hit);
     }
-  });
+  };
+  built.searchTracksList.on(SelectRenderableEvents.ITEM_SELECTED, () => selectSearchHit('tracks'));
+  built.searchArtistsList.on(SelectRenderableEvents.ITEM_SELECTED, () =>
+    selectSearchHit('artists'),
+  );
+  built.searchAlbumsList.on(SelectRenderableEvents.ITEM_SELECTED, () => selectSearchHit('albums'));
+  built.searchPlaylistsList.on(SelectRenderableEvents.ITEM_SELECTED, () =>
+    selectSearchHit('playlists'),
+  );
   built.libraryList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
     const item = ctx.currentLibraryItems.value[idx];
     if (item && opts.onSelectLibraryItem) {
@@ -130,12 +150,18 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   built.queueList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
     opts.onSelectQueue(idx);
   });
-  built.homeList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
-    const row = ctx.currentHomeItems.value[idx];
+  const selectHomeRow = (panel: 0 | 1 | 2): void => {
+    const lists = [built.homeTracksList, built.homeArtistsList, built.homeRecentList];
+    const parts = partitionHomeRows(ctx.currentHomeItems.value);
+    const groups = [parts.tracks, parts.artists, parts.recent];
+    const row = groups[panel]?.[lists[panel]?.getSelectedIndex() ?? 0];
     if (row && opts.onSelectHomeRow) {
       opts.onSelectHomeRow(row);
     }
-  });
+  };
+  built.homeTracksList.on(SelectRenderableEvents.ITEM_SELECTED, () => selectHomeRow(0));
+  built.homeArtistsList.on(SelectRenderableEvents.ITEM_SELECTED, () => selectHomeRow(1));
+  built.homeRecentList.on(SelectRenderableEvents.ITEM_SELECTED, () => selectHomeRow(2));
   built.browseList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
     if (opts.onSelectBrowseEntry) {
       opts.onSelectBrowseEntry(idx);

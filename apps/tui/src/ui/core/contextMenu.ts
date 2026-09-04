@@ -1,6 +1,7 @@
 import { fg, t } from '@opentui/core';
 import { COLOR_TEXT } from '../theme';
 import type { ContextMenuItem, ContextTarget, FocusArea, LibraryItemT } from '../types';
+import { partitionHomeRows } from '../views/homeRows';
 import { routeKind } from './navigationStack';
 import type { UiCoreContext } from './types';
 
@@ -22,9 +23,16 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
   const { built, route } = ctx;
   const kind = routeKind(route.current);
   if (kind === 'search') {
-    const listIdx = built.searchResults.getSelectedIndex();
-    const hitIdx = ctx.currentSearchIndexMap.value[listIdx] ?? listIdx;
-    if (hitIdx < 0) return null;
+    const panels = ['tracks', 'artists', 'albums', 'playlists'] as const;
+    const panel = panels[ctx.searchPanel.value] ?? 'tracks';
+    const lists = {
+      tracks: built.searchTracksList,
+      artists: built.searchArtistsList,
+      albums: built.searchAlbumsList,
+      playlists: built.searchPlaylistsList,
+    };
+    const hitIdx = ctx.searchPanelMaps.value[panel][lists[panel]?.getSelectedIndex() ?? 0];
+    if (hitIdx === undefined) return null;
     const hit = ctx.currentSearchHits.value[hitIdx] as
       | {
           type: string;
@@ -75,9 +83,14 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
     return { kind: targetKind, id: entity.id, uri: entity.uri, name: entity.name ?? entity.id };
   }
   if (kind === 'home' && (route.current as { browse?: unknown }).browse === undefined) {
-    const row = ctx.currentHomeItems.value[built.homeList.getSelectedIndex()] as
-      | { kind: string; track?: EntityLike; artist?: EntityLike }
-      | undefined;
+    const parts = partitionHomeRows(ctx.currentHomeItems.value as never) as unknown as Record<
+      string,
+      Array<{ kind: string; track?: EntityLike; artist?: EntityLike }>
+    >;
+    const groups = [parts.tracks, parts.artists, parts.recent];
+    const lists = [built.homeTracksList, built.homeArtistsList, built.homeRecentList];
+    const panel = Math.max(0, Math.min(2, ctx.homePanel.value));
+    const row = groups[panel]?.[lists[panel]?.getSelectedIndex() ?? 0];
     if (row?.kind === 'track' && row.track?.id) {
       return {
         kind: 'track',

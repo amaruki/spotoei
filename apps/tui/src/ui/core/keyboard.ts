@@ -1,7 +1,9 @@
 import { resolveBackAction } from '../../navigation/backBehavior';
 import { resolveClientId } from '../../config';
+import { cycleHomePanel, focusedHomeList } from './categoryPanels';
 import { handleEntityBrowseKeys } from './keyboardEntity';
 import { handleLibraryQueueKeys } from './keyboardLists';
+import { handleSearchKeys } from './keyboardSearch';
 import { routeKind } from './navigationStack';
 import type { Route, UiCoreContext } from './types';
 // Key dispatcher for the full TUI. Implements focus isolation: when an
@@ -84,61 +86,8 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
       return;
     }
 
-    // 2. Search route input focus isolation
-    if (routeKind(route.current) === 'search' && focus.current === 'main') {
-      if (built.searchInput.focused) {
-        if (e.ctrl && e.name === 'c') {
-          opts.onKey(key);
-          return;
-        }
-        if (e.name === 'escape' || e.name === 'tab') {
-          built.searchInput.blur();
-          ctx.helpers.setFocusArea('sidebar');
-          return;
-        }
-        if (e.name === 'down') {
-          built.searchInput.blur();
-          built.searchResults.focus();
-          ctx.helpers.updateSearchFocusVisuals(false);
-          return;
-        }
-        if (e.name === 'return') {
-          // Handled natively by InputRenderable.submit(), emitting InputRenderableEvents.ENTER
-          return;
-        }
-        // Characters/spaces typed into searchInput are consumed here; do NOT trigger global hotkeys!
-        return;
-      }
-      if (built.searchResults.focused) {
-        if (e.ctrl && e.name === 'c') {
-          opts.onKey(key);
-          return;
-        }
-        if (e.name === 'escape' || e.name === 'tab' || e.name === 'left') {
-          built.searchResults.blur();
-          ctx.helpers.setFocusArea('sidebar');
-          return;
-        }
-        if (e.name === 'up' && built.searchResults.getSelectedIndex() === 0) {
-          built.searchResults.blur();
-          built.searchInput.focus();
-          ctx.helpers.updateSearchFocusVisuals(true);
-          return;
-        }
-        if (!e.shift && (e.name === '/' || e.name === 's' || e.sequence === '/')) {
-          built.searchResults.blur();
-          built.searchInput.focus();
-          ctx.helpers.updateSearchFocusVisuals(true);
-          return;
-        }
-        if (['up', 'down', 'return', 'pageup', 'pagedown', 'home', 'end'].includes(e.name)) {
-          // Let SelectRenderable handle arrow/enter events for playing tracks
-          return;
-        }
-      }
-      // If neither is focused while in search route, focus search input
-      built.searchInput.focus();
-      ctx.helpers.updateSearchFocusVisuals(true);
+    // 2. Search route input focus isolation (split for LoC cap)
+    if (handleSearchKeys(ctx, e, key)) {
       return;
     }
 
@@ -227,6 +176,23 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
     // 4d. Entity / browse / visualizer keys (split for LoC cap)
     if (handleEntityBrowseKeys(ctx, e)) {
       return;
+    }
+
+    // 4e. Home category panels: Tab cycles panels, arrows stay in-list.
+    if (
+      routeKind(route.current) === 'home' &&
+      (route.current as { browse?: unknown }).browse === undefined &&
+      focus.current === 'main'
+    ) {
+      if (e.name === 'tab') {
+        cycleHomePanel(ctx);
+        return;
+      }
+      const homeList = focusedHomeList(ctx);
+      if (['up', 'down', 'return', 'pageup', 'pagedown', 'home', 'end'].includes(e.name)) {
+        void homeList;
+        return;
+      }
     }
 
     // 5. Context exit keys. Esc resolves through resolveBackAction:

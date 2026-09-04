@@ -1,6 +1,7 @@
 import { routeTitle } from '../formatters';
 import { COLOR_BORDER, COLOR_BORDER_FOCUS } from '../theme';
 import { getNavOptions } from '../views/nav';
+import { focusedSearchList } from './categoryPanels';
 import { routeKind } from './navigationStack';
 import type { Route, UiCoreContext } from './types';
 
@@ -14,12 +15,12 @@ export function createRouteHelpers(ctx: UiCoreContext) {
       built.searchInputBox.borderColor = COLOR_BORDER_FOCUS;
       built.searchInputBox.title = '▶ Search Spotify (Type query & press Enter)';
       built.searchResultsBox.borderColor = COLOR_BORDER;
-      built.searchResultsBox.title = 'Results (Press ↓ to browse)';
+      built.searchResultsBox.title = 'Results (Press ↓ for tracks, Tab: category)';
     } else {
       built.searchInputBox.borderColor = COLOR_BORDER;
       built.searchInputBox.title = 'Search Spotify (Press ↑ to edit query)';
       built.searchResultsBox.borderColor = COLOR_BORDER_FOCUS;
-      built.searchResultsBox.title = '▶ Results (Press ↑/↓ to browse, Enter to play)';
+      built.searchResultsBox.title = '▶ Results (↑/↓ browse, Tab: category, Enter: play)';
     }
   };
 
@@ -47,7 +48,7 @@ export function createRouteHelpers(ctx: UiCoreContext) {
       built.main.borderColor = COLOR_BORDER_FOCUS;
       built.main.title = `▶ ${baseTitle} [Active]`;
       if (curKind === 'search') {
-        updateSearchFocusVisuals(built.searchInput.focused || !built.searchResults.focused);
+        updateSearchFocusVisuals(built.searchInput.focused || !focusedSearchList(ctx).focused);
       }
       built.library.borderColor = curKind === 'library' ? COLOR_BORDER_FOCUS : COLOR_BORDER;
       built.queue.borderColor = curKind === 'queue' ? COLOR_BORDER_FOCUS : COLOR_BORDER;

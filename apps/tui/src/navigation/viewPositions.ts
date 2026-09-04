@@ -36,4 +36,16 @@ export class ViewPositionStore {
   restore(route: RouteT): ViewPosition {
     return this.positions.get(routePositionKey(route)) ?? { selected: 0, scroll: 0 };
   }
+
+  saveKey(key: string, pos: ViewPosition): void {
+    this.positions.set(key, { ...pos });
+  }
+
+  restoreKey(key: string): ViewPosition {
+    return this.positions.get(key) ?? { selected: 0, scroll: 0 };
+  }
+}
+
+export function panelPositionKey(route: RouteT, view: string, panel: string): string {
+  return `${routePositionKey(route)}:${view}:${panel}`;
 }

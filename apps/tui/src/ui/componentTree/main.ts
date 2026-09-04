@@ -11,20 +11,38 @@ import {
 } from '@opentui/core';
 import { COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_DIM, COLOR_PANEL_BG } from '../theme';
 import type { UiViewState } from '../types';
-import { homeRowOptions } from '../views/homeRows';
 import { getSettingsContent } from '../views/settings';
 import { buildEntityViews, type EntityViewNodes } from './entityViews';
+import { buildHomeView } from './homeView';
+import { buildLyricsView } from './lyricsView';
+import { buildSearchGrid } from './searchView';
 
 export interface MainNodes extends EntityViewNodes {
   center: BoxRenderable;
   main: BoxRenderable;
   home: BoxRenderable;
-  homeList: SelectRenderable;
+  homeRow: BoxRenderable;
+  homeTracks: BoxRenderable;
+  homeTracksList: SelectRenderable;
+  homeArtists: BoxRenderable;
+  homeArtistsList: SelectRenderable;
+  homeRecent: BoxRenderable;
+  homeRecentList: SelectRenderable;
+  homeNow: BoxRenderable;
+  homeNowText: TextRenderable;
   search: BoxRenderable;
   searchInputBox: BoxRenderable;
   searchInput: InputRenderable;
   searchResultsBox: BoxRenderable;
-  searchResults: SelectRenderable;
+  searchRow: BoxRenderable;
+  searchTracks: BoxRenderable;
+  searchTracksList: SelectRenderable;
+  searchArtists: BoxRenderable;
+  searchArtistsList: SelectRenderable;
+  searchAlbums: BoxRenderable;
+  searchAlbumsList: SelectRenderable;
+  searchPlaylists: BoxRenderable;
+  searchPlaylistsList: SelectRenderable;
   library: BoxRenderable;
   libraryList: SelectRenderable;
   queue: BoxRenderable;
@@ -67,16 +85,8 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     flexGrow: 1,
     flexDirection: 'column',
   });
-  const homeList = new SelectRenderable(renderer, {
-    id: 'home-list',
-    options: homeRowOptions([]),
-    showScrollIndicator: true,
-    showDescription: true,
-    width: '100%',
-    height: '100%',
-    flexGrow: 1,
-  });
-  home.add(homeList);
+  const homeView = buildHomeView(renderer);
+  home.add(homeView.homeRow);
   main.add(home);
 
   // Search view
@@ -120,22 +130,14 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     borderStyle: 'single',
     borderColor: COLOR_BORDER,
     backgroundColor: COLOR_PANEL_BG,
-    title: 'Results (Press ↓ to browse, Enter to play)',
+    title: 'Results (Tab: category, Enter: play/open)',
     flexDirection: 'column',
     paddingLeft: 1,
     paddingRight: 1,
     paddingTop: 1,
   });
-  const searchResults = new SelectRenderable(renderer, {
-    id: 'search-results',
-    options: [{ name: '(no results)', description: 'Type a query above and press Enter' }],
-    showScrollIndicator: true,
-    showDescription: true,
-    width: '100%',
-    height: '100%',
-    flexGrow: 1,
-  });
-  searchResultsBox.add(searchResults);
+  const searchGrid = buildSearchGrid(renderer);
+  searchResultsBox.add(searchGrid.searchRow);
   search.add(searchResultsBox);
   main.add(search);
 
@@ -194,27 +196,8 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
   main.add(queue);
 
   // Lyrics view
-  const lyrics = new BoxRenderable(renderer, {
-    id: 'view-lyrics',
-    width: '100%',
-    flexGrow: 1,
-    flexDirection: 'column',
-    visible: false,
-  });
-  const lyricsScroll = new ScrollBoxRenderable(renderer, {
-    id: 'lyrics-scroll',
-    width: '100%',
-    flexGrow: 1,
-  });
-  const lyricsText = new TextRenderable(renderer, {
-    id: 'lyrics-text',
-    content: t`${fg(COLOR_DIM)('(no lyrics loaded — press L to fetch)')}`,
-    wrapMode: 'word',
-    width: '100%',
-  });
-  lyricsScroll.add(lyricsText);
-  lyrics.add(lyricsScroll);
-  main.add(lyrics);
+  const lyricsView = buildLyricsView(renderer);
+  main.add(lyricsView.lyrics);
 
   // Settings view
   const settings = new BoxRenderable(renderer, {
@@ -266,19 +249,35 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     center,
     main,
     home,
-    homeList,
+    homeRow: homeView.homeRow,
+    homeTracks: homeView.homeTracks,
+    homeTracksList: homeView.homeTracksList,
+    homeArtists: homeView.homeArtists,
+    homeArtistsList: homeView.homeArtistsList,
+    homeRecent: homeView.homeRecent,
+    homeRecentList: homeView.homeRecentList,
+    homeNow: homeView.homeNow,
+    homeNowText: homeView.homeNowText,
     search,
     searchInputBox,
     searchInput,
     searchResultsBox,
-    searchResults,
+    searchRow: searchGrid.searchRow,
+    searchTracks: searchGrid.searchTracks,
+    searchTracksList: searchGrid.searchTracksList,
+    searchArtists: searchGrid.searchArtists,
+    searchArtistsList: searchGrid.searchArtistsList,
+    searchAlbums: searchGrid.searchAlbums,
+    searchAlbumsList: searchGrid.searchAlbumsList,
+    searchPlaylists: searchGrid.searchPlaylists,
+    searchPlaylistsList: searchGrid.searchPlaylistsList,
     library,
     libraryList,
     queue,
     queueList,
-    lyrics,
-    lyricsScroll,
-    lyricsText,
+    lyrics: lyricsView.lyrics,
+    lyricsScroll: lyricsView.lyricsScroll,
+    lyricsText: lyricsView.lyricsText,
     settings,
     settingsText,
     clientIdBox,

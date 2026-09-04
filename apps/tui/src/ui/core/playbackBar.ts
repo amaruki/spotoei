@@ -1,7 +1,6 @@
 import { bold, fg, t } from '@opentui/core';
-import { formatArtists } from '../formatters';
+import { formatArtists, formatTime } from '../formatters';
 import { COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
-import { contextLine, homeRowOptions } from '../views/homeRows';
 import { getSettingsContent } from '../views/settings';
 import { buildPlaybackBarContent } from '../playbackBarView';
 import { routeKind } from './navigationStack';
@@ -29,7 +28,7 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
       if (built.searchInput.focused) {
         return 'Enter: search Spotify  ↓: results  Tab/Esc: navigation  q: quit';
       }
-      return '↑/↓: select  Enter: play/open  x: actions  ↑ at top: edit search  q: quit';
+      return '↑/↓: select  Enter: play/open  x: actions  Tab: category  q: quit';
     }
     if (curKind === 'library' || curKind === 'queue') {
       return '↑/↓: browse list  Enter: play/open  x: actions  r: refresh  q: quit';
@@ -44,25 +43,26 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
       return 'V/Esc: back  m: mode  Space: play/pause  q: quit';
     }
     if (curKind === 'home') {
-      return '↑/↓: browse  Enter: play/open  x: actions  Tab/Esc: navigation  q: quit';
+      return '↑/↓: browse  Enter: play/open  x: actions  Tab: panel  q: quit';
     }
     return 'Space: play/pause  n: next  p: prev  l: lyrics  S: shuffle  R: repeat  A: autoplay  +/-: vol  Tab: nav  q: quit';
   };
 
   const refreshHome = (): void => {
-    // Re-render loaded home rows with the live playback context line.
-    // Never fetches: data arrives through setHomeItems only.
-    const rows = ctx.currentHomeItems.value;
-    if (rows.length === 0) return;
+    // Update the Now Playing home panel from live playback state.
+    // Never fetches: panel rows arrive through setHomeItems only.
     const pb = state.playback;
-    const line = contextLine(pb?.track?.name, pb?.track?.artists, pb?.state);
-    const withoutContext = rows.filter((r) => r.kind !== 'context');
-    const next =
-      line !== null
-        ? [{ kind: 'context', text: line } as const, ...withoutContext]
-        : withoutContext;
-    ctx.currentHomeItems.value = next;
-    built.homeList.options = homeRowOptions(next as never);
+    const track = pb?.track;
+    if (!track) {
+      built.homeNowText.content = t`${fg(COLOR_DIM)('Nothing playing — pick a track from any panel')}`;
+      return;
+    }
+    const pos = formatTime(pb?.positionMs ?? 0);
+    const dur = formatTime(pb?.durationMs ?? track.durationMs ?? 0);
+    const vol = Math.round((pb?.volume ?? 1) * 100);
+    built.homeNowText.content = t`${fg(COLOR_TEXT)(bold(track.name || 'Untitled'))}
+${fg(COLOR_TEXT)(formatArtists(track.artists))}${track.album ? fg(COLOR_DIM)(` — ${track.album}`) : ''}
+${fg(COLOR_DIM)(`${pb?.state ?? 'idle'} · ${pos} / ${dur} · vol ${vol}% · shuffle ${pb?.shuffle ? 'on' : 'off'} · repeat ${pb?.repeat ?? 'off'}`)}`;
   };
 
   const refreshSettings = (): void => {

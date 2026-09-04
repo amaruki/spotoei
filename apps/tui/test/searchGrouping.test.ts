@@ -3,7 +3,7 @@ import { createTestRenderer } from '@opentui/core/testing';
 import { PROTOCOL_VERSION } from 'spotoei-protocol';
 import type { SearchResponseT } from 'spotoei-protocol';
 import { createUiCore, type UiViewState } from '../src/ui';
-import { searchHitOptions } from '../src/ui/views/search';
+import { partitionSearchHits, renderHit } from '../src/ui/views/search';
 import { routeKind } from '../src/ui/core/navigationStack';
 
 const trackHit = (id: string) => ({
@@ -41,35 +41,28 @@ const baseState: UiViewState = {
 };
 
 describe('search grouping', () => {
-  it('orders groups Tracks, Artists, Albums, Playlists with headers', () => {
-    const results = {
-      query: 'q',
-      hits: [artistHit('a1'), trackHit('t1')],
-    } as unknown as SearchResponseT;
-    const { options, indexMap } = searchHitOptions(results);
-    expect(options.map((o) => o.name)).toEqual(['── Tracks ──', '♪ t1', '── Artists ──', '👤 a1']);
-    expect(indexMap).toEqual([-1, 1, -1, 0]);
+  it('partitions hits by category with original indices', () => {
+    const hits = [artistHit('a1'), trackHit('t1')] as unknown as SearchResponseT['hits'];
+    const panels = partitionSearchHits(hits);
+    expect(panels.tracks.map((r) => r.index)).toEqual([1]);
+    expect(panels.artists.map((r) => r.index)).toEqual([0]);
+    expect(panels.albums).toEqual([]);
+    expect(panels.playlists).toEqual([]);
+    expect(renderHit(panels.tracks[0]?.hit as never).name).toBe('♪ t1');
   });
 
-  it('skips empty groups and filters by entity type', () => {
-    const results = {
-      query: 'q',
-      hits: [artistHit('a1'), trackHit('t1')],
-    } as unknown as SearchResponseT;
-    const filtered = searchHitOptions(results, 'track');
-    expect(filtered.options.map((o) => o.name)).toEqual(['♪ t1']);
-    expect(filtered.indexMap).toEqual([1]);
+  it('filters by entity type', () => {
+    const hits = [artistHit('a1'), trackHit('t1')] as unknown as SearchResponseT['hits'];
+    const panels = partitionSearchHits(hits, 'track');
+    expect(panels.tracks.length).toBe(1);
+    expect(panels.artists).toEqual([]);
   });
 
-  it('header rows never resolve to hits', async () => {
+  it('panel rows resolve to hits, empty panels resolve nothing', async () => {
     const { renderer, renderOnce } = await createTestRenderer({ width: 120, height: 40 });
-    const selected: string[] = [];
     const ui = createUiCore(renderer, baseState, {
       onKey: () => {},
       onSearchSubmit: () => {},
-      onSelectSearchHit: (hit) => {
-        selected.push(hit.type);
-      },
       onSelectLibrary: () => {},
       onSelectQueue: () => {},
     });
@@ -80,7 +73,8 @@ describe('search grouping', () => {
       hits: [artistHit('a1') as never, trackHit('t1') as never],
     } as unknown as SearchResponseT);
     expect(routeKind(ui.getRoute())).toBe('search');
-    expect(selected).toEqual([]);
+    // Default panel is tracks: first row maps to the track hit.
+    expect(ui.getContextTarget()).toMatchObject({ kind: 'track', id: 't1' });
     await ui.shutdown();
   });
 

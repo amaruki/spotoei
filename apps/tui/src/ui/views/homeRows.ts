@@ -32,6 +32,24 @@ export function homeRowOptions(rows: HomeRow[]): Array<{ name: string; descripti
   });
 }
 
+export interface HomePanels {
+  tracks: HomeRow[];
+  artists: HomeRow[];
+  recent: HomeRow[];
+}
+
+export function partitionHomeRows(rows: HomeRow[]): HomePanels {
+  const tracks: HomeRow[] = [];
+  const artists: HomeRow[] = [];
+  const recent: HomeRow[] = [];
+  for (const row of rows) {
+    if (row.kind === 'artist') artists.push(row);
+    else if (row.kind === 'track' && row.playedAt) recent.push(row);
+    else if (row.kind === 'track') tracks.push(row);
+  }
+  return { tracks, artists, recent };
+}
+
 export function formatPlayedAt(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;

@@ -1,20 +1,14 @@
 import { fg, t } from '@opentui/core';
-import type {
-  AuthStatusDataT,
-  PlaybackPositionDataT,
-  QueueSnapshotT,
-  SearchResponseT,
-} from 'spotoei-protocol';
+import type { AuthStatusDataT, PlaybackPositionDataT, QueueSnapshotT } from 'spotoei-protocol';
 
 import { formatArtists } from '../formatters';
 import { COLOR_DIM } from '../theme';
 import { resolveContextTarget } from './contextMenu';
 import { browseCategoryOptions, browseEntryOptions } from '../views/browseView';
-import { homeRowOptions } from '../views/homeRows';
 import { createEntitySetters } from './entitySetters';
 import { libraryItemOptions } from '../views/library';
 import { renderLyricsContent } from '../views/lyrics';
-import { searchHitOptions, type SearchFilter } from '../views/search';
+import { createPanelSetters, restoreListPosition } from './panelSetters';
 import { routeFromLegacy, routeKind } from './navigationStack';
 import type { ContextTarget } from '../types';
 import type {
@@ -29,24 +23,6 @@ import type {
 } from './types';
 // Creates the public `Ui` API handle that consumers use to update state.
 // All setters propagate through `ctx.helpers` and trigger granular repaints.
-function renderSearchResults(ctx: UiCoreContext): void {
-  const results = ctx.lastSearch.value;
-  if (!results) return;
-  const { options, indexMap } = searchHitOptions(results, ctx.searchFilter.current);
-  ctx.currentSearchIndexMap.value = indexMap;
-  ctx.built.searchResults.options = options;
-  ctx.built.searchResults.setSelectedIndex(0);
-}
-
-function restoreListPosition(
-  ctx: UiCoreContext,
-  list: { options: unknown[]; setSelectedIndex: (idx: number) => void },
-): void {
-  // Async loads arrive after showRoute, so re-apply the saved position here.
-  const pos = ctx.positions.restore(ctx.route.current);
-  const max = Math.max(0, list.options.length - 1);
-  list.setSelectedIndex(Math.min(Math.max(0, pos.selected), max));
-}
 
 export function createUiApi(ctx: UiCoreContext): Ui {
   const {
@@ -92,16 +68,7 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       latestVizFrame.value = frame;
       helpers.paintViz();
     },
-    setSearchResults(query: string, results: SearchResponseT): void {
-      state.search = { query, hitCount: results.hits.length };
-      ctx.currentSearchHits.value = results.hits;
-      ctx.lastSearch.value = results;
-      renderSearchResults(ctx);
-    },
-    setSearchFilter(filter: SearchFilter): void {
-      ctx.searchFilter.current = filter;
-      if (ctx.lastSearch.value) renderSearchResults(ctx);
-    },
+    ...createPanelSetters(ctx),
     setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }): void {
       ctx.currentLibraryItems.value = items;
       built.libraryList.options = libraryItemOptions(items, error);
@@ -133,18 +100,6 @@ export function createUiApi(ctx: UiCoreContext): Ui {
           description: '',
         }));
       }
-    },
-    setHomeItems(rows, meta?: { error?: string }): void {
-      ctx.currentHomeItems.value = rows;
-      const options = homeRowOptions(rows as never);
-      if (meta?.error) {
-        options.push({
-          name: `⚠ ${meta.error}`,
-          description: 'Tab-local error — other tabs unaffected',
-        });
-      }
-      built.homeList.options = options;
-      restoreListPosition(ctx, built.homeList);
     },
     setQueueSnapshot(snap: QueueSnapshotT): void {
       const items: { name: string; description: string }[] = [];
@@ -202,10 +157,19 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       // so prior results stay visible until setSearchResults arrives.
       if (loading) {
         built.statusText.content = t`${fg(COLOR_DIM)('searching Spotify…')}`;
-        built.searchResults.options = [
-          { name: 'Searching Spotify…', description: 'Please wait while querying Spotify Web API' },
-        ];
-        built.searchResults.setSelectedIndex(0);
+        const row = {
+          name: 'Searching Spotify…',
+          description: 'Please wait while querying Spotify Web API',
+        };
+        for (const list of [
+          built.searchTracksList,
+          built.searchArtistsList,
+          built.searchAlbumsList,
+          built.searchPlaylistsList,
+        ]) {
+          list.options = [row];
+          list.setSelectedIndex(0);
+        }
       }
     },
     setPaletteCommands(
