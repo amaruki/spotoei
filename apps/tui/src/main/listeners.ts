@@ -36,9 +36,12 @@ export function wireSubscriptions(
 
   clients.auth.onStatusChange((next: AuthStatusDataT) => {
     const wasAuthed = state.currentInfo.auth?.state === 'authenticated';
-    state.currentInfo.auth = next;
     const ui = getUi();
+    // ui.setAuth owns the state mutation (same object by reference) so its
+    // transition check sees the real before/after; pre-mutating here would
+    // make every transition look like a no-op and skip routing home.
     if (ui) ui.setAuth(next);
+    else state.currentInfo.auth = next;
     if (!wasAuthed && next.state === 'authenticated') {
       ui?.setStatus('Successfully authenticated! Loading library…');
       void actions.loadLibrary();
