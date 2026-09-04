@@ -11,7 +11,12 @@ export const HOME_PANELS = ['tracks', 'artists', 'recent', 'discover'] as const;
 export const SEARCH_PANELS = ['tracks', 'artists', 'albums', 'playlists'] as const;
 
 export function homePanelLists(built: BuiltUi): SelectRenderable[] {
-  return [built.homeTracksList, built.homeArtistsList, built.homeRecentList, built.homeDiscoverList];
+  return [
+    built.homeTracksList,
+    built.homeArtistsList,
+    built.homeRecentList,
+    built.homeDiscoverList,
+  ];
 }
 
 export function homePanelBoxes(built: BuiltUi): BoxRenderable[] {

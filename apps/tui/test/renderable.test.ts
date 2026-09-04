@@ -394,10 +394,10 @@ describe('OpenTUI renderables integration', () => {
     // while focus settles, so a settling keypress goes first.
     ui.setFocus('sidebar');
     await renderOnce();
-    sendKey('down', '[B');
+    sendKey('down', '\u001b[B');
     await renderOnce();
-    sendKey('down', '[B');
-    sendKey('return', '');
+    sendKey('down', '\u001b[B');
+    sendKey('return', '\r');
     await renderOnce();
     expect(kindOf(ui.getRoute())).toBe('search');
     expect(ui.getFocus()).toBe('main');
