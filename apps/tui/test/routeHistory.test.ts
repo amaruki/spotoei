@@ -128,13 +128,13 @@ describe('history positions and back behavior wiring', () => {
     const { ui, renderOnce } = await makeUi();
     await renderOnce();
 
-    ui.setRoute({ kind: 'home', tab: 'browse' });
-    ui.setRoute({ kind: 'home', tab: 'browse', browse: { category: 'moods' } });
-    ui.setRoute({ kind: 'home', tab: 'browse', browse: { category: 'moods', entry: 'chill' } });
+    ui.setRoute({ kind: 'browse', path: {} });
+    ui.setRoute({ kind: 'browse', path: { category: 'moods' } });
+    ui.setRoute({ kind: 'browse', path: { category: 'moods', entry: 'chill' } });
     expect(ui.navigateBack()).toBe(true);
-    expect(ui.getRoute()).toEqual({ kind: 'home', tab: 'browse', browse: { category: 'moods' } });
+    expect(ui.getRoute()).toEqual({ kind: 'browse', path: { category: 'moods' } });
     expect(ui.navigateBack()).toBe(true);
-    expect(ui.getRoute()).toEqual({ kind: 'home', tab: 'browse' });
+    expect(ui.getRoute()).toEqual({ kind: 'browse', path: {} });
     await ui.shutdown();
   });
 });

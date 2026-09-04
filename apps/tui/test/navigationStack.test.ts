@@ -74,9 +74,21 @@ describe('sameRoute', () => {
   });
 
   it('returns false for same kind but different data', () => {
-    expect(sameRoute({ kind: 'home', tab: 'for_you' }, { kind: 'home', tab: 'browse' })).toBe(
-      false,
-    );
+    expect(
+      sameRoute({ kind: 'home', tab: 'for_you' }, { kind: 'home', tab: 'recently_played' }),
+    ).toBe(false);
+    expect(
+      sameRoute(
+        { kind: 'browse', path: { category: 'moods' } },
+        { kind: 'browse', path: { category: 'genres' } },
+      ),
+    ).toBe(false);
+    expect(
+      sameRoute(
+        { kind: 'browse', path: { category: 'moods' } },
+        { kind: 'browse', path: { category: 'moods' } },
+      ),
+    ).toBe(true);
   });
 });
 

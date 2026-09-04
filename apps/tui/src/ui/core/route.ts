@@ -55,12 +55,7 @@ export function createRouteHelpers(ctx: UiCoreContext) {
   const setNavSelected = (target: Route): void => {
     const options = built.nav.options;
     const targetKind = routeKind(target);
-    // Browse lives on the home route; highlight its own sidebar entry.
-    const wanted =
-      targetKind === 'home' && (target as { browse?: unknown }).browse !== undefined
-        ? 'browse'
-        : targetKind;
-    const idx = options.findIndex((o) => o.value === wanted);
+    const idx = options.findIndex((o) => o.value === targetKind);
     if (idx >= 0 && built.nav.getSelectedIndex() !== idx) {
       built.nav.setSelectedIndex(idx);
     }

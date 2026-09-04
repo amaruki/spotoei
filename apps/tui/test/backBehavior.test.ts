@@ -22,7 +22,7 @@ describe('back behavior', () => {
   it('escapes browse results to entry list', () => {
     expect(
       resolveBackAction({
-        route: { kind: 'home', tab: 'browse', browse: { category: 'moods', entry: 'chill' } },
+        route: { kind: 'browse', path: { category: 'moods', entry: 'chill' } },
         browse: {},
       }),
     ).toBe('browse_results_to_entries');
@@ -31,20 +31,20 @@ describe('back behavior', () => {
   it('escapes browse entry list to category list', () => {
     expect(
       resolveBackAction({
-        route: { kind: 'home', tab: 'browse', browse: { category: 'moods' } },
+        route: { kind: 'browse', path: { category: 'moods' } },
         browse: {},
       }),
     ).toBe('browse_entries_to_categories');
   });
 
-  it('escapes browse category list to prior home tab', () => {
+  it('pops the route stack from the browse category list', () => {
     expect(
       resolveBackAction({
-        route: { kind: 'home', tab: 'browse', browse: {} },
+        route: { kind: 'browse', path: {} },
         browse: {},
         priorHomeTab: 'for_you',
       }),
-    ).toBe('browse_to_home');
+    ).toBe('pop_route');
   });
 
   it('returns exact previous route for artist, album, playlist, lyrics, visualizer', () => {

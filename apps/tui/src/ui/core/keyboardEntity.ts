@@ -11,8 +11,7 @@ export function handleEntityBrowseKeys(
   const kind = routeKind(route.current);
   const isEntityList =
     kind === 'artist' || kind === 'album' || kind === 'playlist' || kind === 'visualizer';
-  const isBrowseList =
-    kind === 'home' && (route.current as { browse?: unknown }).browse !== undefined;
+  const isBrowseList = kind === 'browse';
   if ((isEntityList || isBrowseList) && focus.current === 'main') {
     if (e.ctrl) {
       return false;

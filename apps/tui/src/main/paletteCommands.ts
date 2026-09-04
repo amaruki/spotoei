@@ -79,7 +79,7 @@ export function buildPaletteCommands(
       description: 'result type filter',
       action: () => getUi()?.setSearchFilter(filter),
     })),
-    ...(['for_you', 'browse', 'recently_played'] as HomeTabT[]).map((tab) => ({
+    ...(['for_you', 'recently_played'] as HomeTabT[]).map((tab) => ({
       name: `Home tab: ${tab}`,
       description: 'home tab',
       action: () => getUi()?.setRoute({ kind: 'home', tab }),
@@ -119,7 +119,7 @@ export function buildPaletteCommands(
       action: () => {
         const u = getUi();
         const r = u?.getRoute();
-        if (u && r?.kind === 'home' && r.tab !== 'browse') {
+        if (u && r?.kind === 'home') {
           void ensureHomeTab(
             {
               homeManager: ctx.clients.homeManager,

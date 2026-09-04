@@ -18,7 +18,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
   const { built, focus, manualLyricsScroll, opts, route, state } = ctx;
   const saveRoutePosition = (r: Route): void => {
     const kind = routeKind(r);
-    if (kind === 'home' && (r as { browse?: unknown }).browse === undefined) {
+    if (kind === 'home') {
       homePanelLists(built).forEach((list, i) => {
         ctx.positions.saveKey(panelPositionKey(r, 'home', HOME_PANELS[i] ?? String(i)), {
           selected: list.getSelectedIndex(),
@@ -43,16 +43,14 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
   };
   const listForRoute = (r: Route) => {
     const kind = routeKind(r);
-    if (kind === 'home' && (r as { browse?: unknown }).browse === undefined)
-      return focusedHomeList(ctx);
+    if (kind === 'home') return focusedHomeList(ctx);
+    if (kind === 'browse') return built.browseList;
     if (kind === 'search') return focusedSearchList(ctx);
     if (kind === 'library') return built.libraryList;
     if (kind === 'queue') return built.queueList;
     if (kind === 'artist') return built.artistList;
     if (kind === 'album') return built.albumList;
     if (kind === 'playlist') return built.playlistList;
-    if (kind === 'home' && (r as { browse?: unknown }).browse !== undefined)
-      return built.browseList;
     return null;
   };
   const showRoute = (nextInput: Route | string, force = false, replace = false): void => {
@@ -79,9 +77,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     route.current = next;
     const finalKind = routeKind(next);
 
-    const isHomeBrowse =
-      finalKind === 'home' && (next as { browse?: unknown }).browse !== undefined;
-    built.home.visible = finalKind === 'home' && !isHomeBrowse;
+    built.home.visible = finalKind === 'home';
     built.search.visible = finalKind === 'search';
     built.library.visible = finalKind === 'library';
     built.queue.visible = finalKind === 'queue';
@@ -95,7 +91,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     built.artist.visible = finalKind === 'artist';
     built.album.visible = finalKind === 'album';
     built.playlist.visible = finalKind === 'playlist';
-    built.browse.visible = isHomeBrowse;
+    built.browse.visible = finalKind === 'browse';
     built.visualizerFull.visible = finalKind === 'visualizer';
     const isVizFull = finalKind === 'visualizer';
     // Login-only mode: unauthenticated users see the settings login page
@@ -125,7 +121,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
         ctx.helpers.updateSearchFocusVisuals(true);
       } else {
         built.searchInput.blur();
-        if (finalKind === 'home' && !isHomeBrowse) {
+        if (finalKind === 'home') {
           focusHomePanel(ctx, ctx.homePanel.value);
         } else {
           blurAllPanels(built);
@@ -162,13 +158,8 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
         ['playlist', built.playlistList],
         ['browse', built.browseList],
       ] as const) {
-        if (finalKind === viewKind || (viewKind === 'browse' && finalKind === 'home')) {
-          if (viewKind === 'browse' && finalKind === 'home') {
-            if ((next as { browse?: unknown }).browse !== undefined) list.focus();
-            else list.blur();
-          } else if (finalKind === viewKind) {
-            list.focus();
-          }
+        if (finalKind === viewKind) {
+          list.focus();
         } else {
           list.blur();
         }
@@ -189,9 +180,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       // Home/search panels restore per-panel in their setters; single
       // lists restore here against current options.
       const nextKind = routeKind(next);
-      const isPanelView =
-        (nextKind === 'home' && (next as { browse?: unknown }).browse === undefined) ||
-        nextKind === 'search';
+      const isPanelView = nextKind === 'home' || nextKind === 'search';
       if (!isPanelView) {
         const pos = ctx.positions.restore(next);
         const max = Math.max(0, nextList.options.length - 1);
@@ -241,8 +230,10 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       built.nav.focus();
     } else {
       built.nav.blur();
-      if (curKind === 'home' && (route.current as { browse?: unknown }).browse === undefined) {
+      if (curKind === 'home') {
         focusHomePanel(ctx, ctx.homePanel.value);
+      } else if (curKind === 'browse') {
+        built.browseList.focus();
       } else if (curKind === 'search') {
         blurAllPanels(built);
         built.searchInput.focus();

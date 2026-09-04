@@ -82,7 +82,7 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
     const targetKind = kind === 'artist' ? 'album' : 'track';
     return { kind: targetKind, id: entity.id, uri: entity.uri, name: entity.name ?? entity.id };
   }
-  if (kind === 'home' && (route.current as { browse?: unknown }).browse === undefined) {
+  if (kind === 'home') {
     const parts = partitionHomeRows(ctx.currentHomeItems.value as never) as unknown as Record<
       string,
       Array<{ kind: string; track?: EntityLike; artist?: EntityLike; id?: string; label?: string }>
@@ -117,8 +117,8 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
     }
     return null;
   }
-  const browse = (route.current as { browse?: { category?: string } }).browse;
-  if (kind === 'home' && browse?.category) {
+  const path = (route.current as { path?: { category?: string } }).path;
+  if (kind === 'browse' && path?.category) {
     const entry = asEntity(ctx.currentRouteItems.value[built.browseList.getSelectedIndex()]) as
       | (EntityLike & { label?: string })
       | null;

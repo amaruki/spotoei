@@ -129,6 +129,27 @@ export class EntityManager {
     return page;
   }
 
+  async loadNewReleases(limit = 20, forceRefresh = false): Promise<CatalogAlbumT[]> {
+    const key = `new-releases:v2:${limit}`;
+    if (!forceRefresh) {
+      const cached = this.tryGetCached<CatalogAlbumT[]>(key, 60 * 60);
+      if (cached) return cached;
+    }
+    const albums = await this.client.getNewReleases(limit);
+    const isEmpty = albums.length === 0;
+    this.putCached(key, albums, isEmpty ? 60_000 : 60 * 60_000);
+    return albums;
+  }
+
+  async loadRecommendations(opts: {
+    limit?: number;
+    seedGenres?: string[];
+    seedArtists?: string[];
+    seedTracks?: string[];
+  }): Promise<CatalogTrackT[]> {
+    return this.client.getRecommendations(opts);
+  }
+
   // --- Membership & Mutations ---
 
   async checkMembership(uris: string[], forceRefresh = false): Promise<LibraryMembershipT[]> {

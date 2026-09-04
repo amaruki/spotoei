@@ -44,6 +44,8 @@ export function routeTitle(route: Route): string {
   switch (kind) {
     case 'home':
       return 'Home';
+    case 'browse':
+      return 'Browse';
     case 'search':
       return 'Search';
     case 'library':

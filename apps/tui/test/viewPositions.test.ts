@@ -5,9 +5,8 @@ describe('view positions', () => {
   it('keys routes by serializable IDs only', () => {
     expect(routePositionKey({ kind: 'album', id: 'a1' })).toBe('album:a1');
     expect(routePositionKey({ kind: 'search', query: 'q' })).toBe('search:q');
-    expect(routePositionKey({ kind: 'home', tab: 'browse', browse: { category: 'm' } })).toBe(
-      'home:browse:m:',
-    );
+    expect(routePositionKey({ kind: 'home', tab: 'for_you' })).toBe('home:for_you');
+    expect(routePositionKey({ kind: 'browse', path: { category: 'm' } })).toBe('browse:m:');
   });
 
   it('restores saved selection and scroll per route', () => {
@@ -19,20 +18,14 @@ describe('view positions', () => {
 
   it('keeps browse entry positions separate from category positions', () => {
     const store = new ViewPositionStore();
+    store.save({ kind: 'browse', path: { category: 'moods' } }, { selected: 2, scroll: 0 });
     store.save(
-      { kind: 'home', tab: 'browse', browse: { category: 'moods' } },
-      { selected: 2, scroll: 0 },
-    );
-    store.save(
-      { kind: 'home', tab: 'browse', browse: { category: 'moods', entry: 'chill' } },
+      { kind: 'browse', path: { category: 'moods', entry: 'chill' } },
       { selected: 5, scroll: 40 },
     );
+    expect(store.restore({ kind: 'browse', path: { category: 'moods' } }).selected).toBe(2);
     expect(
-      store.restore({ kind: 'home', tab: 'browse', browse: { category: 'moods' } }).selected,
-    ).toBe(2);
-    expect(
-      store.restore({ kind: 'home', tab: 'browse', browse: { category: 'moods', entry: 'chill' } })
-        .selected,
+      store.restore({ kind: 'browse', path: { category: 'moods', entry: 'chill' } }).selected,
     ).toBe(5);
   });
 });

@@ -21,12 +21,6 @@ interface BackInput {
 export function resolveBackAction(input: BackInput): BackAction {
   if (input.overlayOpen || input.paletteOpen) return 'close_overlay';
   const r = input.route;
-  if (r.kind === 'home' && r.tab === 'browse') {
-    const b = r.browse ?? input.browse;
-    if (b?.entry && b?.category) return 'browse_results_to_entries';
-    if (b?.category) return 'browse_entries_to_categories';
-    return 'browse_to_home';
-  }
   if (r.kind === 'browse') {
     const b = (r as { path?: { category?: string; entry?: string } }).path ?? input.browse;
     if (b?.entry && b?.category) return 'browse_results_to_entries';

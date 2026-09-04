@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const HomeTab = z.enum(['for_you', 'browse', 'recently_played']);
+export const HomeTab = z.enum(['for_you', 'recently_played']);
 export type HomeTabT = z.infer<typeof HomeTab>;
 
 export const BrowseCategoryId = z.string();

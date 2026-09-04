@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import type { BrowseEntryT } from 'spotoei-protocol';
+import type { BrowseEntryT, CatalogTrackT } from 'spotoei-protocol';
 import {
   activateBrowseEntry,
   browseBreadcrumb,
+  ensureBrowseEntry,
   ensureBrowseLevel,
   resolveBrowseSelection,
 } from '../src/main/browseLoad';
@@ -16,21 +17,49 @@ const searchEntry = (id: string): BrowseEntryT => ({
   source: { kind: 'search', query: 'chill', types: ['playlist'] },
 });
 
+const track = (id: string): CatalogTrackT => ({
+  id,
+  uri: `spotify:track:${id}`,
+  name: id,
+  artists: [{ id: 'a', name: 'A', uri: 'spotify:artist:a' }],
+  durationMs: 180000,
+});
+
+function stubUi(calls: string[]): Ui {
+  return {
+    setBrowseCategories: (cats: unknown[]) => calls.push(`cats:${cats.length}`),
+    setBrowseEntries: (entries: unknown[]) => calls.push(`entries:${entries.length}`),
+    setBrowseTracks: (tracks: unknown[]) => calls.push(`tracks:${tracks.length}`),
+    setStatus: () => {},
+  } as unknown as Ui;
+}
+
 describe('browse navigation', () => {
   it('navigates categories deeper without API calls', () => {
     const nav = resolveBrowseSelection({}, 3);
     expect(nav.kind).toBe('route');
     if (nav.kind === 'route') {
-      expect(nav.route.kind).toBe('home');
+      expect(nav.route).toEqual({ kind: 'browse', path: { category: 'moods' } });
     }
   });
 
-  it('activates search entries as catalog search routes with notes', () => {
+  it('resolves search entries to the browse entry level, never search', () => {
+    const nav = resolveBrowseSelection({ category: 'moods' }, 0);
+    expect(nav.kind).toBe('route');
+    if (nav.kind === 'route') {
+      expect(nav.route.kind).toBe('browse');
+      if (nav.route.kind === 'browse') {
+        expect(nav.route.path.category).toBe('moods');
+        expect(nav.route.path.entry).toBeTruthy();
+      }
+    }
+  });
+
+  it('activates search entries as inline browse routes with notes', () => {
     const nav = activateBrowseEntry(searchEntry('chill'));
     expect(nav.kind).toBe('route');
-    if (nav.kind === 'route' && nav.route.kind === 'search') {
-      expect(nav.route.query).toBe('chill');
-      expect(nav.note).toContain('Catalog search results');
+    if (nav.kind === 'route') {
+      expect(nav.route.kind).toBe('browse');
     }
   });
 
@@ -91,15 +120,34 @@ describe('browse navigation', () => {
 
   it('renders category and entry levels into the browse list', () => {
     const calls: string[] = [];
-    const ui = {
-      setBrowseCategories: (cats: unknown[]) => calls.push(`cats:${cats.length}`),
-      setBrowseEntries: (entries: unknown[]) => calls.push(`entries:${entries.length}`),
-      setStatus: () => {},
-    } as unknown as Ui;
+    const ui = stubUi(calls);
     ensureBrowseLevel(ui, {});
     ensureBrowseLevel(ui, { category: 'moods' });
     expect(calls[0]?.startsWith('cats:')).toBe(true);
     expect(Number(calls[0]?.split(':')[1])).toBeGreaterThan(5);
     expect(calls[1]).toBe('entries:5');
+  });
+
+  it('renders search entries inline as tracks without leaving browse', async () => {
+    const calls: string[] = [];
+    const ui = stubUi(calls);
+    const ok = await ensureBrowseEntry(
+      ui,
+      { category: 'moods', entry: 'chill' },
+      {
+        entityManager: {
+          loadNewReleases: async () => [],
+          loadRecommendations: async () => [],
+        },
+        searchClient: {
+          search: async () => ({
+            query: 'chill',
+            hits: [{ type: 'track', track: track('t1') }],
+          }),
+        },
+      },
+    );
+    expect(ok).toBe(true);
+    expect(calls).toEqual(['tracks:1']);
   });
 });

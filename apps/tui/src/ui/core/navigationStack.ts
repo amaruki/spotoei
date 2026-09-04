@@ -28,13 +28,9 @@ export function sameRoute(a: RouteT, b: RouteT): boolean {
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
     case 'home': {
-      const ha = a as { tab: string; browse?: { category?: string; entry?: string } };
-      const hb = b as { tab: string; browse?: { category?: string; entry?: string } };
-      return (
-        ha.tab === hb.tab &&
-        (ha.browse?.category ?? '') === (hb.browse?.category ?? '') &&
-        (ha.browse?.entry ?? '') === (hb.browse?.entry ?? '')
-      );
+      const ha = a as { tab: string };
+      const hb = b as { tab: string };
+      return ha.tab === hb.tab;
     }
     case 'browse': {
       const pa = a as { path?: { category?: string; entry?: string } };
@@ -77,7 +73,7 @@ export function routeFromLegacy(input: string | RouteT): RouteT {
     case 'home':
       return { kind: 'home', tab: 'for_you' };
     case 'browse':
-      return { kind: 'home', tab: 'browse' };
+      return { kind: 'browse', path: {} };
     case 'search':
       return { kind: 'search' };
     case 'library':

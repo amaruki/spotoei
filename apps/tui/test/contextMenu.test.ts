@@ -132,7 +132,7 @@ describe('context menu overlay', () => {
     ]);
     expect(ui.getContextTarget()).toMatchObject({ kind: 'track', id: 't9' });
 
-    ui.setRoute({ kind: 'home', tab: 'browse', browse: { category: 'moods' } });
+    ui.setRoute({ kind: 'browse', path: { category: 'moods' } });
     ui.setBrowseEntries([
       {
         id: 'chill',

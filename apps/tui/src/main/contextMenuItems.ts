@@ -144,7 +144,7 @@ export async function runContextAction(
     }
     case 'open': {
       if (target.kind === 'browse-entry') {
-        ui?.setRoute({ kind: 'home', tab: 'browse', browse: { category: target.id } });
+        ui?.setRoute({ kind: 'browse', path: { category: target.id } });
       } else {
         ui?.setStatus(`Nothing to open for ${target.name}`, true);
       }

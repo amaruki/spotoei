@@ -172,7 +172,7 @@ describe('entity, browse and visualizer routes', () => {
     });
     await renderOnce();
 
-    ui.setRoute({ kind: 'home', tab: 'browse', browse: { category: 'moods' } });
+    ui.setRoute({ kind: 'browse', path: { category: 'moods' } });
     ui.setBrowseEntries([
       {
         id: 'chill',
@@ -183,7 +183,7 @@ describe('entity, browse and visualizer routes', () => {
       },
     ]);
     await renderOnce();
-    expect(routeKind(ui.getRoute())).toBe('home');
+    expect(routeKind(ui.getRoute())).toBe('browse');
     await ui.shutdown();
   });
 

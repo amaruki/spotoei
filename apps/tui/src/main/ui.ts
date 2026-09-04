@@ -3,7 +3,7 @@ import type { CatalogTrackT, LibraryCollectionT } from 'spotoei-protocol';
 import { createUi, type Ui } from '../ui';
 import type { ContextTarget } from '../ui/types';
 import { routeKind } from '../ui/core/navigationStack';
-import { ensureBrowseLevel, resolveBrowseSelection } from './browseLoad';
+import { ensureBrowseEntry, ensureBrowseLevel, getBrowseTrack, isBrowseTracksMode, resolveBrowseSelection } from './browseLoad';
 import { runContextAction } from './contextMenuItems';
 import { ensureEntityRoute, loadMoreEntityItems } from './entityLoaders';
 import { ensureHomeTab } from './homeLoad';
@@ -39,7 +39,13 @@ export async function initUi(
   },
 ): Promise<Ui> {
   const { clients, state, getUi, quit } = ctx;
-
+  const play = (t: CatalogTrackT) => {
+    const isAlbum = t.uri.startsWith('spotify:album:');
+    if (isAlbum) void actions.playTrackOrContext({ contextUri: t.uri, title: t.name });
+    else void actions.playTrackOrContext({ trackUri: t.uri, title: t.name });
+    void actions.updateQueueView();
+    void actions.ensureAutoplayTracks();
+  };
   function submitSearch(query: string, label?: string): void {
     const q = query.trim();
     if (!q) return;
@@ -87,18 +93,33 @@ export async function initUi(
   const ui = await createUi(state.currentInfo, {
     onKey: actions.handleKey,
     onSearchSubmit: (q) => submitSearch(q),
-    onSelectBrowseEntry: (idx) => {
+    onSelectBrowseEntry: async (idx) => {
       const u = getUi();
       const r = u?.getRoute();
-      if (!r || r.kind !== 'home' || r.tab !== 'browse') return;
-      const nav = resolveBrowseSelection(r.browse ?? {}, idx);
-      if (nav.kind === 'message') {
-        u?.setStatus(nav.text, nav.persist);
+      if (!r || r.kind !== 'browse') return;
+      if (isBrowseTracksMode()) {
+        const t = getBrowseTrack(idx);
+        if (t) play(t);
         return;
       }
-      if (nav.route.kind === 'search') {
+      const path = r.path ?? {};
+      // Entry-level inline kinds (new_releases/recommendations) render
+      // tracks without pushing a route; everything else resolves to a
+      // browse sub-route (entry level) or a foreign route. Search routes
+      // are never produced here — browse results stay in Browse.
+      if (!path.category) {
+        const nav = resolveBrowseSelection(path, idx);
+        if (nav.kind === 'message') {
+          u?.setStatus(nav.text, nav.persist);
+          return;
+        }
         u?.setRoute(nav.route);
-        submitSearch(nav.route.query, nav.note);
+        if (nav.note) u?.setStatus(nav.note);
+        return;
+      }
+      const nav = resolveBrowseSelection(path, idx);
+      if (nav.kind === 'message') {
+        u?.setStatus(nav.text, nav.persist);
         return;
       }
       u?.setRoute(nav.route);
@@ -182,19 +203,17 @@ export async function initUi(
       }
     },
     onSelectHomeRow: (row) => {
-      if (row.kind === 'track') {
-        void actions.playTrackOrContext({ trackUri: row.track.uri, title: row.track.name });
-        void actions.updateQueueView();
-        void actions.ensureAutoplayTracks();
-      } else if (row.kind === 'artist') {
-        getUi()?.setRoute({ kind: 'artist', id: row.artist.id });
-      } else if (row.kind === 'discover') {
-        getUi()?.setRoute({ kind: 'home', tab: 'browse', browse: { category: row.id } });
+      if (row.kind === 'track') play(row.track);
+      else if (row.kind === 'artist') getUi()?.setRoute({ kind: 'artist', id: row.artist.id });
+      else if (row.kind === 'discover') {
+        const maybeTrack = (row as { track?: CatalogTrackT }).track;
+        if (maybeTrack) play(maybeTrack as CatalogTrackT);
+        else getUi()?.setRoute({ kind: 'browse', path: { category: row.id } });
       }
     },
     onRouteChange: (route) => {
       const curKind = routeKind(route);
-      if (curKind === 'home' && route.kind === 'home' && route.tab !== 'browse') {
+      if (curKind === 'home' && route.kind === 'home') {
         state.homeTabs.activeTab = route.tab;
         void ensureHomeTab(
           {
@@ -224,9 +243,19 @@ export async function initUi(
       if (curKind === 'artist' || curKind === 'album' || curKind === 'playlist') {
         void ensureEntityRoute({ entityManager: clients.entityManager, getUi, state }, route);
       }
-      if (curKind === 'home' && route.kind === 'home' && route.tab === 'browse') {
+      if (curKind === 'browse' && route.kind === 'browse') {
         const u = getUi();
-        if (u) ensureBrowseLevel(u, route.browse ?? {});
+        if (!u) return;
+        const path = route.path ?? {};
+        if (path.entry) {
+          void ensureBrowseEntry(
+            u,
+            path,
+            { entityManager: clients.entityManager, searchClient: clients.searchClient },
+          );
+        } else {
+          ensureBrowseLevel(u, path);
+        }
       }
     },
     onSaveClientId: actions.handleSaveClientId,

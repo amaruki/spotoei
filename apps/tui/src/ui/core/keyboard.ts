@@ -180,11 +180,7 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
     }
 
     // 4e. Home category panels: Tab cycles panels, arrows stay in-list.
-    if (
-      routeKind(route.current) === 'home' &&
-      (route.current as { browse?: unknown }).browse === undefined &&
-      focus.current === 'main'
-    ) {
+    if (routeKind(route.current) === 'home' && focus.current === 'main') {
       if (e.name === 'tab') {
         if (e.shift) {
           const len = HOME_PANELS.length;
@@ -209,11 +205,11 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
       if (e.name === 'escape' || e.name === 'left') {
         const cur = route.current as unknown as {
           kind: string;
-          browse?: { category?: string; entry?: string };
+          path?: { category?: string; entry?: string };
         };
         const action = resolveBackAction({
           route: route.current,
-          browse: cur.browse ?? {},
+          browse: cur.path ?? {},
           overlayOpen: ctx.menu.open,
           paletteOpen: palette.open,
         });
@@ -238,11 +234,12 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
     if (routeKind(route.current) !== 'search' && !built.clientIdInput.focused) {
       const numRoutes: Record<string, Route> = {
         '1': { kind: 'home', tab: 'for_you' },
-        '2': { kind: 'search' },
-        '3': { kind: 'library', section: 'saved_tracks' },
-        '4': { kind: 'queue' },
-        '5': { kind: 'lyrics' },
-        '6': { kind: 'settings' },
+        '2': { kind: 'browse', path: {} },
+        '3': { kind: 'search' },
+        '4': { kind: 'library', section: 'saved_tracks' },
+        '5': { kind: 'queue' },
+        '6': { kind: 'lyrics' },
+        '7': { kind: 'settings' },
       };
       const dest = numRoutes[e.name];
       if (dest) {

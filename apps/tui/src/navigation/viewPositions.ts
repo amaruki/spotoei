@@ -12,7 +12,7 @@ export interface ViewPosition {
 export function routePositionKey(route: RouteT): string {
   switch (route.kind) {
     case 'home':
-      return `home:${route.tab}:${route.browse?.category ?? ''}:${route.browse?.entry ?? ''}`;
+      return `home:${route.tab}`;
     case 'browse':
       return `browse:${route.path?.category ?? ''}:${route.path?.entry ?? ''}`;
     case 'search':
