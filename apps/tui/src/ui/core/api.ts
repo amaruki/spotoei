@@ -193,28 +193,31 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       helpers.refreshHome();
     },
     setPlaybackPosition(pos: PlaybackPositionDataT): void {
-      if (state.playback) {
-        state.playback.positionMs = pos.positionMs;
-        helpers.setHeader();
-        helpers.refreshHome();
-        if (
-          routeKind(route.current) === 'lyrics' &&
-          !manualLyricsScroll.value &&
-          state.lyrics?.kind === 'synced'
-        ) {
-          built.lyricsText.content = renderLyricsContent(state);
-          let activeIdx = -1;
-          for (let i = 0; i < state.lyrics.lines.length; i++) {
-            const line = state.lyrics.lines[i];
-            if (line && line.startMs <= pos.positionMs) {
-              activeIdx = i;
-            } else {
-              break;
-            }
+      if (!state.playback) return;
+      if (pos.revision !== state.playback.revision) return;
+      state.playback.positionMs = pos.positionMs;
+      // Store wall-clock observedAt for interpolation; playbackBar computes
+      // displayPos as positionMs + elapsed since observedAt when playing.
+      (state.playback as unknown as Record<string, unknown>)._observedAt = Date.now();
+      helpers.setHeader();
+      helpers.refreshHome();
+      if (
+        routeKind(route.current) === 'lyrics' &&
+        !manualLyricsScroll.value &&
+        state.lyrics?.kind === 'synced'
+      ) {
+        built.lyricsText.content = renderLyricsContent(state);
+        let activeIdx = -1;
+        for (let i = 0; i < state.lyrics.lines.length; i++) {
+          const line = state.lyrics.lines[i];
+          if (line && line.startMs <= pos.positionMs) {
+            activeIdx = i;
+          } else {
+            break;
           }
-          if (activeIdx >= 0) {
-            built.lyricsScroll.scrollTo(Math.max(0, activeIdx - 3));
-          }
+        }
+        if (activeIdx >= 0) {
+          built.lyricsScroll.scrollTo(Math.max(0, activeIdx - 3));
         }
       }
     },

@@ -68,10 +68,10 @@ export function wireSubscriptions(
   });
 
   clients.playback.onPosition((pos: PlaybackPositionDataT) => {
-    if (state.currentInfo.playback) {
-      const ui = getUi();
-      if (ui) ui.setPlaybackPosition(pos);
-    }
+    if (!state.currentInfo.playback) return;
+    if (pos.revision !== state.currentInfo.playback.revision) return;
+    const ui = getUi();
+    if (ui) ui.setPlaybackPosition(pos);
   });
 
   clients.queueManager.subscribe((snap) => {

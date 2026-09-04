@@ -87,8 +87,14 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     }
 
     const width = ctx.termWidth.value;
-    const posMs = pb?.positionMs ?? 0;
     const durMs = pb?.durationMs && pb.durationMs > 0 ? pb.durationMs : (track.durationMs ?? 0);
+    let posMs = pb?.positionMs ?? 0;
+    // Interpolation: advance displayPos by wall-clock elapsed since last observedAt when playing.
+    const observedAt = (pb as unknown as { _observedAt?: number })?._observedAt;
+    if (pb?.state === 'playing' && observedAt) {
+      const elapsed = Date.now() - observedAt;
+      posMs = durMs > 0 ? Math.min(durMs, posMs + elapsed) : posMs + elapsed;
+    }
     const content = buildPlaybackBarContent({
       state: pbState,
       title: track.name || 'Untitled',
