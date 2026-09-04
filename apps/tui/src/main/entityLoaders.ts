@@ -36,6 +36,16 @@ export async function ensureEntityRoute(deps: EntityLoaderDeps, route: unknown):
   if (!ui || !route || typeof route !== 'object') return;
   const r = route as { kind: string; id?: string };
   if (r.kind === 'artist' && r.id) {
+    try {
+      const view = await entityManager.loadArtist(r.id);
+      if (view.type === 'artist' && view.completeness === 'complete' && view.artist) {
+        ui.setArtistHeader(view.artist as { name: string });
+      } else {
+        ui.setArtistHeader(null);
+      }
+    } catch {
+      ui.setArtistHeader(null);
+    }
     const group = artistGroups.get(r.id) ?? 'album';
     const key = `artist:${r.id}:${group}`;
     if (pagesOf(state)[key]) {
@@ -59,6 +69,16 @@ export async function ensureEntityRoute(deps: EntityLoaderDeps, route: unknown):
     return;
   }
   if (r.kind === 'album' && r.id) {
+    try {
+      const view = await entityManager.loadAlbum(r.id);
+      if (view.type === 'album' && view.completeness === 'complete' && view.album) {
+        ui.setAlbumHeader(view.album as { name: string; artists: Array<{ name: string }> });
+      } else {
+        ui.setAlbumHeader(null);
+      }
+    } catch {
+      ui.setAlbumHeader(null);
+    }
     const key = `album:${r.id}`;
     if (pagesOf(state)[key]) {
       ui.setAlbumTracks(pagesOf(state)[key]?.items as CatalogTrackT[]);
@@ -81,6 +101,16 @@ export async function ensureEntityRoute(deps: EntityLoaderDeps, route: unknown):
     return;
   }
   if (r.kind === 'playlist' && r.id) {
+    try {
+      const view = await entityManager.loadPlaylist(r.id);
+      if (view.type === 'playlist' && view.completeness === 'complete' && view.playlist) {
+        ui.setPlaylistHeader(view.playlist as { name: string; owner?: { displayName?: string } });
+      } else {
+        ui.setPlaylistHeader(null);
+      }
+    } catch {
+      ui.setPlaylistHeader(null);
+    }
     const key = `playlist:${r.id}`;
     if (pagesOf(state)[key]) {
       ui.setPlaylistTracks(pagesOf(state)[key]?.items as CatalogTrackT[]);

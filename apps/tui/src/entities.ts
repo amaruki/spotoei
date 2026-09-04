@@ -56,7 +56,8 @@ export class EntityManager {
       if (cached) return cached;
     }
     const page = await this.client.getArtistAlbums(id, group, offset, limit);
-    this.putCached(key, page, 60 * 60_000);
+    const isEmpty = page.items.length === 0 && page.total === 0;
+    this.putCached(key, page, isEmpty ? 60_000 : 60 * 60_000);
     return page;
   }
 
@@ -89,7 +90,8 @@ export class EntityManager {
       if (cached) return cached;
     }
     const page = await this.client.getAlbumTracks(id, offset, limit);
-    this.putCached(key, page, 24 * 60 * 60_000);
+    const isEmpty = page.items.length === 0 && page.total === 0;
+    this.putCached(key, page, isEmpty ? 60_000 : 24 * 60 * 60_000);
     return page;
   }
 
@@ -122,7 +124,8 @@ export class EntityManager {
       if (cached) return cached;
     }
     const page = await this.client.getPlaylistTracks(id, offset, limit);
-    this.putCached(key, page, 5 * 60_000);
+    const isEmpty = page.items.length === 0 && page.total === 0;
+    this.putCached(key, page, isEmpty ? 60_000 : 5 * 60_000);
     return page;
   }
 

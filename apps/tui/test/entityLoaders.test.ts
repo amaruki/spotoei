@@ -28,6 +28,35 @@ const track = (id: string): CatalogTrackT => ({
 function setup(fetches: { albums?: CatalogAlbumT[]; tracks?: CatalogTrackT[]; calls?: string[] }) {
   const calls = fetches.calls ?? [];
   const manager = {
+    loadArtist: async (id: string) => {
+      calls.push(`artist:${id}`);
+      return {
+        type: 'artist' as const,
+        artist: { id, uri: `spotify:artist:${id}`, name: `Artist ${id}` },
+        completeness: 'complete' as const,
+      };
+    },
+    loadAlbum: async (id: string) => {
+      calls.push(`album:${id}`);
+      return {
+        type: 'album' as const,
+        album: {
+          id,
+          uri: `spotify:album:${id}`,
+          name: `Album ${id}`,
+          artists: [{ id: 'a', name: 'A', uri: 'spotify:artist:a' }],
+        },
+        completeness: 'complete' as const,
+      };
+    },
+    loadPlaylist: async (id: string) => {
+      calls.push(`playlist:${id}`);
+      return {
+        type: 'playlist' as const,
+        playlist: { id, uri: `spotify:playlist:${id}`, name: `Playlist ${id}` },
+        completeness: 'complete' as const,
+      };
+    },
     loadArtistAlbums: async (id: string, group = 'album', offset = 0) => {
       calls.push(`albums:${id}:${group}:${offset}`);
       const items = (fetches.albums ?? [album('al1'), album('al2')]).slice(offset, offset + 2);
@@ -57,6 +86,9 @@ function setup(fetches: { albums?: CatalogAlbumT[]; tracks?: CatalogTrackT[]; ca
     setPlaylistTracks: (items: CatalogTrackT[], opts?: { append?: boolean }) => {
       setCalls.push({ what: 'playlist', count: items.length, append: opts?.append });
     },
+    setArtistHeader: () => {},
+    setAlbumHeader: () => {},
+    setPlaylistHeader: () => {},
     setStatus: (msg: string) => {
       statuses.push(msg);
     },
@@ -97,6 +129,11 @@ describe('entity loaders', () => {
 
   it('keeps failures page-local without throwing', async () => {
     const manager = {
+      loadAlbum: async () => ({
+        type: 'album' as const,
+        album: { id: 'x', uri: 'spotify:album:x', name: 'x', artists: [] },
+        completeness: 'complete' as const,
+      }),
       loadAlbumTracks: async () => {
         throw new Error('403 forbidden');
       },
@@ -104,6 +141,7 @@ describe('entity loaders', () => {
     const statuses: string[] = [];
     const ui = {
       setAlbumTracks: () => {},
+      setAlbumHeader: () => {},
       setStatus: (m: string) => statuses.push(m),
     } as unknown as Ui;
     const state = { entityPages: {} } as AppState;

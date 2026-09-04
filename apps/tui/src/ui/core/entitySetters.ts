@@ -49,6 +49,23 @@ export function createEntitySetters(ctx: UiCoreContext) {
         applySavedPosition(ctx, built.playlistList);
       }
     },
+    setArtistHeader(artist: { name: string } | null): void {
+      built.artist.title = artist
+        ? `Artist: ${artist.name} (Enter: play, x: actions)`
+        : 'Artist (Enter: play, x: actions)';
+    },
+    setAlbumHeader(album: { name: string; artists: Array<{ name: string }> } | null): void {
+      const label = album ? `${album.name} — ${album.artists.map((a) => a.name).join(', ')}` : null;
+      built.album.title = label ? `Album: ${label} (Enter: play, x: actions)` : 'Album (Enter: play, x: actions)';
+    },
+    setPlaylistHeader(playlist: { name: string; owner?: { displayName?: string } } | null): void {
+      if (playlist) {
+        const owner = playlist.owner?.displayName ? ` • ${playlist.owner.displayName}` : '';
+        built.playlist.title = `Playlist: ${playlist.name}${owner} (Enter: play, x: actions)`;
+      } else {
+        built.playlist.title = 'Playlist (Enter: play, x: actions)';
+      }
+    },
   };
 }
 

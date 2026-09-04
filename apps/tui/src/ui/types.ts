@@ -139,6 +139,9 @@ export interface Ui {
     }>,
     opts?: { append?: boolean },
   ): void;
+  setArtistHeader(artist: { name: string } | null): void;
+  setAlbumHeader(album: { name: string; artists: Array<{ name: string }> } | null): void;
+  setPlaylistHeader(playlist: { name: string; owner?: { displayName?: string } } | null): void;
   setBrowseCategories(cats: Array<{ id: string; label: string; entries: unknown[] }>): void;
   setBrowseEntries(
     entries: Array<{
