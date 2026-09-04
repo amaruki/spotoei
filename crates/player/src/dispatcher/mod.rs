@@ -42,6 +42,25 @@ pub async fn handle(
 }
 
 fn hello(cmd: &Command) -> String {
+    const SUPPORTED: [u32; 1] = [PROTOCOL_VERSION];
+    let client_protocols: Option<Vec<u32>> = cmd
+        .data
+        .get("protocols")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|x| x.as_u64().map(|n| n as u32)).collect());
+    let has_overlap = match &client_protocols {
+        Some(protos) => protos.iter().any(|p| SUPPORTED.contains(p)),
+        None => false,
+    };
+    if !has_overlap {
+        return err(
+            &cmd.id,
+            ErrorBody::new(
+                ErrorCode::Unsupported,
+                format!("unsupported protocol: expected one of {SUPPORTED:?}, got {client_protocols:?}"),
+            ),
+        );
+    }
     let data = serde_json::json!({
         "protocol": PROTOCOL_VERSION,
         "playerVersion": PLAYER_VERSION,

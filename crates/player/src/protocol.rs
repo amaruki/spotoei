@@ -15,6 +15,7 @@ pub fn next_event_seq() -> u64 {
 }
 
 pub const PROTOCOL_VERSION: u32 = 1;
+pub const SUPPORTED_PROTOCOLS: &[u32] = &[PROTOCOL_VERSION];
 pub const PLAYER_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 pub const MAX_LINE_BYTES: usize = 1 << 20; // 1 MiB
@@ -193,7 +194,7 @@ pub fn parse_command(line: &str) -> Result<Command, ProtocolError> {
         line: e.line(),
         col: e.column(),
     })?;
-    if cmd.version != PROTOCOL_VERSION {
+    if !SUPPORTED_PROTOCOLS.contains(&cmd.version) {
         return Err(ProtocolError::UnsupportedVersion(cmd.version));
     }
     if cmd.kind != "command" {
