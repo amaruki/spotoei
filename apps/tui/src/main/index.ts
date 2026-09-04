@@ -67,63 +67,34 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
   const requestQuit = createRequestQuit<number>();
   let child: ChildProcess | null = null;
   let ui: Ui | null = null;
-
-  const quit = createShutdownFn(
-    () => ui,
-    () => child,
-    requestQuit,
-  );
-
-  const ctx: AppContext = {
-    clients: {} as AppClients,
-    state: {} as AppState,
-    child: null as unknown as ChildProcess,
-    getUi: () => ui,
-    quit,
-  };
-
-  installSignalHandlers(quit);
-  installUncaughtHandler(
-    () => ui,
-    () => child,
-  );
-
+  let isQuitting = false;
+  const quit = createShutdownFn(() => ui, () => child, requestQuit);
+  const quitWithFlag = async () => { isQuitting = true; await quit(); };
+  void requestQuit.promise.then(() => { isQuitting = true; });
+  const ctx: AppContext = { quit: quitWithFlag, child: null as unknown as ChildProcess, clients: null as unknown as AppClients, state: null as unknown as AppState, getUi: () => ui };
+  installSignalHandlers(quitWithFlag);
+  installUncaughtHandler(() => ui, () => child);
   try {
+    const isTTY = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+    let playerBin: string;
+    try { playerBin = locatePlayer(); } catch (e) { process.stderr.write(`spotoei: ${e instanceof Error ? e.message : String(e)}\n`); return 1; }
     const clientRes = resolveClientId();
-    if (clientRes.clientId) {
-      process.env.SPOTOEI_CLIENT_ID = clientRes.clientId;
-    }
     const extraEnv: Record<string, string> = {};
-    if (clientRes.clientId) {
-      extraEnv.SPOTOEI_CLIENT_ID = clientRes.clientId;
-    }
+    if (clientRes.clientId) extraEnv.SPOTOEI_CLIENT_ID = clientRes.clientId;
     const handshake = await startPlayer(playerBin, extraEnv);
-    child = handshake.child;
-    ctx.child = handshake.child;
+    child = handshake.child; ctx.child = handshake.child;
     let restartTimestamps: number[] = [];
-    const onPlayerExit = async (code: number | null, _signal: NodeJS.Signals | null): Promise<void> => {
-      const now = Date.now();
-      restartTimestamps = restartTimestamps.filter((t) => now - t < 60_000);
-      restartTimestamps.push(now);
-      if (restartTimestamps.length > 3) {
-        if (ui) ui.setStatus('Player unavailable: restart limit exceeded (3/60s)', true);
-        else process.stderr.write('Player unavailable: restart limit exceeded (3/60s)\n');
-        return;
-      }
-      if (ui) ui.setStatus(`Player exited (code ${code ?? 'none'}), restarting...`, true);
+    const onPlayerExit = async (code: number | null) => {
+      if (isQuitting) return;
+      const now = Date.now(); restartTimestamps = restartTimestamps.filter((t) => now - t < 60000); restartTimestamps.push(now);
+      if (restartTimestamps.length > 3) { try { ui?.setStatus('Player unavailable: restart limit exceeded (3/60s)', true); } catch { process.stderr.write('Player unavailable: restart limit exceeded (3/60s)\n'); } return; }
+      try { ui?.setStatus(`Player exited (code ${code ?? 'none'}), restarting...`, true); } catch { process.stderr.write(`Player exited (code ${code ?? 'none'}), restarting...\n`); }
       try {
-        const crashed = child;
-        if (!crashed) return;
+        const crashed = child; if (!crashed) return;
         const next = await restartPlayer(crashed, playerBin, extraEnv, restartTimestamps.length - 1);
-        child = next.child;
-        ctx.child = next.child;
-        child.on('exit', onPlayerExit);
-        if (ui) ui.setStatus('Player restarted', false);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (ui) ui.setStatus(`Player unavailable: ${msg}`, true);
-        else process.stderr.write(`Player unavailable: ${msg}\n`);
-      }
+        child = next.child; ctx.child = next.child; child.on('exit', onPlayerExit);
+        try { ui?.setStatus('Player restarted', false); } catch { process.stderr.write('Player restarted\n'); }
+      } catch (e) { const msg = e instanceof Error ? e.message : String(e); try { ui?.setStatus(`Player unavailable: ${msg}`, true); } catch { process.stderr.write(`Player unavailable: ${msg}\n`); } }
     };
     child.on('exit', onPlayerExit);
 

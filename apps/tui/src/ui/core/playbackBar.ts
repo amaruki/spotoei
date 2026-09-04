@@ -118,16 +118,24 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
 
   const setStatus = (msg: string, persist = false): void => {
     state.statusMessage = msg;
-    if (persist) {
-      built.statusText.content = t`${fg(COLOR_WARN)(bold(msg))}`;
-      return;
+    try {
+      if (persist) {
+        built.statusText.content = t`${fg(COLOR_WARN)(bold(msg))}`;
+        return;
+      }
+      clearTimeout(statusTimer.value as unknown as NodeJS.Timeout);
+      statusTimer.value = setTimeout(() => {
+        state.statusMessage = undefined;
+        try {
+          built.statusText.content = t`${fg(COLOR_DIM)(getFooterHelp())}`;
+        } catch {
+          // renderer destroyed during shutdown
+        }
+      }, 2500);
+    } catch {
+      // TextBuffer destroyed after renderer shutdown — fallback to stderr
+      if (persist) process.stderr.write(`${msg}\n`);
     }
-    built.statusText.content = t`${fg(COLOR_TEXT)(msg)}  ${fg(COLOR_DIM)(getFooterHelp())}`;
-    if (statusTimer.value) clearTimeout(statusTimer.value);
-    statusTimer.value = setTimeout(() => {
-      state.statusMessage = undefined;
-      built.statusText.content = t`${fg(COLOR_DIM)(getFooterHelp())}`;
-    }, 2500);
   };
 
   return {
