@@ -38,6 +38,39 @@ export function markRefreshFailed(
   };
 }
 
+export function markPageLoaded(
+  map: CollectionMap,
+  collection: LibraryCollectionT,
+  nextOffset: number,
+  hasMore: boolean,
+): CollectionMap {
+  return {
+    ...map,
+    [collection]: {
+      ...map[collection],
+      nextOffset,
+      hasMore,
+      loading: false,
+      lastError: undefined,
+    },
+  };
+}
+
+export function setCollectionLoading(
+  map: CollectionMap,
+  collection: LibraryCollectionT,
+  loading: boolean,
+): CollectionMap {
+  return { ...map, [collection]: { ...map[collection], loading } };
+}
+
+export function resetCollection(map: CollectionMap, collection: LibraryCollectionT): CollectionMap {
+  return {
+    ...map,
+    [collection]: { ...initialCollectionState(), lastError: map[collection].lastError },
+  };
+}
+
 export function activeRefreshTarget(active: LibraryCollectionT): LibraryCollectionT {
   return active;
 }

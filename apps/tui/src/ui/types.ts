@@ -104,7 +104,7 @@ export interface Ui {
   setVisualizerFrame(frame: VisualizerFrame | null): void;
   setSearchResults(query: string, results: SearchResponseT): void;
   setSearchFilter(filter: SearchFilter): void;
-  setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }): void;
+  setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }, opts?: { append?: boolean }): void;
   setLibraryLoading(loading: boolean): void;
   setLibraryLines(lines: string[], empty: boolean): void;
   setQueueSnapshot(snap: QueueSnapshotT): void;
@@ -177,6 +177,7 @@ export interface UiOptions {
   onSelectArtistAlbum?: (albumId: string) => void;
   onSelectEntityTrack?: (trackUri: string, title: string) => void;
   onEntityListEnd?: (kind: 'artist' | 'album' | 'playlist') => void;
+  onLibraryListEnd?: () => void;
   onSelectHomeRow?: (row: HomeRow) => void;
   onSelectBrowseEntry?: (index: number) => void;
   onSaveClientId?: (clientId: string) => void | Promise<void>;

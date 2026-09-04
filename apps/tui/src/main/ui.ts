@@ -1,4 +1,4 @@
-import type { CatalogTrackT } from 'spotoei-protocol';
+import type { CatalogTrackT, LibraryCollectionT } from 'spotoei-protocol';
 
 import { createUi, type Ui } from '../ui';
 import type { ContextTarget } from '../ui/types';
@@ -17,8 +17,9 @@ export async function initUi(
     handleSaveClientId: (id: string) => Promise<void>;
     loadLibrary: (
       force?: boolean,
-      collection?: import('spotoei-protocol').LibraryCollectionT,
+      collection?: LibraryCollectionT,
     ) => Promise<void>;
+    loadMoreLibrary?: () => Promise<void>;
     loadCurrentLyrics: (force?: boolean) => Promise<void>;
     updateQueueView: () => Promise<void>;
     ensureAutoplayTracks: () => Promise<void>;
@@ -158,6 +159,10 @@ export async function initUi(
           r.id,
         );
       }
+    },
+    onLibraryListEnd: () => {
+      const fn = actions.loadMoreLibrary;
+      if (fn) void fn();
     },
     onSelectQueue: (idx) => {
       const snap = clients.queueManager.getSnapshot();

@@ -69,8 +69,13 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       helpers.paintViz();
     },
     ...createPanelSetters(ctx),
-    setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }): void {
-      ctx.currentLibraryItems.value = items;
+    setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }, opts?: { append?: boolean }): void {
+      if (opts?.append) {
+        ctx.currentLibraryItems.value = [...ctx.currentLibraryItems.value, ...items] as never;
+        built.libraryList.options = [...built.libraryList.options, ...libraryItemOptions(items, error)];
+        return;
+      }
+      ctx.currentLibraryItems.value = items as never;
       built.libraryList.options = libraryItemOptions(items, error);
       restoreListPosition(ctx, built.libraryList);
     },

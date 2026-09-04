@@ -211,6 +211,11 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   watchListEnd('artist', built.artistList);
   watchListEnd('album', built.albumList);
   watchListEnd('playlist', built.playlistList);
+  built.libraryList.on(SelectRenderableEvents.SELECTION_CHANGED, (idx: number) => {
+    if (idx >= built.libraryList.options.length - 1 && opts.onLibraryListEnd) {
+      opts.onLibraryListEnd();
+    }
+  });
   built.paletteInput.on(InputRenderableEvents.CHANGE, (value: string) => {
     ctx.helpers.updatePaletteList(value);
   });
@@ -225,9 +230,13 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
       ctx.helpers.refreshOnboarding();
     }
   });
-
   renderer.on('resize', (w: number) => {
     ctx.termWidth.value = w;
+    // Keep overlays capped to terminal width to avoid clipping.
+    const pw = Math.min(60, w - 2);
+    const mw = Math.min(44, w - 2);
+    (built.palette as unknown as { width: number }).width = pw > 0 ? pw : 20;
+    (built.menu as unknown as { width: number }).width = mw > 0 ? mw : 20;
     // Re-apply layout visibility for the new width; migrate focus off a
     // sidebar that just disappeared.
     ctx.helpers.showRoute(ctx.route.current, true, true);
