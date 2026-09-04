@@ -47,11 +47,12 @@ export class VisualizerController {
   private lineListener: ((line: string) => void) | null = null;
   private running = false;
 
-  // Adaptive FPS state
-  private frameLatencies: number[] = [];
+  // Adaptive FPS state — windowed hysteresis (ring of last 120 frameTimes)
+  private frameTimes: number[] = [];
   private lastFrameTimestamp: number = 0;
-  private slowFrameCount: number = 0;
-  private fastFrameCount: number = 0;
+  private lastEvalAt: number = 0;
+  private downgradedAt: number = 0;
+  private stableSince: number = 0;
 
   constructor(opts: VisualizerClientOptions) {
     this.child = opts.child;
@@ -197,37 +198,38 @@ export class VisualizerController {
   }
 
   private recordFrameLatency(ms: number): void {
-    this.frameLatencies.push(ms);
-    if (this.frameLatencies.length > 30) {
-      this.frameLatencies.shift();
-    }
-
+    this.frameTimes.push(ms);
+    if (this.frameTimes.length > 120) this.frameTimes.shift();
+    if (this.frameTimes.length < 10) return;
+    const now = performance.now();
+    const sorted = [...this.frameTimes].sort((a, b) => a - b);
+    const p95 = sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] ?? 0;
+    const drop22 = this.frameTimes.filter((t) => t > 22).length / this.frameTimes.length;
+    const drop40 = this.frameTimes.filter((t) => t > 40).length / this.frameTimes.length;
+    const WINDOW_MS = 2000;
+    const STABLE_MS = 10000;
+    const COOLDOWN_MS = 15000;
     if (this.currentFps === 60) {
-      if (ms > 22) {
-        this.slowFrameCount++;
-        this.fastFrameCount = 0;
-      } else {
-        this.slowFrameCount = 0;
-      }
-
-      if (this.slowFrameCount >= 10) {
+      const windowOk = now - this.lastEvalAt >= WINDOW_MS || this.frameTimes.length < 120;
+      if (windowOk && p95 > 22 && drop22 > 0.08) {
         this.currentFps = 30;
-        this.slowFrameCount = 0;
-        this.fastFrameCount = 0;
+        this.downgradedAt = now;
+        this.lastEvalAt = now;
+        this.stableSince = 0;
         this.syncConfig().catch(() => {});
-      }
+      } else if (p95 <= 22) this.lastEvalAt = now;
     } else if (this.currentFps === 30) {
-      // At 30 FPS target interval is ~33.3ms. Low-jitter frames (<=40ms) indicate recovery.
-      if (ms <= 40) {
-        this.fastFrameCount++;
-      } else {
-        this.fastFrameCount = Math.max(0, this.fastFrameCount - 2);
-      }
-
-      if (this.fastFrameCount >= 60) {
+      const inCooldown = now - this.downgradedAt < COOLDOWN_MS;
+      const recovery = p95 <= 40 && drop40 < 0.05;
+      if (!recovery) { this.stableSince = 0; return; }
+      const timeStable = this.stableSince !== 0 && now - this.stableSince >= STABLE_MS;
+      const countStable = this.frameTimes.filter((t) => t <= 40).length >= 60;
+      if (this.stableSince === 0) this.stableSince = now;
+      if ((timeStable || countStable) && (!inCooldown || countStable)) {
         this.currentFps = this.targetFps;
-        this.fastFrameCount = 0;
-        this.slowFrameCount = 0;
+        this.lastEvalAt = now;
+        this.stableSince = 0;
+        this.downgradedAt = 0;
         this.syncConfig().catch(() => {});
       }
     }

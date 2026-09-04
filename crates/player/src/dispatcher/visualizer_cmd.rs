@@ -74,8 +74,8 @@ pub async fn configure(cmd: &Command, visualizer_cfg: &Arc<RwLock<VisualizerConf
 
     let mut cfg = visualizer_cfg.write().await;
     // Off mode implies disabled regardless of explicit enabled flag.
-    let effectiveEnabled = if mode == VisualizerMode::Off { false } else { enabled };
-    cfg.enabled = effectiveEnabled;
+    let effective_enabled = if mode == VisualizerMode::Off { false } else { enabled };
+    cfg.enabled = effective_enabled;
     cfg.mode = mode;
     cfg.fps = fps;
     cfg.bands = bands;
