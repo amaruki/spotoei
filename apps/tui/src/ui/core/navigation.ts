@@ -57,8 +57,12 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     built.browse.visible = isHomeBrowse;
     built.visualizerFull.visible = finalKind === 'visualizer';
     const isVizFull = finalKind === 'visualizer';
-    built.sidebar.visible = !isVizFull;
-    built.right.visible = !isVizFull && visualizerVisible.value;
+    // Login-only mode: unauthenticated users see the settings login page
+    // with no sidebar, side panel, or playback bar — like a logged-out web route.
+    const loginMode = state.auth.state !== 'authenticated';
+    built.sidebar.visible = !loginMode && !isVizFull;
+    built.right.visible = !loginMode && !isVizFull && visualizerVisible.value;
+    built.playbackBar.visible = !loginMode;
 
     if (finalKind === 'lyrics') {
       manualLyricsScroll.value = false;
@@ -135,6 +139,10 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
   };
 
   const navigateBack = (): boolean => {
+    if (state.auth.state !== 'authenticated') {
+      ctx.helpers.setStatus('Complete setup to continue — A: authenticate, C: edit Client ID');
+      return false;
+    }
     const { stack, popped } = popRoute(ctx.routeStack);
     ctx.routeStack = stack;
     if (popped) {

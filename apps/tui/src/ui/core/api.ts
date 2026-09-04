@@ -211,7 +211,10 @@ export function createUiApi(ctx: UiCoreContext): Ui {
           `🎉 Authenticated as ${auth.accountId ?? 'user'}! Welcome to Spotoei.`,
           true,
         );
-        helpers.showRoute('home', true);
+        helpers.showRoute('home', true, true);
+      }
+      if (wasAuth && auth.state !== 'authenticated') {
+        helpers.showRoute('settings', true, true);
       }
     },
     focusClientIdInput(): void {

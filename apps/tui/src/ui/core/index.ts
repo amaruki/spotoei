@@ -119,8 +119,9 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     built.right.visible = w >= 80 && visualizerVisible.value;
   });
 
-  // Mount initial state.
-  ctx.helpers.showRoute('home');
+  // Mount initial state. Unauthenticated boots route straight to the
+  // login page without pushing a spurious home entry onto the stack.
+  ctx.helpers.showRoute(initial.auth.state === 'authenticated' ? 'home' : 'settings', true, true);
   ctx.helpers.setFocusArea('sidebar');
   ctx.helpers.refreshNav();
   applyStateToTree(ctx);

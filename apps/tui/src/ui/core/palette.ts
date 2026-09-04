@@ -6,13 +6,23 @@ export function createPaletteHelpers(ctx: UiCoreContext) {
   const { built, focus, palette } = ctx;
 
   const updatePaletteList = (filter: string): void => {
+    // Login-only mode exposes just the setup commands.
+    const available =
+      ctx.state.auth.state === 'authenticated'
+        ? palette.commands
+        : palette.commands.filter(
+            (c) =>
+              c.name.includes('Authenticate') ||
+              c.name.includes('Client ID') ||
+              c.name.includes('Quit'),
+          );
     const needle = filter.toLowerCase().trim();
     palette.filtered = needle
-      ? palette.commands.filter(
+      ? available.filter(
           (c) =>
             c.name.toLowerCase().includes(needle) || c.description.toLowerCase().includes(needle),
         )
-      : [...palette.commands];
+      : [...available];
     if (palette.filtered.length === 0) {
       built.paletteList.options = [{ name: '(no matches)', description: '' }];
     } else {
