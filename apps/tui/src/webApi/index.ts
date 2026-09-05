@@ -3,33 +3,73 @@
 // the existing one-class API stable.
 
 import { CatalogEndpoints } from './catalog';
+import { BrowseEndpoints, getBrowseCategories, getCategoryPlaylists } from './browseEndpoints';
 import { EntityEndpoints } from './entityEndpoints';
 import { LibraryEndpoints } from './library';
-import { PlayerEndpoints } from './player';
+import { PlayerEndpoints, toggleMute, seekRelative, getDevices, transferPlayback, type DeviceInfo } from './player';
 import { QueueEndpoints } from './queue';
-import { Transport } from './transport';
+import {
+  createPlaylist,
+  addTracksToPlaylist,
+  removeTracksFromPlaylist,
+  reorderPlaylistTracks,
+  PlaylistMutations,
+  type PlaylistT,
+} from './playlistMutations';
+import { Transport, preserveRefreshToken, mergeTokenRefresh } from './transport';
 import type { WebApiClientOptions } from './types';
 
-export type { TokenProvider, WebApiClientOptions } from './types';
-
+export type { TokenPayload, TokenProvider, WebApiClientOptions } from './types';
+export type { RestrictionStore } from './transport';
+export {
+  Transport,
+  getBrowseCategories,
+  getCategoryPlaylists,
+  createPlaylist,
+  addTracksToPlaylist,
+  removeTracksFromPlaylist,
+  reorderPlaylistTracks,
+  PlaylistMutations,
+  type PlaylistT,
+  toggleMute,
+  seekRelative,
+  preserveRefreshToken,
+  mergeTokenRefresh,
+  getDevices,
+  transferPlayback,
+  type DeviceInfo,
+};
 export class WebApiClient {
   private transport: Transport;
   private catalog: CatalogEndpoints;
+  private browse: BrowseEndpoints;
   private entities: EntityEndpoints;
   private library: LibraryEndpoints;
   private queue: QueueEndpoints;
   private player: PlayerEndpoints;
 
   constructor(opts: WebApiClientOptions) {
-    this.transport = new Transport(opts.tokenProvider, opts.baseUrl);
+    this.transport = new Transport(opts.tokenProvider, opts.baseUrl, opts.restrictionStore);
     this.catalog = new CatalogEndpoints(this.transport);
+    this.browse = new BrowseEndpoints(this.transport);
     this.entities = new EntityEndpoints(this.transport);
     this.library = new LibraryEndpoints(this.transport);
     this.queue = new QueueEndpoints(this.transport);
     this.player = new PlayerEndpoints(this.transport);
   }
 
+  getTransport(): Transport {
+    return this.transport;
+  }
+
   // --- Catalog / Search ---
+  getNewReleases: BrowseEndpoints['getNewReleases'] = (...args) =>
+    this.browse.getNewReleases(...args);
+  getCategories: BrowseEndpoints['getCategories'] = (...args) => this.browse.getCategories(...args);
+  getBrowseCategories: BrowseEndpoints['getBrowseCategories'] = (...args) =>
+    this.browse.getBrowseCategories(...args);
+  getCategoryPlaylists: BrowseEndpoints['getCategoryPlaylists'] = (...args) =>
+    this.browse.getCategoryPlaylists(...args);
   search: CatalogEndpoints['search'] = (...args) => this.catalog.search(...args);
   getTrackView: CatalogEndpoints['getTrackView'] = (id) => this.catalog.getTrackView(id);
   getAlbumView: CatalogEndpoints['getAlbumView'] = (id) => this.catalog.getAlbumView(id);
@@ -72,6 +112,10 @@ export class WebApiClient {
   previousTrack: PlayerEndpoints['previousTrack'] = () => this.player.previousTrack();
   seek: PlayerEndpoints['seek'] = (ms) => this.player.seek(ms);
   setVolume: PlayerEndpoints['setVolume'] = (vol) => this.player.setVolume(vol);
+  seekRelative: PlayerEndpoints['seekRelative'] = (currentPositionMs, offsetMs) =>
+    this.player.seekRelative(currentPositionMs, offsetMs);
+  toggleMute: PlayerEndpoints['toggleMute'] = (currentState) =>
+    this.player.toggleMute(currentState);
   shuffle: PlayerEndpoints['shuffle'] = (state) => this.player.shuffle(state);
   repeat: PlayerEndpoints['repeat'] = (state) => this.player.repeat(state);
   getPlaybackState: PlayerEndpoints['getPlaybackState'] = () => this.player.getPlaybackState();
@@ -79,4 +123,31 @@ export class WebApiClient {
   transferPlayback: PlayerEndpoints['transferPlayback'] = (id, play) =>
     this.player.transferPlayback(id, play);
   getArtistGenres: PlayerEndpoints['getArtistGenres'] = (id) => this.player.getArtistGenres(id);
+
+  // --- Playlist Mutations ---
+  createPlaylist = (
+    userId: string,
+    name: string,
+    description?: string,
+    isPublic?: boolean,
+  ): Promise<PlaylistT> =>
+    createPlaylist(this.transport, userId, name, description, isPublic);
+  addTracksToPlaylist = (
+    playlistId: string,
+    uris: string[],
+    position?: number,
+  ): Promise<{ snapshot_id: string }> =>
+    addTracksToPlaylist(this.transport, playlistId, uris, position);
+  removeTracksFromPlaylist = (
+    playlistId: string,
+    uris: string[],
+  ): Promise<{ snapshot_id: string }> =>
+    removeTracksFromPlaylist(this.transport, playlistId, uris);
+  reorderPlaylistTracks = (
+    playlistId: string,
+    rangeStart: number,
+    insertBefore: number,
+    rangeLength?: number,
+  ): Promise<{ snapshot_id: string }> =>
+    reorderPlaylistTracks(this.transport, playlistId, rangeStart, insertBefore, rangeLength);
 }

@@ -2,16 +2,190 @@
 // Handles auth token resolution, in-flight request deduplication,
 // 401 token refresh retries, and 429 rate limit backoff.
 
-import type { HttpMethod, TokenProvider } from './types';
+import type { HttpMethod, TokenPayload, TokenProvider } from './types';
+import { diagnostic, reportFailure } from '../diagnostics';
+
+export const QUOTA_BANNER = 'Library temporarily unavailable \u00b7 Spotify API quota exceeded';
+export const BROWSE_QUOTA_BANNER = QUOTA_BANNER;
+export const SEARCH_QUOTA_BANNER = QUOTA_BANNER;
+
+// Endpoints Spotify deprecated for dev apps without Extended Quota
+// (Nov 2024 + Feb 2026 changes). A 403/404 here is an expected platform
+// restriction, not an app bug.
+const DEPRECATED_PATTERNS: RegExp[] = [
+  /\/v1\/browse\/new-releases$/,
+  /\/v1\/browse\/featured-playlists$/,
+  /\/v1\/browse\/categories$/,
+  /\/v1\/browse\/categories\/.+\/playlists$/,
+  /\/v1\/recommendations$/,
+  /\/v1\/artists\/.+\/top-tracks$/,
+  /\/v1\/artists\/.+\/related-artists$/,
+];
+
+// Persistent memory for endpoint restrictions. The default Transport keeps
+// this in memory; the app wires a SQLite-backed store so a restriction
+// learned in a previous run still suppresses the doomed request (silently)
+// instead of re-probing Spotify on every cold start.
+export interface RestrictionStore {
+  getRestriction(endpoint: string): number | undefined;
+  setRestriction(endpoint: string, until: number): void;
+}
+
+export function isDeprecatedEndpoint(pathname: string): boolean {
+  return DEPRECATED_PATTERNS.some((re) => re.test(pathname));
+}
+
+// How long a 403/404 on a deprecated endpoint suppresses repeat network
+// calls (callers' fallbacks throw the cached refusal instead). Bounds
+// staleness in case the restriction lifts on re-auth or quota approval.
+const RESTRICTION_TTL_MS = 10 * 60 * 1000;
+
+export class ApiError extends Error {
+  code:
+    | 'API_RATE_LIMITED'
+    | 'API_QUOTA_EXCEEDED'
+    | 'API_UNAVAILABLE'
+    | 'AUTH_EXPIRED'
+    | 'FORBIDDEN';
+  diagnosticId = crypto.randomUUID().slice(0, 8);
+  retryable: boolean;
+  status: number;
+  constructor(code: ApiError['code'], message: string, status: number, retryable: boolean) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.status = status;
+    this.retryable = retryable;
+  }
+}
+
+/**
+ * Preserves previous refresh_token when a token refresh response returns
+ * a new access_token without a new refresh_token (#1040 parity).
+ */
+export function preserveRefreshToken(
+  previousRefreshToken: string | null | undefined,
+  refreshedToken:
+    | Record<string, unknown>
+    | { refresh_token?: string | null; refreshToken?: string | null }
+    | null
+    | undefined,
+): string | undefined {
+  if (!refreshedToken || typeof refreshedToken !== 'object') {
+    return previousRefreshToken ?? undefined;
+  }
+  const next =
+    'refresh_token' in refreshedToken && typeof refreshedToken.refresh_token === 'string'
+      ? refreshedToken.refresh_token
+      : 'refreshToken' in refreshedToken && typeof refreshedToken.refreshToken === 'string'
+        ? refreshedToken.refreshToken
+        : undefined;
+  if (next && next.trim().length > 0) {
+    return next;
+  }
+  return previousRefreshToken ?? undefined;
+}
+
+/**
+ * Merges a refresh token response into existing credentials, preserving the existing
+ * refresh_token if the response omitted or nullified it (#1040 parity).
+ */
+export function mergeTokenRefresh<T extends Record<string, unknown>>(
+  current: TokenPayload | string | null | undefined,
+  refreshed: T,
+): T & { refresh_token?: string; refreshToken?: string } {
+  const prevRefresh =
+    typeof current === 'string'
+      ? current
+      : (current?.refreshToken ?? current?.refresh_token);
+
+  const ref = refreshed as Record<string, unknown>;
+  const nextRefresh = ref.refresh_token ?? ref.refreshToken;
+  if (!nextRefresh || (typeof nextRefresh === 'string' && !nextRefresh.trim())) {
+    if (prevRefresh) {
+      if ('refresh_token' in ref || !('refreshToken' in ref)) {
+        return {
+          ...refreshed,
+          refresh_token: prevRefresh,
+        };
+      } else {
+        return {
+          ...refreshed,
+          refreshToken: prevRefresh,
+        };
+      }
+    }
+  }
+  return refreshed;
+}
 
 export class Transport {
   private tokenProvider: TokenProvider;
   private baseUrl: string;
   private inFlight = new Map<string, Promise<unknown>>();
-
-  constructor(tokenProvider: TokenProvider, baseUrl = 'https://api.spotify.com/v1') {
+  // Endpoints recently refused with 403/404 as a platform restriction
+  // (pathname -> timestamp when the restriction entry expires).
+  private restrictedUntil = new Map<string, number>();
+  private restrictionStore?: RestrictionStore;
+  private currentRefreshToken?: string;
+  constructor(
+    tokenProvider: TokenProvider,
+    baseUrl = 'https://api.spotify.com/v1',
+    restrictionStore?: RestrictionStore,
+  ) {
     this.tokenProvider = tokenProvider;
     this.baseUrl = baseUrl;
+    this.restrictionStore = restrictionStore;
+  }
+
+  setRefreshToken(token: string | null | undefined): void {
+    if (typeof token === 'string' && token.trim().length > 0) {
+      this.currentRefreshToken = token;
+      this.tokenProvider.setRefreshToken?.(token);
+    }
+  }
+
+  getRefreshToken(): string | undefined {
+    return this.currentRefreshToken ?? this.tokenProvider.getRefreshToken?.();
+  }
+
+  handleTokenRefresh<T extends TokenPayload>(refreshed: T): T {
+    const prev = this.getRefreshToken();
+    const merged = mergeTokenRefresh(prev, refreshed);
+    const preserved = merged.refresh_token ?? merged.refreshToken;
+    if (typeof preserved === 'string' && preserved.trim().length > 0) {
+      this.setRefreshToken(preserved);
+    }
+    return merged;
+  }
+
+  private isRestricted(endpoint: string): boolean {
+    const now = Date.now();
+    const mem = this.restrictedUntil.get(endpoint);
+    if (mem !== undefined) {
+      if (now < mem) return true;
+      this.restrictedUntil.delete(endpoint);
+    }
+    try {
+      const stored = this.restrictionStore?.getRestriction(endpoint);
+      if (stored !== undefined && now < stored) {
+        this.restrictedUntil.set(endpoint, stored);
+        return true;
+      }
+    } catch {
+      // Store failures must never break requests.
+    }
+    return false;
+  }
+
+  private markRestricted(endpoint: string): void {
+    const until = Date.now() + RESTRICTION_TTL_MS;
+    this.restrictedUntil.set(endpoint, until);
+    try {
+      this.restrictionStore?.setRestriction(endpoint, until);
+    } catch {
+      // Store failures must never break requests.
+    }
   }
 
   async request(
@@ -49,7 +223,11 @@ export class Transport {
       if (signal?.aborted) {
         throw new DOMException('Aborted', 'AbortError');
       }
-      const token = await this.tokenProvider.getAccessToken();
+      const token = await this.tokenProvider.getAccessToken().catch((error: unknown) => {
+        const id = reportFailure('ipc', 'auth.getWebToken', error);
+        if (error instanceof Error) Object.assign(error, { diagnosticId: id });
+        throw error;
+      });
       const headers: Record<string, string> = {
         Authorization: `Bearer ${token}`,
         'User-Agent': 'spotoei/0.0.0',
@@ -76,7 +254,9 @@ export class Transport {
         const errBody = await res.text().catch(() => '');
         let detail = res.statusText;
         try {
-          const parsed = JSON.parse(errBody) as { error?: { message?: string; reason?: string } | string };
+          const parsed = JSON.parse(errBody) as {
+            error?: { message?: string; reason?: string } | string;
+          };
           if (typeof parsed?.error === 'object' && parsed.error?.message) {
             detail = parsed.error.message;
           } else if (typeof parsed?.error === 'object' && parsed.error?.reason) {
@@ -94,7 +274,12 @@ export class Transport {
 
         const isQuota = /quota/i.test(errBody) || /quota/i.test(detail);
         if (isQuota) {
-          throw new Error(`QUOTA_EXCEEDED: 429 Quota exceeded (${detail})`);
+          throw new ApiError(
+            'API_QUOTA_EXCEEDED',
+            `QUOTA_EXCEEDED: ${res.status} Quota exceeded (${detail})`,
+            res.status,
+            false,
+          );
         }
 
         if (res.status === 401 && retryCount === 0) {
@@ -102,31 +287,43 @@ export class Transport {
           return doFetch(retryCount + 1);
         }
         if (res.status === 401) {
-          throw new Error(`AUTH_EXPIRED: 401 Unauthorized (${detail})`);
+          throw new ApiError(
+            'AUTH_EXPIRED',
+            `AUTH_EXPIRED: 401 Unauthorized (${detail})`,
+            401,
+            false,
+          );
         }
 
         if (res.status === 429 && retryCount === 0) {
           const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10);
-          const baseWaitMs = Math.min(
-            10000,
-            Math.max(1, isNaN(retryAfterSec) ? 1 : retryAfterSec) * 1000,
-          );
-          const isBun = 'Bun' in globalThis;
-          const waitMs = isBun ? Math.min(50, baseWaitMs) : baseWaitMs;
-          await new Promise((r) => setTimeout(r, waitMs));
-          return doFetch(retryCount + 1);
+          const waitMs = Math.max(1, isNaN(retryAfterSec) ? 1 : retryAfterSec) * 1000;
+          // Long backoffs return to the UI without retrying too early.
+          if (waitMs <= 1000) {
+            diagnostic('api', 'retry', { endpoint: new URL(urlStr).pathname, status: 429, waitMs });
+            await new Promise((resolve) => setTimeout(resolve, waitMs));
+            return doFetch(retryCount + 1);
+          }
         }
         if (res.status === 429) {
           const retryAfter = res.headers.get('Retry-After');
-          throw new Error(
+          throw new ApiError(
+            'API_RATE_LIMITED',
             `RATE_LIMITED: 429 Too Many Requests (retry after ${retryAfter ?? 'unknown'}s)`,
+            429,
+            true,
           );
         }
 
         if (res.status === 403) {
-          throw new Error(`FORBIDDEN: 403 Forbidden (${detail})`);
+          throw new ApiError('FORBIDDEN', `FORBIDDEN: 403 Forbidden (${detail})`, 403, false);
         }
-        throw new Error(`HTTP_${res.status}: ${detail}`);
+        throw new ApiError(
+          'API_UNAVAILABLE',
+          `HTTP_${res.status}: ${detail}`,
+          res.status,
+          res.status >= 500,
+        );
       }
 
       if (res.status === 204) {
@@ -140,8 +337,38 @@ export class Transport {
     };
 
     const p = (async () => {
+      const started = Date.now();
+      const endpoint = new URL(urlStr).pathname;
+      // A remembered restriction short-circuits silently (no request line,
+      // no fetch, no error): it was already recorded with full details on
+      // the first refusal, and callers treat it like the real 403/404.
+      if (isDeprecatedEndpoint(endpoint) && this.isRestricted(endpoint)) {
+        throw new ApiError(
+          'API_UNAVAILABLE',
+          `FORBIDDEN: 403 endpoint restricted (${endpoint})`,
+          403,
+          false,
+        );
+      }
+      diagnostic('api', 'request', { method, endpoint });
       try {
-        return await doFetch();
+        const result = await doFetch();
+        diagnostic('api', 'response', { method, endpoint, durationMs: Date.now() - started });
+        return result;
+      } catch (error) {
+        if (
+          error instanceof ApiError &&
+          error.code !== 'API_QUOTA_EXCEEDED' &&
+          (error.status === 403 || error.status === 404) &&
+          isDeprecatedEndpoint(endpoint)
+        ) {
+          this.markRestricted(endpoint);
+          diagnostic('api', 'unavailable', { method, endpoint, status: error.status });
+          throw error;
+        }
+        const id = reportFailure('api', `${method} ${endpoint}`, error);
+        if (error instanceof Error) Object.assign(error, { diagnosticId: id });
+        throw error;
       } finally {
         if (isGet) {
           this.inFlight.delete(cacheKey);

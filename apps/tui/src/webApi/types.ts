@@ -2,14 +2,30 @@
 // `unknown` payload arrives at the boundary; these shapes let mappers narrow safely
 // without an `any` cast.
 
+import type { RestrictionStore } from './transport';
+
+export type { RestrictionStore };
+
+export interface TokenPayload {
+  access_token?: string;
+  accessToken?: string;
+  refresh_token?: string | null;
+  refreshToken?: string | null;
+  expires_in?: number;
+  expiresAt?: number;
+  [key: string]: unknown;
+}
+
 export interface TokenProvider {
   getAccessToken(): Promise<string>;
   invalidateToken?(): void;
+  getRefreshToken?(): string | undefined;
+  setRefreshToken?(token?: string | null): void;
 }
-
 export interface WebApiClientOptions {
   tokenProvider: TokenProvider;
   baseUrl?: string;
+  restrictionStore?: RestrictionStore;
 }
 
 export interface RawArtistRef {
@@ -88,6 +104,8 @@ export interface RawSearchResponse {
   albums?: RawPage;
   artists?: RawPage;
   playlists?: RawPage;
+  shows?: RawPage;
+  episodes?: RawPage;
 }
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';

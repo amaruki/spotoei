@@ -6,14 +6,73 @@ import {
   CatalogAlbum as AlbumSchema,
   CatalogArtist as ArtistSchema,
   CatalogPlaylist as PlaylistSchema,
+  CatalogShow as ShowSchema,
+  CatalogEpisode as EpisodeSchema,
   CatalogTrack as TrackSchema,
   type CatalogAlbumT,
   type CatalogArtistT,
   type CatalogPlaylistT,
+  type CatalogShowT,
+  type CatalogEpisodeT,
   type CatalogTrackT,
 } from 'spotoei-protocol';
 import { toAlbumRef, toArtistList, toFirstImage } from './shape';
 import type { RawAlbum, RawArtist, RawPlaylist, RawTrack } from './types';
+
+export type CategoryT = {
+  id: string;
+  name: string;
+  imageUrl?: string;
+  icons?: Array<{ url: string; width?: number; height?: number }>;
+};
+
+export function mapCategory(raw: unknown): CategoryT | null {
+  if (raw === null || typeof raw !== 'object') return null;
+  const c = raw as { id?: unknown; name?: unknown; icons?: unknown };
+  if (typeof c.id !== 'string' || typeof c.name !== 'string') return null;
+  const icons = Array.isArray(c.icons)
+    ? (c.icons.filter((x) => x && typeof (x as { url?: unknown }).url === 'string') as Array<{ url: string; width?: number; height?: number }>)
+    : undefined;
+  const imageUrl = icons?.[0]?.url;
+  return { id: c.id, name: c.name, imageUrl, icons };
+}
+
+export function mapShow(raw: unknown): CatalogShowT | null {
+  if (raw === null || typeof raw !== 'object') return null;
+  const s = raw as { id?: unknown; name?: unknown; description?: unknown; publisher?: unknown; images?: unknown; total_episodes?: unknown; uri?: unknown };
+  if (typeof s.id !== 'string' || typeof s.name !== 'string') return null;
+  const firstImg = toFirstImage(s.images as unknown[]);
+  const candidate = {
+    id: s.id,
+    uri: typeof s.uri === 'string' ? s.uri : `spotify:show:${s.id}`,
+    name: s.name,
+    description: typeof s.description === 'string' ? s.description : undefined,
+    publisher: typeof s.publisher === 'string' ? s.publisher : undefined,
+    image: firstImg,
+    totalEpisodes: typeof s.total_episodes === 'number' ? s.total_episodes : undefined,
+  };
+  const parsed = ShowSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : null;
+}
+
+export function mapEpisode(raw: unknown): CatalogEpisodeT | null {
+  if (raw === null || typeof raw !== 'object') return null;
+  const e = raw as { id?: unknown; name?: unknown; description?: unknown; images?: unknown; duration_ms?: unknown; release_date?: unknown; explicit?: unknown; uri?: unknown };
+  if (typeof e.id !== 'string' || typeof e.name !== 'string') return null;
+  const firstImg = toFirstImage(e.images as unknown[]);
+  const candidate = {
+    id: e.id,
+    uri: typeof e.uri === 'string' ? e.uri : `spotify:episode:${e.id}`,
+    name: e.name,
+    description: typeof e.description === 'string' ? e.description : undefined,
+    image: firstImg,
+    durationMs: typeof e.duration_ms === 'number' ? e.duration_ms : 0,
+    releaseDate: typeof e.release_date === 'string' ? e.release_date : undefined,
+    isExplicit: typeof e.explicit === 'boolean' ? e.explicit : undefined,
+  };
+  const parsed = EpisodeSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : null;
+}
 
 export function mapTrack(raw: unknown): CatalogTrackT | null {
   if (raw === null || typeof raw !== 'object') return null;
