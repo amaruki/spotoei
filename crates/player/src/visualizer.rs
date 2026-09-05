@@ -127,8 +127,8 @@ impl Analyzer {
         let bin_count = self.fft_out.len();
         let freq_per_bin = 44100.0 / (fft_size as f32);
 
-        let min_freq = 30.0f32;
-        let max_freq = 16000.0f32;
+        let min_freq = 20.0f32;
+        let max_freq = 20000.0f32;
 
         let mut raw_bands = vec![0.0f32; self.bands];
 
@@ -138,7 +138,7 @@ impl Analyzer {
             let f_low = min_freq * (max_freq / min_freq).powf(t0);
             let f_high = min_freq * (max_freq / min_freq).powf(t1);
 
-            let k_low = ((f_low / freq_per_bin).floor() as usize).min(bin_count - 1);
+            let k_low = ((f_low / freq_per_bin).floor() as usize).clamp(1, bin_count - 1);
             let mut k_high = ((f_high / freq_per_bin).ceil() as usize).min(bin_count);
             if k_high <= k_low {
                 k_high = (k_low + 1).min(bin_count);
@@ -218,6 +218,95 @@ impl Analyzer {
     }
 }
 
+/// Synthetic sample generator used when no live audio device is active
+/// or during mock playback mode.
+#[derive(Debug, Clone)]
+pub struct MockSampleGenerator {
+    phase: f32,
+    sample_rate: f32,
+}
+
+impl Default for MockSampleGenerator {
+    fn default() -> Self {
+        Self::new(44100.0)
+    }
+}
+
+impl MockSampleGenerator {
+    pub fn new(sample_rate: f32) -> Self {
+        Self {
+            phase: 0.0,
+            sample_rate,
+        }
+    }
+
+    pub fn phase(&self) -> f32 {
+        self.phase
+    }
+
+    pub fn sample_rate(&self) -> f32 {
+        self.sample_rate
+    }
+
+    pub fn reset(&mut self) {
+        self.phase = 0.0;
+    }
+
+    /// Generate `count` synthetic audio samples across multiple frequency bands.
+    pub fn generate(&mut self, count: usize) -> Vec<f32> {
+        let mut buffer = vec![0.0f32; count];
+        self.generate_into(&mut buffer);
+        buffer
+    }
+
+    /// Fill `buffer` with synthetic audio samples across bass, mid, and treble tones.
+    pub fn generate_into(&mut self, buffer: &mut [f32]) {
+        let dt = 1.0 / self.sample_rate;
+        for sample in buffer.iter_mut() {
+            let t = self.phase;
+            let bass = 0.40 * (2.0 * PI * 65.0 * t).sin();
+            let kick = 0.30 * (2.0 * PI * 130.0 * t).sin();
+            let mid1 = 0.25 * (2.0 * PI * 440.0 * t).sin();
+            let mid2 = 0.20 * (2.0 * PI * 880.0 * t).sin();
+            let treble = 0.15 * (2.0 * PI * 3520.0 * t).sin();
+            *sample = (bass + kick + mid1 + mid2 + treble).clamp(-1.0, 1.0);
+            self.phase += dt;
+        }
+        if self.phase > 1000.0 {
+            self.phase %= 1000.0;
+        }
+    }
+}
+
+/// Helper function to generate mock audio samples into a vector.
+pub fn generate_mock_samples(phase: &mut f32, sample_rate: f32, count: usize) -> Vec<f32> {
+    let mut gen = MockSampleGenerator {
+        phase: *phase,
+        sample_rate,
+    };
+    let out = gen.generate(count);
+    *phase = gen.phase;
+    out
+}
+
+/// Create a serialized protocol event string for visualizer spectrum data.
+pub fn format_spectrum_event(seq: u64, bands: &[f32]) -> String {
+    crate::protocol::event(
+        "visualizer.spectrum",
+        seq,
+        serde_json::json!({ "bands": bands }),
+    )
+}
+
+/// Create a serialized protocol event string for visualizer waveform data.
+pub fn format_waveform_event(seq: u64, samples: &[f32]) -> String {
+    crate::protocol::event(
+        "visualizer.waveform",
+        seq,
+        serde_json::json!({ "samples": samples }),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -266,5 +355,74 @@ mod tests {
         assert_eq!(waveform.len(), 4);
         assert_eq!(waveform[0], 0.0);
         assert_eq!(waveform[2], 0.0);
+    }
+
+    #[test]
+    fn test_64_bands_spectrum_calculation() {
+        let mut analyzer = Analyzer::new(64);
+        let sample_rate = 44100.0f32;
+        let freq = 440.0f32; // A4 (440 Hz)
+        let n = 1024;
+
+        let samples: Vec<f32> = (0..n)
+            .map(|i| (2.0 * PI * freq * (i as f32) / sample_rate).sin())
+            .collect();
+
+        let bands = analyzer.compute_spectrum(&samples, VisualizerMode::Spectrum);
+        assert_eq!(bands.len(), 64);
+        for &b in &bands {
+            assert!(b >= 0.0 && b <= 1.0, "band value out of range: {b}");
+        }
+
+        // In 20Hz-20kHz 64-band log scale:
+        // log10(440/20) / log10(20000/20) * 64 = log10(22) / 3 * 64 = 1.3424 / 3 * 64 = 28.6
+        // Peak should be around band index 26..32
+        let max_idx = bands
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .map(|(idx, _)| idx)
+            .unwrap();
+        assert!(
+            max_idx >= 25 && max_idx <= 32,
+            "Max band index for 440Hz was {max_idx}"
+        );
+    }
+
+    #[test]
+    fn test_mock_sample_generator() {
+        let mut gen = MockSampleGenerator::new(44100.0);
+        let samples = gen.generate(1024);
+        assert_eq!(samples.len(), 1024);
+        for &s in &samples {
+            assert!(s >= -1.0 && s <= 1.0, "sample out of range: {s}");
+        }
+        assert!(gen.phase() > 0.0);
+
+        let mut analyzer = Analyzer::new(64);
+        let bands = analyzer.compute_spectrum(&samples, VisualizerMode::Spectrum);
+        assert_eq!(bands.len(), 64);
+        // Mock generator has bass, kick, mids, and treble, so some bands should be active
+        let total_energy: f32 = bands.iter().sum();
+        assert!(total_energy > 0.1, "mock samples must produce spectrum energy");
+    }
+
+    #[test]
+    fn test_format_protocol_events() {
+        let bands = vec![0.1, 0.5, 0.75];
+        let spec_line = format_spectrum_event(42, &bands);
+        let spec_val: serde_json::Value =
+            serde_json::from_str(&spec_line).expect("valid json for spectrum event");
+        assert_eq!(spec_val["event"], "visualizer.spectrum");
+        assert_eq!(spec_val["seq"], 42);
+        assert_eq!(spec_val["data"]["bands"].as_array().unwrap().len(), 3);
+
+        let wave = vec![0.0, -0.5, 0.5];
+        let wave_line = format_waveform_event(43, &wave);
+        let wave_val: serde_json::Value =
+            serde_json::from_str(&wave_line).expect("valid json for waveform event");
+        assert_eq!(wave_val["event"], "visualizer.waveform");
+        assert_eq!(wave_val["seq"], 43);
+        assert_eq!(wave_val["data"]["samples"].as_array().unwrap().len(), 3);
     }
 }

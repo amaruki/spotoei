@@ -5,8 +5,11 @@ use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use crate::playback::Playback;
-use crate::protocol::{event, next_event_seq};
-use crate::visualizer::{Analyzer, VisualizerConfig, VisualizerMode};
+use crate::protocol::next_event_seq;
+use crate::visualizer::{
+    format_spectrum_event, format_waveform_event, Analyzer, MockSampleGenerator, VisualizerConfig,
+    VisualizerMode,
+};
 
 pub fn spawn_visualizer_task(
     playback: Playback,
@@ -17,9 +20,7 @@ pub fn spawn_visualizer_task(
     tokio::spawn(async move {
         let mut analyzer = Analyzer::new(64);
         let mut ring_buffer = vec![0.0f32; 1024];
-        let mut mock_phase: f32 = 0.0;
-        let sample_rate = 44100.0_f32;
-        let mut last_tick = std::time::Instant::now();
+        let mut mock_gen = MockSampleGenerator::new(44100.0);
         loop {
             let fps = viz_cfg.read().await.fps.max(1);
             let interval_ms = (1000_u64 / fps as u64).max(1);
@@ -41,13 +42,12 @@ pub fn spawn_visualizer_task(
                 let seq = next_event_seq();
                 let line = match mode {
                     VisualizerMode::Oscilloscope => {
-                        let payload = serde_json::json!({ "samples": vec![0.0; waveform_samples] });
-                        event("visualizer.waveform", seq, payload)
+                        let samples = vec![0.0; waveform_samples];
+                        format_waveform_event(seq, &samples)
                     }
                     _ => {
                         let bands = analyzer.compute_spectrum(&empty_samples, mode);
-                        let payload = serde_json::json!({ "bands": bands });
-                        event("visualizer.spectrum", seq, payload)
+                        format_spectrum_event(seq, &bands)
                     }
                 };
                 let _ = viz_stdout_tx.try_send(line);
@@ -68,31 +68,18 @@ pub fn spawn_visualizer_task(
             }
 
             if !got_real_pcm {
-                let elapsed = last_tick.elapsed().as_secs_f32();
-                for i in 0..1024 {
-                    let t = mock_phase + (i as f32) / sample_rate;
-                    let bass = 0.40 * (2.0 * std::f32::consts::PI * 65.0 * t).sin();
-                    let kick = 0.30 * (2.0 * std::f32::consts::PI * 130.0 * t).sin();
-                    let mid1 = 0.25 * (2.0 * std::f32::consts::PI * 440.0 * t).sin();
-                    let mid2 = 0.20 * (2.0 * std::f32::consts::PI * 880.0 * t).sin();
-                    let treble = 0.15 * (2.0 * std::f32::consts::PI * 3520.0 * t).sin();
-                    ring_buffer[i] = (bass + kick + mid1 + mid2 + treble).clamp(-1.0, 1.0);
-                }
-                mock_phase = (mock_phase + elapsed) % 1000.0;
+                mock_gen.generate_into(&mut ring_buffer);
             }
-            last_tick = std::time::Instant::now();
 
             let seq = next_event_seq();
             let line = match mode {
                 VisualizerMode::Oscilloscope => {
                     let downsampled = Analyzer::compute_waveform(&ring_buffer, waveform_samples);
-                    let payload = serde_json::json!({ "samples": downsampled });
-                    event("visualizer.waveform", seq, payload)
+                    format_waveform_event(seq, &downsampled)
                 }
                 _ => {
                     let bands = analyzer.compute_spectrum(&ring_buffer, mode);
-                    let payload = serde_json::json!({ "bands": bands });
-                    event("visualizer.spectrum", seq, payload)
+                    format_spectrum_event(seq, &bands)
                 }
             };
             let _ = viz_stdout_tx.try_send(line);
