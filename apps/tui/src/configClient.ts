@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AppConfig } from './config';
-import { getConfigDir, getConfigPath, KEYMASTER_CLIENT_ID, readValidConfig } from './config';
+import { getConfigDir, getConfigPath, DEFAULT_CLIENT_ID, readValidConfig } from './config';
 
 function parseEnvFile(content: string): Record<string, string> {
   const env: Record<string, string> = {};
@@ -28,7 +28,7 @@ export interface ClientIdResolution {
   configPath: string;
 }
 
-export function resolveClientId(allowDefault = false): ClientIdResolution {
+export function resolveClientId(allowDefault = true): ClientIdResolution {
   const configPath = getConfigPath();
 
   // 1. Explicit environment variable
@@ -73,7 +73,7 @@ export function resolveClientId(allowDefault = false): ClientIdResolution {
   }
 
   if (allowDefault) {
-    return { clientId: KEYMASTER_CLIENT_ID, source: 'default', configPath };
+    return { clientId: DEFAULT_CLIENT_ID, source: 'default', configPath };
   }
 
   return { source: 'none', configPath };

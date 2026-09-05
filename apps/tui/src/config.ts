@@ -1,6 +1,6 @@
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { BrowseConfigT } from 'spotoei-protocol';
 import { DEFAULT_BROWSE_CONFIG } from './browse';
 import { isValidBrowse } from './browseConfigValidator';
@@ -21,8 +21,12 @@ export interface AppConfig {
 export const DEFAULT_BROWSE: BrowseConfigT = DEFAULT_BROWSE_CONFIG;
 
 export const KEYMASTER_CLIENT_ID = '65b708073fc0480ea92a077233ca87bd';
+export const NCSPOT_CLIENT_ID = 'd420a117a32841c2b3474932e49fb54b';
+export const DEFAULT_CLIENT_ID = NCSPOT_CLIENT_ID;
 export const KEYMASTER_REDIRECT_PORT = 8898;
 export const DEFAULT_REDIRECT_PORT = 8989;
+
+
 
 export function resolveRedirectPort(): number {
   if (process.env.SPOTOEI_REDIRECT_PORT) {
@@ -49,14 +53,13 @@ export function resolveRedirectPort(): number {
   if (cRes.clientId === KEYMASTER_CLIENT_ID) {
     return KEYMASTER_REDIRECT_PORT;
   }
-
   return DEFAULT_REDIRECT_PORT;
 }
 
 export function getRedirectUri(port?: number): string {
   const p = port ?? resolveRedirectPort();
   const cRes = resolveClientId();
-  if (cRes.clientId === KEYMASTER_CLIENT_ID && p === KEYMASTER_REDIRECT_PORT) {
+  if ((cRes.clientId === NCSPOT_CLIENT_ID || cRes.clientId === KEYMASTER_CLIENT_ID) && (p === 8989 || p === KEYMASTER_REDIRECT_PORT)) {
     return `http://127.0.0.1:${p}/login`;
   }
   return `http://127.0.0.1:${p}/callback`;
@@ -157,6 +160,7 @@ export type { ClientIdResolution } from './configClient';
 export function logToFile(message: string): void {
   try {
     const logPath = getLogPath();
+    mkdirSync(dirname(logPath), { recursive: true });
     const timestamp = new Date().toISOString();
     appendFileSync(logPath, `[${timestamp}] ${message}\n`, 'utf8');
   } catch {

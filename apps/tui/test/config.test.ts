@@ -11,6 +11,9 @@ import {
   getRedirectUri,
   saveRedirectPort,
   DEFAULT_REDIRECT_PORT,
+  DEFAULT_CLIENT_ID,
+  KEYMASTER_CLIENT_ID,
+  KEYMASTER_REDIRECT_PORT,
 } from '../src/config';
 
 describe('configuration and client ID resolution', () => {
@@ -61,11 +64,18 @@ describe('configuration and client ID resolution', () => {
     expect(res.clientId).toBe('test-client-id-from-env');
   });
 
-  it('returns none when environment variable and config files are absent', () => {
+  it('returns none when environment variable and config files are absent and allowDefault is false', () => {
     delete process.env.SPOTOEI_CLIENT_ID;
-    const res = resolveClientId();
+    const res = resolveClientId(false);
     expect(res.source).toBe('none');
     expect(res.clientId).toBeUndefined();
+  });
+
+  it('returns default client ID when environment variable and config files are absent', () => {
+    delete process.env.SPOTOEI_CLIENT_ID;
+    const res = resolveClientId();
+    expect(res.source).toBe('default');
+    expect(res.clientId).toBe(DEFAULT_CLIENT_ID);
   });
 
   it('saves client ID to config.json and resolves it', () => {
@@ -85,11 +95,12 @@ describe('configuration and client ID resolution', () => {
     expect(resolved.clientId).toBe(validId);
   });
 
-  it('resolves default redirect port 8989 and constructs redirect URI', () => {
+  it('resolves default redirect port 8989 and login redirect URI', () => {
     delete process.env.SPOTOEI_REDIRECT_PORT;
+    delete process.env.SPOTOEI_CLIENT_ID;
     expect(resolveRedirectPort()).toBe(DEFAULT_REDIRECT_PORT);
     expect(DEFAULT_REDIRECT_PORT).toBe(8989);
-    expect(getRedirectUri()).toBe('http://127.0.0.1:8989/callback');
+    expect(getRedirectUri()).toBe('http://127.0.0.1:8989/login');
   });
 
   it('resolves redirect port from environment variable', () => {
