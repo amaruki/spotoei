@@ -217,6 +217,34 @@ impl Playback {
         self.emit_changed(&snap).await;
         Ok(snap)
     }
+
+    pub async fn seek_relative(&self, offset_ms: i64) -> Result<PlaybackChangedPayload, PlaybackError> {
+        let snap = {
+            let mut inner = self.inner.lock().await;
+            if inner.track.is_none() {
+                return Err(PlaybackError);
+            }
+            super::settings_cmd::advance_position_if_playing(&mut inner);
+            let target = if offset_ms >= 0 {
+                inner.position_ms.saturating_add(offset_ms as u64)
+            } else {
+                inner.position_ms.saturating_sub(offset_ms.unsigned_abs())
+            };
+            let clamped = target.min(inner.duration_ms);
+            inner.revision = inner.revision.wrapping_add(1);
+            inner.position_ms = clamped;
+            inner.last_change_at = Instant::now();
+            inner.last_emitted_position_ms = clamped;
+            self.snapshot_locked(&inner)
+        };
+        let target_pos = {
+            let inner = self.inner.lock().await;
+            inner.position_ms
+        };
+        self.engine.seek(target_pos as u32);
+        self.emit_changed(&snap).await;
+        Ok(snap)
+    }
 }
 
 fn apply_track_overrides(track: &mut Track, req: &LoadRequest<'_>) {

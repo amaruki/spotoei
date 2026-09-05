@@ -24,8 +24,13 @@ impl Playback {
             new_pos
         };
         inner.position_ms = clamped_pos;
-        let reached_end =
-            inner.duration_ms > 0 && new_pos >= inner.duration_ms.saturating_add(100);
+        // NOTE: `position_ms` is clamped at `duration_ms`, so once the end
+        // is reached the stored position stops growing and `new_pos` never
+        // passes `duration_ms + 100`. Detect the end from the clamped
+        // position as well, otherwise track end is never observed.
+        let reached_end = inner.duration_ms > 0
+            && (new_pos >= inner.duration_ms.saturating_add(100)
+                || inner.position_ms >= inner.duration_ms);
         if reached_end {
             // Honor repeat modes and autoplay rules when track finishes.
             match inner.repeat {
