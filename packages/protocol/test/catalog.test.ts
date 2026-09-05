@@ -13,12 +13,12 @@ import {
 } from '../src/catalog';
 
 describe('catalog domain schemas', () => {
-  test('EntityType enum covers track/album/artist/playlist', () => {
-    const types = ['track', 'album', 'artist', 'playlist'] as const;
+  test('EntityType enum covers track/album/artist/playlist/show/episode', () => {
+    const types = ['track', 'album', 'artist', 'playlist', 'show', 'episode'] as const;
     for (const t of types) {
       expect(EntityType.parse(t)).toBe(t);
     }
-    expect(() => EntityType.parse('episode')).toThrow();
+    expect(() => EntityType.parse('podcast')).toThrow();
   });
 
   test('TrackArtist requires id/name/uri', () => {

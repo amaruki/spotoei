@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 // Spotify's "type" field on URI namespacing. Used as a discriminator so a
 // search result for "track" vs "album" stays unambiguous downstream.
-export const EntityType = z.enum(['track', 'album', 'artist', 'playlist']);
+export const EntityType = z.enum(['track', 'album', 'artist', 'playlist', 'show', 'episode']);
 export type EntityTypeT = z.infer<typeof EntityType>;
 
 // A small image reference. We only carry URL + dimensions; full image
@@ -90,6 +90,28 @@ export const CatalogPlaylist = z.object({
   isCollaborative: z.boolean().optional(),
 });
 export type CatalogPlaylistT = z.infer<typeof CatalogPlaylist>;
+export const CatalogShow = z.object({
+  id: z.string(),
+  uri: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  publisher: z.string().optional(),
+  image: ImageRef.optional(),
+  totalEpisodes: z.number().int().nonnegative().optional(),
+});
+export type CatalogShowT = z.infer<typeof CatalogShow>;
+
+export const CatalogEpisode = z.object({
+  id: z.string(),
+  uri: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  image: ImageRef.optional(),
+  durationMs: z.number().int().nonnegative(),
+  releaseDate: z.string().optional(),
+  isExplicit: z.boolean().optional(),
+});
+export type CatalogEpisodeT = z.infer<typeof CatalogEpisode>;
 
 // A single hit in a search result. Discriminated by `type` so the matching
 // entity field is enforced and unrelated entity fields are rejected.
@@ -114,15 +136,35 @@ export const SearchHit = z.discriminatedUnion('type', [
     score: z.number().optional(),
     playlist: CatalogPlaylist,
   }),
+  z.object({
+    type: z.literal('show'),
+    score: z.number().optional(),
+    show: CatalogShow,
+  }),
+  z.object({
+    type: z.literal('episode'),
+    score: z.number().optional(),
+    episode: CatalogEpisode,
+  }),
 ]);
 export type SearchHitT = z.infer<typeof SearchHit>;
 
 // The full search response. The TUI is responsible for rendering only the
 // `hits` and showing a compact "no results" / "error" affordance when the
 // adapter returns `error`.
+export const SearchPaging = <T extends z.ZodTypeAny>(itemSchema: T) =>
+  z.object({
+    items: z.array(itemSchema),
+    total: z.number().int().nonnegative().optional(),
+    limit: z.number().int().nonnegative().optional(),
+    offset: z.number().int().nonnegative().optional(),
+  });
+
 export const SearchResponse = z.object({
   query: z.string(),
   hits: z.array(SearchHit),
+  shows: SearchPaging(CatalogShow).optional(),
+  episodes: SearchPaging(CatalogEpisode).optional(),
   error: z
     .object({
       code: z.string(),
@@ -162,6 +204,13 @@ export const EntityViewResponse = z.discriminatedUnion('type', [
     completeness: z.enum(['complete', 'partial', 'unavailable']),
     reason: z.string().optional(),
   }),
+  z.object({
+    type: z.literal('show'),
+    show: CatalogShow,
+    episodes: z.array(CatalogEpisode).optional(),
+    completeness: z.enum(['complete', 'partial', 'unavailable']),
+    reason: z.string().optional(),
+  }),
 ]);
 
 // Library collections supported by the local library view.
@@ -170,16 +219,19 @@ export const LibraryCollection = z.enum([
   'saved_albums',
   'followed_artists',
   'playlists',
+  'saved_shows',
 ]);
 export type LibraryCollectionT = z.infer<typeof LibraryCollection>;
 
 export const LibraryPageResponse = z.object({
   collection: LibraryCollection,
-  items: z.array(z.union([CatalogTrack, CatalogAlbum, CatalogArtist, CatalogPlaylist])),
+  items: z.array(z.union([CatalogTrack, CatalogAlbum, CatalogArtist, CatalogPlaylist, CatalogShow, CatalogEpisode])),
   total: z.number().int().nonnegative(),
   offset: z.number().int().nonnegative(),
   limit: z.number().int().positive(),
   hasMore: z.boolean(),
+  nextOffset: z.number().int().nonnegative().optional(),
+  nextCursor: z.string().optional(),
   error: z
     .object({
       code: z.string(),
