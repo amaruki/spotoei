@@ -49,6 +49,7 @@ export type AuthLogoutDataT = z.infer<typeof AuthLogoutData>;
 export const AuthTokenData = z.object({
   accessToken: z.string().min(1),
   expiresAt: z.number().int().nonnegative(),
+  refreshToken: z.string().optional(),
 });
 export type AuthTokenDataT = z.infer<typeof AuthTokenData>;
 

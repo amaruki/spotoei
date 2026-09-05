@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CatalogArtist, CatalogTrack } from './catalog';
 
 export const HomeTab = z.enum(['for_you', 'recently_played']);
 export type HomeTabT = z.infer<typeof HomeTab>;
@@ -19,14 +20,14 @@ export const TimeRange = z.enum(['short_term', 'medium_term', 'long_term']);
 export type TimeRangeT = z.infer<typeof TimeRange>;
 
 export const HomeForYouData = z.object({
-  topTracks: z.array(z.unknown()),
-  topArtists: z.array(z.unknown()),
+  topTracks: z.array(CatalogTrack),
+  topArtists: z.array(CatalogArtist),
   range: TimeRange,
 });
 export type HomeForYouDataT = z.infer<typeof HomeForYouData>;
 
 export const RecentlyPlayedItem = z.object({
-  track: z.unknown(),
+  track: CatalogTrack,
   playedAt: z.string(),
 });
 export type RecentlyPlayedItemT = z.infer<typeof RecentlyPlayedItem>;

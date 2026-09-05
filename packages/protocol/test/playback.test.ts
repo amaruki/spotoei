@@ -14,12 +14,16 @@ import {
   makePlaybackPlay,
   makePlaybackPrevious,
   makePlaybackSeek,
+  makePlaybackSeekRelative,
   makePlaybackSetAutoplay,
   makePlaybackSetRepeat,
   makePlaybackSetShuffle,
   makePlaybackSetVolume,
   makePlaybackStatus,
+  makePlaybackToggleMute,
   makePlaybackToggle,
+  makePlaybackGetAudioConfig,
+  makePlaybackSetAudioConfig,
 } from '../src';
 
 describe('Protocol Playback Schemas', () => {
@@ -145,6 +149,16 @@ describe('Protocol Playback Schemas', () => {
       command: 'playback.set_autoplay',
       data: { autoplay: false },
     });
+    expect(makePlaybackSeekRelative(id, 15000)).toMatchObject({
+      command: 'playback.seek_relative',
+      data: { offsetMs: 15000 },
+      id,
+    });
+    expect(makePlaybackToggleMute(id)).toMatchObject({
+      command: 'playback.toggle_mute',
+      data: {},
+      id,
+    });
     expect(
       makePlaybackLoad(id, {
         trackUri: 'spotify:track:xyz',
@@ -169,6 +183,23 @@ describe('Protocol Playback Schemas', () => {
     });
     expect(makePlaybackStatus(id)).toMatchObject({
       command: 'player.status',
+      id,
+    });
+    expect(makePlaybackGetAudioConfig(id)).toMatchObject({
+      command: 'playback.get_audio_config',
+      id,
+    });
+    expect(
+      makePlaybackSetAudioConfig(id, {
+        bitrate: '320',
+        normalisation: true,
+      }),
+    ).toMatchObject({
+      command: 'playback.set_audio_config',
+      data: {
+        bitrate: '320',
+        normalisation: true,
+      },
       id,
     });
   });

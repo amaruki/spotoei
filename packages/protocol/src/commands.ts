@@ -47,10 +47,18 @@ export function makePlaybackSeek(id: string, positionMs: number): CommandT {
   return makeCommand(id, 'playback.seek', { positionMs });
 }
 
+export function makePlaybackSeekRelative(id: string, offsetMs: number): CommandT {
+  return makeCommand(id, 'playback.seek_relative', { offsetMs });
+}
+
 export function makePlaybackSetVolume(id: string, volume: number): CommandT {
   return makeCommand(id, 'playback.set_volume', { volume });
 }
 
+
+export function makePlaybackToggleMute(id: string): CommandT {
+  return makeCommand(id, 'playback.toggle_mute', {});
+}
 export function makePlaybackSetShuffle(id: string, shuffle: boolean): CommandT {
   return makeCommand(id, 'playback.set_shuffle', { shuffle });
 }
@@ -90,6 +98,27 @@ export function makePlaybackLoad(
 
 export function makePlaybackStatus(id: string): CommandT {
   return makeCommand(id, 'player.status', {});
+}
+
+export interface AudioConfigOptions {
+  deviceMode?: string;
+  audioBackend?: string;
+  bitrate?: string | number;
+  crossfadeDurationMs?: number;
+  normalisation?: boolean;
+  normalisationType?: string;
+  pregain?: number;
+}
+
+export function makePlaybackGetAudioConfig(id: string): CommandT {
+  return makeCommand(id, 'playback.get_audio_config', {});
+}
+
+export function makePlaybackSetAudioConfig(
+  id: string,
+  config: AudioConfigOptions = {},
+): CommandT {
+  return makeCommand(id, 'playback.set_audio_config', config as Record<string, unknown>);
 }
 
 // Lyrics command factories
