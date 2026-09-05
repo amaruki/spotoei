@@ -17,7 +17,7 @@ mod types;
 
 pub use constants::{
     html_error, html_escape, DEFAULT_SCOPES, HTML_SUCCESS, KEYMASTER_CLIENT_ID, KEYMASTER_PATH,
-    KEYMASTER_PORT, KEYRING_SERVICE, REDIRECT_PATH, SPOTIFY_ACCOUNTS,
+    KEYMASTER_PORT, KEYRING_SERVICE, NCSPOT_CLIENT_ID, REDIRECT_PATH, SPOTIFY_ACCOUNTS,
 };
 pub use manager::AuthManager;
 pub use types::{AuthError, AuthState, AuthStatus, Storage};

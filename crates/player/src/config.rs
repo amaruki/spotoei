@@ -37,13 +37,5 @@ pub fn resolve_client_id() -> String {
     if !from_config.is_empty() {
         return from_config;
     }
-    // No shared default. BYO Client ID is required. The former
-    // KEYMASTER fallback is only available in debug builds when
-    // explicitly opted in via SPOTOEI_ALLOW_KEYMASTER=1.
-    if cfg!(debug_assertions) {
-        if std::env::var("SPOTOEI_ALLOW_KEYMASTER").as_deref() == Ok("1") {
-            return auth::KEYMASTER_CLIENT_ID.to_string();
-        }
-    }
-    String::new()
+    auth::NCSPOT_CLIENT_ID.to_string()
 }

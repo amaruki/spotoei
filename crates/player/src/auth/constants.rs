@@ -8,6 +8,7 @@ pub const KEYRING_SERVICE: &str = "spotoei";
 pub const SPOTIFY_ACCOUNTS: &str = "https://accounts.spotify.com";
 pub const REDIRECT_PATH: &str = "/callback";
 pub const KEYMASTER_CLIENT_ID: &str = "65b708073fc0480ea92a077233ca87bd";
+pub const NCSPOT_CLIENT_ID: &str = "d420a117a32841c2b3474932e49fb54b";
 pub const KEYMASTER_PORT: u16 = 8898;
 pub const KEYMASTER_PATH: &str = "/login";
 
@@ -17,8 +18,19 @@ pub const DEFAULT_SCOPES: &[&str] = &[
     "user-read-playback-state",
     "user-modify-playback-state",
     "user-read-currently-playing",
+    "user-top-read",
+    "user-read-recently-played",
     "streaming",
 ];
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn default_scopes_cover_home_endpoints() {
+        assert!(super::DEFAULT_SCOPES.contains(&"user-top-read"));
+        assert!(super::DEFAULT_SCOPES.contains(&"user-read-recently-played"));
+    }
+}
 
 pub const HTML_SUCCESS: &str = r#"<!DOCTYPE html>
 <html lang="en">
