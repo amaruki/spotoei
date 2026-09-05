@@ -1,8 +1,7 @@
+#![allow(clippy::large_futures)]
 //! `spotoei` is a Spotify Connect player exposed as a TTY-friendly CLI. It
 //! speaks a newline-delimited JSON protocol on stdin/stdout and serves a
 //! `doctor` subcommand for environment diagnostics.
-//!
-//! Anything non-protocol on stdout is a protocol violation; logs go to stderr.
 
 use std::process::ExitCode;
 
@@ -32,6 +31,14 @@ async fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
     if args.len() >= 2 && args[1] == "doctor" {
         return doctor::run_doctor(&args[2..]).await;
+    }
+    if args.len() >= 2 && args[1] == "logout" {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(8);
+        let auth = auth::AuthManager::new(config::resolve_client_id(), tx);
+        let _ = auth.hydrate().await;
+        let _ = auth.logout().await;
+        println!("Logged out successfully. Keyring and session cleared.");
+        return ExitCode::SUCCESS;
     }
 
     protocol_loop::run().await

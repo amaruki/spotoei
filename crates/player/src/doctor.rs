@@ -22,7 +22,13 @@ pub async fn run_doctor(args: &[String]) -> ExitCode {
         let _ = auth.hydrate().await;
         let engine = playback::LibrespotEngine::new(auth);
         match engine.ensure_player().await {
-            Ok(_) => println!("[ok] audio engine and librespot connection successful"),
+            Ok(_) => {
+                if let Some(err) = engine.last_audio_error().await {
+                    println!("[warn] audio hardware unavailable ({err}); safe fallback to connect_only mode active");
+                } else {
+                    println!("[ok] audio engine and librespot connection successful");
+                }
+            }
             Err(e) => {
                 println!("[err] audio engine failure: {e}");
                 problems += 1;
