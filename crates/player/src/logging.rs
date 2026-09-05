@@ -25,6 +25,16 @@ pub fn get_log_file_path() -> std::path::PathBuf {
 pub fn init_tracing() {
     use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    // The TUI collects stderr into the shared diagnostic file.
+    if std::env::var("SPOTOEI_LOG_STDERR_ONLY").as_deref() == Ok("1") {
+        let _ = fmt()
+            .with_writer(std::io::stderr)
+            .with_ansi(false)
+            .with_env_filter(filter)
+            .with_target(true)
+            .try_init();
+        return;
+    }
     let log_path = get_log_file_path();
 
     if let Ok(file) = std::fs::OpenOptions::new()

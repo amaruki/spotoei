@@ -21,7 +21,7 @@ pub async fn run() -> ExitCode {
     let (stdout_tx, mut stdout_rx) = mpsc::channel::<String>(crate::protocol::PROTOCOL_STDOUT_CAP);
     let (viz_stdout_tx, mut viz_stdout_rx) =
         mpsc::channel::<String>(crate::protocol::VIZ_STDOUT_CAP);
-    let writer_handle = tokio::spawn(async move {
+    let _writer_handle = tokio::spawn(async move {
         let mut stdout = tokio::io::stdout();
         loop {
             tokio::select! {
@@ -52,21 +52,29 @@ pub async fn run() -> ExitCode {
     let auth = Arc::new(AuthManager::new(client_id, stdout_tx.clone()));
     let _initial_status = auth.hydrate().await;
 
-    let lyrics = LyricsService::new(Arc::new(crate::lyrics::MockLyricsProvider::new()));
     let use_mock_playback =
         std::env::var("SPOTOEI_MOCK_AUTH").is_ok() || std::env::var("SPOTOEI_MOCK_PLAYER").is_ok();
-    let (playback, pcm_rx) = if use_mock_playback {
+    let (playback, pcm_rx, lyrics) = if use_mock_playback {
         info!("Playback engine: FakeEngine (mock mode)");
         let (_pcm_tx, pcm_rx) = crossbeam_channel::bounded(64);
+        let lyrics = LyricsService::new(Arc::new(crate::lyrics::MockLyricsProvider::new()));
         (
             Playback::new(crate::playback::FakeEngine, stdout_tx.clone()),
             pcm_rx,
+            lyrics,
         )
     } else {
         info!("Playback engine: LibrespotEngine (native audio output)");
-        let engine = crate::playback::LibrespotEngine::new(auth.clone());
+        let engine = Arc::new(crate::playback::LibrespotEngine::new(auth.clone()));
         let pcm_rx = engine.pcm_receiver();
-        (Playback::new(engine, stdout_tx.clone()), pcm_rx)
+        let lyrics = LyricsService::new(Arc::new(crate::lyrics::LibrespotLyricsProvider::new(
+            engine.clone(),
+        )));
+        (
+            Playback::new((*engine).clone(), stdout_tx.clone()),
+            pcm_rx,
+            lyrics,
+        )
     };
     let visualizer_cfg = Arc::new(RwLock::new(VisualizerConfig::default()));
     // Visualizer publisher: emits real-time CAVA FFT spectrum and waveform
@@ -211,15 +219,13 @@ pub async fn run() -> ExitCode {
             }
         }
     }
-    // Cancel OAuth callback server and join its task before tearing the
-    // process down so the loopback listener is released cleanly.
     auth.cancel_in_flight().await;
     ticker_handle.abort();
     viz_handle.abort();
-    drop(auth);
+    drop(lyrics);
     drop(playback);
+    drop(auth);
     drop(stdout_tx);
-    let _ = writer_handle.await;
     match exit_code {
         ExitCode::SUCCESS => std::process::exit(0),
         _ => std::process::exit(2),
