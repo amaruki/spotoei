@@ -44,22 +44,10 @@ impl PlaybackEngine for super::LibrespotEngine {
             match self_clone.ensure_active().await {
                 Ok(act) => {
                     info!("Spotoei playing track: {}", uri_str);
-                    let options = librespot::connect::LoadRequestOptions {
-                        start_playing: autoplay,
-                        seek_to: position_ms,
-                        ..Default::default()
-                    };
-                    let req = librespot::connect::LoadRequest::from_tracks(
-                        vec![uri_str.clone()],
-                        options,
-                    );
-                    if let Err(e) = act.spirc.load(req) {
-                        warn!("Spirc load failed, fallback to direct player: {:?}", e);
-                        if let Ok(sp_uri) =
-                            librespot::core::spotify_uri::SpotifyUri::from_uri(&uri_str)
-                        {
-                            act.player.load(sp_uri, autoplay, position_ms);
-                        }
+                    if let Ok(sp_uri) =
+                        librespot::core::spotify_uri::SpotifyUri::from_uri(&uri_str)
+                    {
+                        act.player.load(sp_uri, autoplay, position_ms);
                     }
                 }
                 Err(e) => {
@@ -69,11 +57,22 @@ impl PlaybackEngine for super::LibrespotEngine {
         });
     }
 
+    fn resume(&self) {
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            let guard = inner.lock().await;
+            if let Some(act) = &*guard {
+                act.player.play();
+            }
+        });
+    }
+
     fn pause(&self) {
         let inner = self.inner.clone();
         tokio::spawn(async move {
-            if let Some(ref act) = *inner.lock().await {
-                let _ = act.spirc.pause();
+            let guard = inner.lock().await;
+            if let Some(act) = &*guard {
+                act.player.pause();
             }
         });
     }
@@ -81,8 +80,11 @@ impl PlaybackEngine for super::LibrespotEngine {
     fn stop(&self) {
         let inner = self.inner.clone();
         tokio::spawn(async move {
-            if let Some(ref act) = *inner.lock().await {
-                let _ = act.spirc.pause();
+            let guard = inner.lock().await;
+            if let Some(act) = &*guard {
+                if let Some(spirc) = &act.spirc {
+                    let _ = spirc.pause();
+                }
                 act.player.stop();
             }
         });
@@ -91,8 +93,11 @@ impl PlaybackEngine for super::LibrespotEngine {
     fn seek(&self, position_ms: u32) {
         let inner = self.inner.clone();
         tokio::spawn(async move {
-            if let Some(ref act) = *inner.lock().await {
-                let _ = act.spirc.set_position_ms(position_ms);
+            let guard = inner.lock().await;
+            if let Some(act) = &*guard {
+                if let Some(spirc) = &act.spirc {
+                    let _ = spirc.set_position_ms(position_ms);
+                }
                 act.player.seek(position_ms);
             }
         });
@@ -102,8 +107,11 @@ impl PlaybackEngine for super::LibrespotEngine {
         let inner = self.inner.clone();
         let vol_u16 = (volume * 65535.0).clamp(0.0, 65535.0) as u16;
         tokio::spawn(async move {
-            if let Some(ref act) = *inner.lock().await {
-                let _ = act.spirc.set_volume(vol_u16);
+            let guard = inner.lock().await;
+            if let Some(act) = &*guard {
+                if let Some(spirc) = &act.spirc {
+                    let _ = spirc.set_volume(vol_u16);
+                }
                 act.player.emit_volume_changed_event(vol_u16);
             }
         });
@@ -112,48 +120,199 @@ impl PlaybackEngine for super::LibrespotEngine {
     fn next(&self) {
         let inner = self.inner.clone();
         tokio::spawn(async move {
-            if let Some(ref act) = *inner.lock().await {
-                let _ = act.spirc.next();
+            let guard = inner.lock().await;
+            if let Some(act) = &*guard {
+                if let Some(spirc) = &act.spirc {
+                    let _ = spirc.next();
+                }
             }
         });
     }
-
     fn previous(&self) {
         let inner = self.inner.clone();
         tokio::spawn(async move {
-            if let Some(ref act) = *inner.lock().await {
-                let _ = act.spirc.prev();
+            let guard = inner.lock().await;
+            if let Some(act) = &*guard {
+                if let Some(spirc) = &act.spirc {
+                    let _ = spirc.prev();
+                }
             }
         });
     }
-
     fn set_shuffle(&self, shuffle: bool) {
         let inner = self.inner.clone();
         tokio::spawn(async move {
-            if let Some(ref act) = *inner.lock().await {
-                let _ = act.spirc.shuffle(shuffle);
+            let guard = inner.lock().await;
+            if let Some(act) = &*guard {
+                if let Some(spirc) = &act.spirc {
+                    let _ = spirc.shuffle(shuffle);
+                }
             }
         });
     }
-
     fn set_repeat(&self, mode: RepeatMode) {
         let inner = self.inner.clone();
         tokio::spawn(async move {
-            if let Some(ref act) = *inner.lock().await {
-                match mode {
-                    RepeatMode::Off => {
-                        let _ = act.spirc.repeat(false);
-                        let _ = act.spirc.repeat_track(false);
-                    }
-                    RepeatMode::Context => {
-                        let _ = act.spirc.repeat(true);
-                        let _ = act.spirc.repeat_track(false);
-                    }
-                    RepeatMode::Track => {
-                        let _ = act.spirc.repeat_track(true);
+            let guard = inner.lock().await;
+            if let Some(act) = &*guard {
+                if let Some(spirc) = &act.spirc {
+                    match mode {
+                        RepeatMode::Off => {
+                            let _ = spirc.repeat(false);
+                            let _ = spirc.repeat_track(false);
+                        }
+                        RepeatMode::Context => {
+                            let _ = spirc.repeat(true);
+                            let _ = spirc.repeat_track(false);
+                        }
+                        RepeatMode::Track => {
+                            let _ = spirc.repeat_track(true);
+                        }
                     }
                 }
             }
         });
+    }
+
+    fn device_mode(&self) -> super::super::types::DeviceMode {
+        if let Ok(guard) = self.config.try_lock() {
+            guard.device_mode
+        } else {
+            super::super::types::DeviceMode::Integrated
+        }
+    }
+
+    fn set_device_mode(&self, mode: super::super::types::DeviceMode) {
+        if let Ok(mut guard) = self.config.try_lock() {
+            guard.device_mode = mode;
+        }
+    }
+
+    fn audio_backend(&self) -> super::super::types::AudioBackend {
+        if let Ok(guard) = self.config.try_lock() {
+            guard.audio_backend
+        } else {
+            super::super::types::AudioBackend::Rodio
+        }
+    }
+
+    fn set_audio_backend(&self, backend: super::super::types::AudioBackend) {
+        if let Ok(mut guard) = self.config.try_lock() {
+            guard.audio_backend = backend;
+        }
+    }
+
+    fn bitrate(&self) -> super::super::types::Bitrate {
+        if let Ok(guard) = self.config.try_lock() {
+            guard.bitrate
+        } else {
+            super::super::types::Bitrate::Bitrate320
+        }
+    }
+
+    fn set_bitrate(&self, bitrate: super::super::types::Bitrate) {
+        if let Ok(mut guard) = self.config.try_lock() {
+            guard.bitrate = bitrate;
+        }
+    }
+
+    fn crossfade_duration_ms(&self) -> u32 {
+        if let Ok(guard) = self.config.try_lock() {
+            guard.crossfade_duration_ms
+        } else {
+            0
+        }
+    }
+
+    fn set_crossfade_duration_ms(&self, duration_ms: u32) {
+        if let Ok(mut guard) = self.config.try_lock() {
+            guard.crossfade_duration_ms = duration_ms.clamp(0, 15_000);
+        }
+    }
+
+    fn normalisation(&self) -> bool {
+        if let Ok(guard) = self.config.try_lock() {
+            guard.normalisation
+        } else {
+            true
+        }
+    }
+
+    fn set_normalisation(&self, enabled: bool) {
+        if let Ok(mut guard) = self.config.try_lock() {
+            guard.normalisation = enabled;
+        }
+    }
+
+    fn normalisation_type(&self) -> String {
+        if let Ok(guard) = self.config.try_lock() {
+            guard.normalisation_type.clone()
+        } else {
+            "album".to_string()
+        }
+    }
+
+    fn set_normalisation_type(&self, norm_type: &str) {
+        if let Ok(mut guard) = self.config.try_lock() {
+            guard.normalisation_type = match norm_type.trim().to_ascii_lowercase().as_str() {
+                "track" => "track".to_string(),
+                _ => "album".to_string(),
+            };
+        }
+    }
+
+    fn pregain(&self) -> f32 {
+        if let Ok(guard) = self.config.try_lock() {
+            guard.pregain
+        } else {
+            0.0
+        }
+    }
+
+    fn set_pregain(&self, pregain: f32) {
+        if let Ok(mut guard) = self.config.try_lock() {
+            guard.pregain = if pregain.is_nan() {
+                0.0
+            } else {
+                pregain.clamp(-20.0, 20.0)
+            };
+        }
+    }
+
+    fn attach_state_listener(&self, listener: std::sync::Arc<dyn super::super::engine::PlaybackStateListener>) {
+        if let Ok(mut guard) = self.state_listener.try_lock() {
+            *guard = Some(listener);
+        }
+    }
+
+    fn reconcile_player_event(&self, event: &librespot::playback::player::PlayerEvent) {
+        if let librespot::playback::player::PlayerEvent::TrackChanged { audio_item } = event {
+            let uri = audio_item
+                .track_id
+                .to_uri()
+                .unwrap_or_else(|_| audio_item.uri.clone());
+            let (artists, album) = match &audio_item.unique_fields {
+                librespot::metadata::audio::item::UniqueFields::Track { artists, album, .. } => (
+                    artists.iter().map(|a| a.name.clone()).collect(),
+                    Some(album.clone()),
+                ),
+                _ => (vec!["Unknown Artist".to_string()], None),
+            };
+            let track = super::super::types::Track {
+                uri,
+                name: audio_item.name.clone(),
+                artists,
+                album,
+                duration_ms: audio_item.duration_ms as u64,
+                genre: None,
+            };
+            self.remember_track_metadata(&track);
+        }
+
+        if let Ok(guard) = self.state_listener.try_lock() {
+            if let Some(listener) = &*guard {
+                listener.on_player_event(event);
+            }
+        }
     }
 }

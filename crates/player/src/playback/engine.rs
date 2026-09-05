@@ -1,5 +1,4 @@
-use super::types::{RepeatMode, Track};
-
+use super::types::{AudioBackend, Bitrate, DeviceMode, RepeatMode, Track};
 /// Engine abstraction so the fake implementation can be swapped for the
 /// real librespot-driven one in a future milestone.
 pub trait PlaybackEngine: Send + Sync {
@@ -18,13 +17,46 @@ pub trait PlaybackEngine: Send + Sync {
     fn set_shuffle(&self, _shuffle: bool) {}
     fn set_repeat(&self, _mode: RepeatMode) {}
     fn remember_track_metadata(&self, _track: &Track) {}
+    fn device_mode(&self) -> DeviceMode {
+        DeviceMode::Integrated
+    }
+    fn set_device_mode(&self, _mode: DeviceMode) {}
+    fn audio_backend(&self) -> AudioBackend {
+        AudioBackend::Rodio
+    }
+    fn set_audio_backend(&self, _backend: AudioBackend) {}
+    fn bitrate(&self) -> Bitrate {
+        Bitrate::Bitrate320
+    }
+    fn set_bitrate(&self, _bitrate: Bitrate) {}
+    fn crossfade_duration_ms(&self) -> u32 {
+        0
+    }
+    fn set_crossfade_duration_ms(&self, _duration_ms: u32) {}
+    fn normalisation(&self) -> bool {
+        true
+    }
+    fn set_normalisation(&self, _enabled: bool) {}
+    fn normalisation_type(&self) -> String {
+        "album".to_string()
+    }
+    fn set_normalisation_type(&self, _norm_type: &str) {}
+    fn pregain(&self) -> f32 {
+        0.0
+    }
+    fn set_pregain(&self, _pregain: f32) {}
+    fn attach_state_listener(&self, _listener: std::sync::Arc<dyn PlaybackStateListener>) {}
+    fn reconcile_player_event(&self, _event: &librespot::playback::player::PlayerEvent) {}
+}
+
+pub trait PlaybackStateListener: Send + Sync {
+    fn on_player_event(&self, event: &librespot::playback::player::PlayerEvent);
 }
 
 /// Deterministic fake engine used for headless tests and UI development
 /// until the real librespot path lands.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct FakeEngine;
-
 impl PlaybackEngine for FakeEngine {
     fn resolve_track(&self, uri: &str) -> Option<Track> {
         if !uri.starts_with("spotify:track:") {
