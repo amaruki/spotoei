@@ -6,7 +6,7 @@ use tracing::warn;
 
 use super::constants::{
     generate_state, generate_verifier, now_ms, s256_challenge, KEYMASTER_CLIENT_ID, KEYMASTER_PORT,
-    REDIRECT_PATH, SPOTIFY_ACCOUNTS,
+    NCSPOT_CLIENT_ID, REDIRECT_PATH, SPOTIFY_ACCOUNTS,
 };
 use super::manager::AuthManager;
 use super::storage;
@@ -39,8 +39,8 @@ impl AuthManager {
         s.last_auth_url = None;
         s.state = AuthState::Authenticating;
 
-        let is_keymaster = client_id == KEYMASTER_CLIENT_ID;
-        let default_port = if is_keymaster { KEYMASTER_PORT } else { 8989 };
+        let is_login_flow = client_id == KEYMASTER_CLIENT_ID || client_id == NCSPOT_CLIENT_ID;
+        let default_port = if client_id == KEYMASTER_CLIENT_ID { KEYMASTER_PORT } else { 8989 };
         let port: u16 = std::env::var("SPOTOEI_REDIRECT_PORT")
             .ok()
             .and_then(|p| p.parse().ok())
@@ -64,7 +64,7 @@ impl AuthManager {
             .local_addr()
             .map_err(|e| AuthError::Http(format!("local_addr: {e}")))?
             .port();
-        let redirect_path = if is_keymaster {
+        let redirect_path = if is_login_flow {
             "/login"
         } else {
             REDIRECT_PATH

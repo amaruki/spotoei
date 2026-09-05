@@ -3,6 +3,11 @@ use tracing::warn;
 use super::constants::KEYRING_SERVICE;
 use super::types::{AccessToken, AuthError};
 
+fn memory_only() -> bool {
+    std::env::var("SPOTOEI_AUTH_STORAGE").as_deref() == Ok("memory")
+        || std::env::var("SPOTOEI_MOCK_AUTH").is_ok()
+}
+
 pub fn keyring_entry(account_id: &str) -> Result<keyring::Entry, AuthError> {
     let user = format!("web-api-refresh:{account_id}");
     keyring::Entry::new(KEYRING_SERVICE, &user)
@@ -38,13 +43,16 @@ pub fn session_file_path() -> std::path::PathBuf {
 }
 
 pub async fn load_session() -> Result<Option<AccessToken>, AuthError> {
+    if memory_only() {
+        return Err(AuthError::KeyringUnavailable("memory-only authentication".into()));
+    }
     match load_from_keyring("default").await {
         Ok(Some(at)) => {
             // Remove stale dev file if keyring now works
             if cfg!(debug_assertions) {
                 let _ = std::fs::remove_file(session_file_path());
             }
-            return Ok(Some(at));
+            Ok(Some(at))
         }
         Ok(None) => {
             if cfg!(debug_assertions) {
@@ -52,7 +60,7 @@ pub async fn load_session() -> Result<Option<AccessToken>, AuthError> {
                     return Ok(Some(at));
                 }
             }
-            return Ok(None);
+            Ok(None)
         }
         Err(e) => {
             if cfg!(debug_assertions) {
@@ -61,7 +69,7 @@ pub async fn load_session() -> Result<Option<AccessToken>, AuthError> {
                     return Ok(Some(at));
                 }
             }
-            return Err(e);
+            Err(e)
         }
     }
 }
@@ -87,18 +95,36 @@ pub async fn save_to_keyring_account(account_id: &str, at: &AccessToken) -> Resu
 }
 
 pub async fn save_session(at: &AccessToken) -> Result<(), AuthError> {
-    let account_ok = save_to_keyring_account(&at.account_id, at).await.is_ok();
-    let default_ok = save_to_keyring_account("default", at).await.is_ok();
+    if memory_only() {
+        return Err(AuthError::KeyringUnavailable("memory-only authentication".into()));
+    }
+    let merged_token;
+    let token_ref = if at.refresh_token.trim().is_empty() {
+        if let Ok(Some(prev)) = load_session().await {
+            if !prev.refresh_token.trim().is_empty() {
+                let mut t = at.clone();
+                t.refresh_token = prev.refresh_token;
+                merged_token = t;
+                &merged_token
+            } else {
+                at
+            }
+        } else {
+            at
+        }
+    } else {
+        at
+    };
+    let account_ok = save_to_keyring_account(&token_ref.account_id, token_ref).await.is_ok();
+    let default_ok = save_to_keyring_account("default", token_ref).await.is_ok();
     if account_ok || default_ok {
         let path = session_file_path();
         let _ = std::fs::remove_file(path);
         return Ok(());
     }
-    if cfg!(debug_assertions) {
-        if try_save_dev_file(at).is_ok() {
-            warn!("keyring unavailable, persisted dev fallback to session.json");
-            return Ok(());
-        }
+    if cfg!(debug_assertions) && try_save_dev_file(token_ref).is_ok() {
+        warn!("keyring unavailable, persisted dev fallback to session.json");
+        return Ok(());
     }
     // No durable store available — keep credentials in memory only and
     // let the caller surface Storage::Memory to the UI. Never write
@@ -147,6 +173,9 @@ pub async fn delete_from_keyring(account_id: &str) -> Result<(), AuthError> {
 }
 
 pub async fn delete_session(account_id: &str) -> Result<(), AuthError> {
+    if memory_only() {
+        return Ok(());
+    }
     let _ = delete_from_keyring(account_id).await;
     let _ = delete_from_keyring("default").await;
     let path = session_file_path();

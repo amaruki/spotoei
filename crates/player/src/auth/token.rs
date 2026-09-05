@@ -1,7 +1,7 @@
 use tracing::warn;
 
 use super::constants::{
-    now_ms, KEYMASTER_CLIENT_ID, KEYMASTER_PATH, REDIRECT_PATH, SPOTIFY_ACCOUNTS,
+    now_ms, KEYMASTER_CLIENT_ID, KEYMASTER_PATH, NCSPOT_CLIENT_ID, REDIRECT_PATH, SPOTIFY_ACCOUNTS,
 };
 use super::manager::AuthManager;
 use super::storage;
@@ -34,7 +34,11 @@ impl AuthManager {
         let mut new_at = at.clone();
         new_at.access_token = refreshed.access_token.clone();
         new_at.expires_at = refreshed.expires_at;
-        new_at.refresh_token = refreshed.refresh_token.clone();
+        new_at.refresh_token = if !refreshed.refresh_token.trim().is_empty() {
+            refreshed.refresh_token.clone()
+        } else {
+            at.refresh_token.clone()
+        };
         let token_for_return = new_at.access_token.clone();
         let expires_at = new_at.expires_at;
         let mut s = self.state.lock().await;
@@ -65,8 +69,8 @@ impl AuthManager {
             .build()
             .map_err(|e| AuthError::Http(e.to_string()))?;
         let client_id = self.client_id.read().await.clone();
-        let is_keymaster = client_id == KEYMASTER_CLIENT_ID;
-        let redirect_path = if is_keymaster {
+        let is_login_path = client_id == KEYMASTER_CLIENT_ID || client_id == NCSPOT_CLIENT_ID;
+        let redirect_path = if is_login_path {
             KEYMASTER_PATH
         } else {
             REDIRECT_PATH
@@ -135,9 +139,10 @@ impl AuthManager {
         Ok(RefreshedToken {
             access_token: parsed.access_token,
             expires_at: now_ms() + parsed.expires_in * 1000,
-            refresh_token: parsed
-                .refresh_token
-                .unwrap_or_else(|| refresh_token.to_string()),
+            refresh_token: match &parsed.refresh_token {
+                Some(rt) if !rt.trim().is_empty() => rt.clone(),
+                _ => refresh_token.to_string(),
+            },
         })
     }
 }
