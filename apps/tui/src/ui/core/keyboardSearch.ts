@@ -24,13 +24,17 @@ export function handleSearchKeys(
       return true;
     }
     if (e.name === 'escape') {
-      return false;
+      built.searchInput.blur();
+      return true;
     }
     if (e.name === 'tab') {
       built.searchInput.blur();
-      // Shift+Tab reverse: keep sidebar focus but distinguish direction
-      void e.shift;
-      ctx.helpers.setFocusArea('sidebar');
+      if (e.shift) {
+        focusSearchPanel(ctx, SEARCH_PANELS.length - 1);
+        ctx.helpers.updateSearchFocusVisuals(false);
+      } else {
+        ctx.helpers.setFocusArea('sidebar');
+      }
       return true;
     }
     if (e.name === 'down' || e.name === 'j') {
@@ -63,7 +67,8 @@ export function handleSearchKeys(
       return true;
     }
     if (e.name === 'escape') {
-      return false;
+      searchList.blur();
+      return true;
     }
     if (e.name === 'left') {
       searchList.blur();
@@ -76,7 +81,7 @@ export function handleSearchKeys(
       ctx.helpers.updateSearchFocusVisuals(true);
       return true;
     }
-    if (!e.shift && (e.name === '/' || e.name === 's' || e.sequence === '/')) {
+    if (!e.shift && (e.name === '/' || e.sequence === '/')) {
       searchList.blur();
       built.searchInput.focus();
       ctx.helpers.updateSearchFocusVisuals(true);
@@ -87,6 +92,11 @@ export function handleSearchKeys(
       return true;
     }
   }
+  if (e.name === 'escape') {
+    if (!ctx.helpers.navigateBack()) ctx.helpers.setFocusArea('sidebar');
+    return true;
+  }
+  if (e.name === 'tab' || e.name === 'left') return false;
   // If neither is focused while in search route, focus search input
   built.searchInput.focus();
   ctx.helpers.updateSearchFocusVisuals(true);

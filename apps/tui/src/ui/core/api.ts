@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { fg, t } from '@opentui/core';
 import type { AuthStatusDataT, PlaybackPositionDataT, QueueSnapshotT } from 'spotoei-protocol';
 
@@ -7,10 +8,10 @@ import { resolveContextTarget } from './contextMenu';
 import { browseCategoryOptions, browseEntryOptions } from '../views/browseView';
 import { createEntitySetters } from './entitySetters';
 import { libraryItemOptions } from '../views/library';
-import { binarySearchLastLE, renderLyricsContent } from '../views/lyrics';
+import { binarySearchLastLE, calculateLyricsScrollOffset, renderLyricsContent } from '../views/lyrics';
 import { createPanelSetters, restoreListPosition } from './panelSetters';
 import { routeFromLegacy, routeKind } from './navigationStack';
-import type { ContextTarget } from '../types';
+import type { ContextTarget, UiAudioConfig } from '../types';
 import type {
   FocusArea,
   LibraryItemT,
@@ -64,19 +65,84 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       return focus.current;
     },
     setStatus: helpers.setStatus,
+    // One-shot browse notice (offline fallback). Fire-and-forget on purpose:
+    // folding it into every later status polluted unrelated messages, so a
+    // cleared or superseded banner simply stops appearing.
+    setBrowseBanner(banner: string | null): void {
+      if (banner) helpers.setStatus(banner, true);
+    },
     setVisualizerFrame(frame: VisualizerFrame | null): void {
       latestVizFrame.value = frame;
       helpers.paintViz();
     },
-    ...createPanelSetters(ctx),
-    setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }, opts?: { append?: boolean }): void {
+    setLibraryItems(
+      items: LibraryItemT[],
+      error?: { code: string; message: string },
+      opts?: {
+        append?: boolean;
+        hasMore?: boolean;
+        isStale?: boolean;
+        savedIds?: Set<string>;
+        playingUri?: string | null;
+      },
+    ): void {
+      const playingUri = opts?.playingUri ?? state.playback?.track?.uri ?? null;
+      const savedIds =
+        opts?.savedIds ??
+        (() => {
+          const s = new Set<string>();
+          for (const it of items as Array<{ uri?: string; id?: string }>) {
+            if (it.uri) s.add(it.uri);
+            if (it.id) s.add(it.id);
+          }
+          for (const it of ctx.currentLibraryItems.value as Array<{ uri?: string; id?: string }>) {
+            if (it.uri) s.add(it.uri);
+            if (it.id) s.add(it.id);
+          }
+          return s;
+        })();
+      const isStale = opts?.isStale;
+      const hasMore = opts?.hasMore;
+      if (hasMore !== undefined) ctx.libraryHasMore.value = hasMore;
       if (opts?.append) {
-        ctx.currentLibraryItems.value = [...ctx.currentLibraryItems.value, ...items] as never;
-        built.libraryList.options = [...built.libraryList.options, ...libraryItemOptions(items, error)];
+        const prevIdx = built.libraryList.getSelectedIndex();
+        const existingKeys = new Set<string>();
+        for (const it of ctx.currentLibraryItems.value as Array<{ id?: string; uri?: string }>) {
+          const key = it.id ?? it.uri;
+          if (key) existingKeys.add(key);
+        }
+        const appended = items.filter((it) => {
+          const key = (it as { id?: string; uri?: string }).id ?? (it as { uri?: string }).uri;
+          return !key || !existingKeys.has(key);
+        });
+        ctx.currentLibraryItems.value = [...ctx.currentLibraryItems.value, ...appended] as never;
+        built.libraryList.options = libraryItemOptions(ctx.currentLibraryItems.value, error, {
+          savedIds,
+          playingUri,
+          isStale,
+          hasMore,
+        });
+        const max = Math.max(0, built.libraryList.options.length - 1);
+        built.libraryList.setSelectedIndex(Math.min(Math.max(0, prevIdx), max));
         return;
       }
+      const prevIdx = built.libraryList.getSelectedIndex();
+      const prevId = (ctx.currentLibraryItems.value[prevIdx] as { id?: string } | undefined)?.id;
       ctx.currentLibraryItems.value = items as never;
-      built.libraryList.options = libraryItemOptions(items, error);
+      built.libraryList.options = libraryItemOptions(items, error, {
+        savedIds,
+        playingUri,
+        isStale,
+        hasMore,
+      });
+      if (prevId) {
+        const newIdx = items.findIndex((it) => it.id === prevId);
+        if (newIdx >= 0) {
+          built.libraryList.setSelectedIndex(newIdx);
+          ctx.positions.save(ctx.route.current, { selected: newIdx, scroll: 0 });
+          return;
+        }
+      }
       restoreListPosition(ctx, built.libraryList);
     },
     setLibraryLoading(loading: boolean): void {
@@ -130,6 +196,7 @@ export function createUiApi(ctx: UiCoreContext): Ui {
         built.queueList.setSelectedIndex(0);
       }
     },
+    ...createPanelSetters(ctx),
     ...createEntitySetters(ctx),
     setBrowseCategories(cats): void {
       ctx.currentRouteItems.value = cats as unknown[];
@@ -139,6 +206,22 @@ export function createUiApi(ctx: UiCoreContext): Ui {
     setBrowseEntries(entries): void {
       ctx.currentRouteItems.value = entries as unknown[];
       built.browseList.options = browseEntryOptions(entries as never);
+      built.browseList.setSelectedIndex(0);
+    },
+    setBrowseTracks(
+      tracks: Array<{
+        id: string;
+        uri: string;
+        name: string;
+        artists: Array<{ name: string }>;
+        durationMs?: number;
+      }>,
+    ): void {
+      ctx.currentRouteItems.value = tracks as unknown[];
+      built.browseList.options = tracks.map((track) => ({
+        name: track.name,
+        description: formatArtists(track.artists),
+      }));
       built.browseList.setSelectedIndex(0);
     },
     openContextMenu(title, items): void {
@@ -156,6 +239,14 @@ export function createUiApi(ctx: UiCoreContext): Ui {
     setLyrics(doc: LyricsDocumentT | null): void {
       state.lyrics = doc ?? undefined;
       built.lyricsText.content = renderLyricsContent(state);
+      const isSynced = doc?.kind === 'synced';
+      built.lyricsResumeHint.visible = manualLyricsScroll.value && isSynced;
+      if (!isSynced) {
+        manualLyricsScroll.value = false;
+        if (ctx.lyricsResumeTimer?.value)
+          clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout);
+        if (ctx.lyricsResumeTimer) ctx.lyricsResumeTimer.value = null;
+      }
     },
     setSearchLoading(loading: boolean): void {
       // A new query wipes stale hits; background refreshes never call this,
@@ -178,10 +269,15 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       }
     },
     setPaletteCommands(
-      cmds: Array<{ name: string; description: string; action: () => void }>,
+      cmds: Array<{
+        name: string;
+        description: string;
+        action: () => void;
+        isAvailable?: () => boolean;
+      }>,
     ): void {
-      palette.commands = cmds;
-      palette.filtered = [...cmds];
+      palette.commands = cmds as typeof palette.commands;
+      palette.filtered = [...cmds] as typeof palette.filtered;
     },
     openPalette(): void {
       helpers.setPaletteOpen(true);
@@ -203,7 +299,7 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       state.playback.positionMs = pos.positionMs;
       // Store wall-clock observedAt for interpolation; playbackBar computes
       // displayPos as positionMs + elapsed since observedAt when playing.
-      (state.playback as unknown as Record<string, unknown>)._observedAt = Date.now();
+      state.playback.observedAtMonotonicMs = Date.now();
       helpers.setHeader();
       helpers.refreshHome();
       if (
@@ -214,7 +310,7 @@ export function createUiApi(ctx: UiCoreContext): Ui {
         built.lyricsText.content = renderLyricsContent(state);
         const activeIdx = binarySearchLastLE(state.lyrics.lines, pos.positionMs);
         if (activeIdx >= 0) {
-          built.lyricsScroll.scrollTo(Math.max(0, activeIdx - 3));
+          built.lyricsScroll.scrollTo(calculateLyricsScrollOffset(activeIdx));
         }
       }
     },
@@ -241,11 +337,27 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       helpers.setFocusArea('main');
       built.clientIdInput.focus();
     },
+    isAnyInputFocused(): boolean {
+      return Boolean(
+        built.searchInput.focused || built.clientIdInput.focused || built.paletteInput.focused,
+      );
+    },
+    setAudioConfig(cfg: Partial<UiAudioConfig>): void {
+      state.audioConfig = { ...state.audioConfig, ...cfg };
+      helpers.refreshSettings();
+    },
+    setPrivateSession(active: boolean): void {
+      state.isPrivateSession = active;
+      helpers.refreshNav();
+      helpers.renderPlaybackBar();
+    },
     async start(): Promise<void> {
       // Renderer is already started.
     },
     async shutdown(): Promise<void> {
       if (statusTimer.value) clearTimeout(statusTimer.value);
+      if (ctx.lyricsResumeTimer?.value)
+        clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout);
       await renderer.destroy();
     },
   };

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import { createTestRenderer } from '@opentui/core/testing';
 import type { KeyEvent } from '@opentui/core';
 import { PROTOCOL_VERSION } from 'spotoei-protocol';
@@ -235,18 +235,26 @@ describe('OpenTUI renderables integration', () => {
     // Verify quick numeric shortcuts for navigation
     ui.setRoute({ kind: 'home', tab: 'for_you' });
     expect(kindOf(ui.getRoute())).toBe('home');
+    vi.useFakeTimers();
     sendKey('2', '2');
+    vi.advanceTimersByTime(1000);
     expect(kindOf(ui.getRoute())).toBe('browse');
     sendKey('4', '4');
+    vi.advanceTimersByTime(1000);
     expect(kindOf(ui.getRoute())).toBe('library');
     sendKey('5', '5');
+    vi.advanceTimersByTime(1000);
     expect(kindOf(ui.getRoute())).toBe('queue');
     sendKey('6', '6');
+    vi.advanceTimersByTime(1000);
     expect(kindOf(ui.getRoute())).toBe('lyrics');
     sendKey('7', '7');
+    vi.advanceTimersByTime(1000);
     expect(kindOf(ui.getRoute())).toBe('settings');
     sendKey('1', '1');
+    vi.advanceTimersByTime(1000);
     expect(kindOf(ui.getRoute())).toBe('home');
+    vi.useRealTimers();
 
     // Verify sidebar focus toggle with Tab
     ui.setFocus('sidebar');

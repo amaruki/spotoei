@@ -36,13 +36,29 @@ export function searchPanelBoxes(built: BuiltUi): BoxRenderable[] {
   return [built.searchTracks, built.searchArtists, built.searchAlbums, built.searchPlaylists];
 }
 
+function baseTitle(box: BoxRenderable): string {
+  const id = (box as unknown as { id?: string }).id ?? '';
+  if (id.includes('home-tracks')) return 'Top Tracks';
+  if (id.includes('home-artists')) return 'Top Artists';
+  if (id.includes('home-recent')) return 'Recently Played';
+  if (id.includes('home-discover')) return 'Discover';
+  if (id.includes('search-tracks')) return 'Tracks';
+  if (id.includes('search-artists')) return 'Artists';
+  if (id.includes('search-albums')) return 'Albums';
+  if (id.includes('search-playlists')) return 'Playlists';
+  return (box as unknown as { title?: string }).title ?? '';
+}
 function highlight(lists: SelectRenderable[], boxes: BoxRenderable[], active: number): void {
   lists.forEach((list, i) => {
     if (i === active) list.focus();
     else list.blur();
   });
   boxes.forEach((box, i) => {
-    box.borderColor = i === active ? COLOR_BORDER_FOCUS : COLOR_BORDER;
+    const isActive = i === active;
+    box.borderColor = isActive ? COLOR_BORDER_FOCUS : COLOR_BORDER;
+    const raw = (box as unknown as { title?: string }).title ?? baseTitle(box);
+    const cleaned = raw.replace(/^▶\s*/, '').replace(/\s*\[Active\]$/, '').trim();
+    box.title = isActive ? `▶ ${cleaned} [Active]` : cleaned;
   });
 }
 
@@ -82,5 +98,8 @@ export function blurAllPanels(built: BuiltUi): void {
   }
   for (const box of [...homePanelBoxes(built), ...searchPanelBoxes(built)]) {
     box.borderColor = COLOR_BORDER;
+    const raw = (box as unknown as { title?: string }).title ?? baseTitle(box);
+    const cleaned = raw.replace(/^▶\s*/, '').replace(/\s*\[Active\]$/, '').trim();
+    box.title = cleaned;
   }
 }

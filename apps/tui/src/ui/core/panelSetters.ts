@@ -51,23 +51,35 @@ function renderSearchResults(ctx: UiCoreContext): void {
     { key: 'tracks', list: ctx.built.searchTracksList, refs: panels.tracks },
     { key: 'artists', list: ctx.built.searchArtistsList, refs: panels.artists },
     { key: 'albums', list: ctx.built.searchAlbumsList, refs: panels.albums },
-    { key: 'playlists', list: ctx.built.searchPlaylistsList, refs: panels.playlists },
   ];
+  const playingUri = (ctx.state.playback as unknown as { track?: { uri?: string } })?.track?.uri ?? null;
+  const savedIds = new Set<string>();
+  for (const it of ctx.currentLibraryItems.value as Array<{ uri?: string; id?: string }>) {
+    if (it.uri) savedIds.add(it.uri);
+    if (it.id) savedIds.add(it.id);
+  }
+  const isStale = (results as unknown as { isStale?: boolean }).isStale ?? false;
   for (const entry of entries) {
     ctx.searchPanelMaps.value[entry.key] = entry.refs.map((r) => r.index);
     entry.list.options =
       entry.refs.length > 0
-        ? entry.refs.map((ref) => renderHit(results.hits[ref.index] as never))
+        ? entry.refs.map((ref) => renderHit(results.hits[ref.index] as never, { savedIds, playingUri, isStale }))
         : [emptyRow(entry.key)];
-    const saved = ctx.positions.restoreKey(
-      panelPositionKey(ctx.route.current, 'search', entry.key),
-    );
+    const saved = ctx.positions.restoreKey(panelPositionKey(ctx.route.current, 'search', entry.key));
     const max = Math.max(0, entry.list.options.length - 1);
     entry.list.setSelectedIndex(Math.min(Math.max(0, saved.selected), max));
   }
-  focusSearchPanel(ctx, ctx.searchPanel.value);
+  let targetPanel = ctx.searchPanel.value;
+  if (entries[targetPanel]?.refs.length === 0) {
+    const next = entries.findIndex((e) => e.refs.length > 0);
+    if (next >= 0) targetPanel = next;
+    else {
+      targetPanel = 0;
+      entries[0]?.list.setSelectedIndex(0);
+    }
+  }
+  focusSearchPanel(ctx, targetPanel);
 }
-
 // Home + search panel setters extracted from api.ts for the 300 LoC cap.
 export function createPanelSetters(ctx: UiCoreContext) {
   const { built } = ctx;

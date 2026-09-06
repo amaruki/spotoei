@@ -13,6 +13,7 @@ import type {
   VisualizerFrame,
 } from '../types';
 import { partitionHomeRows } from '../views/homeRows';
+import { isLibraryFooterIndex } from '../views/library';
 import { createUiApi } from './api';
 import { createContextMenuHelpers } from './contextMenu';
 import { createKeyDispatcher } from './keyboard';
@@ -62,6 +63,9 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     items: [],
   };
   const manualLyricsScroll = { value: false };
+  const lyricsResumeTimer: { value: ReturnType<typeof setTimeout> | null } = { value: null };
+  const drawerOpen = { value: false };
+  const libraryHasMore = { value: undefined as boolean | undefined };
   const statusTimer: { value: ReturnType<typeof setTimeout> | null } = { value: null };
   const palette = {
     commands: [] as Array<{ name: string; description: string; action: () => void }>,
@@ -93,6 +97,9 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     searchPanel,
     searchPanelMaps,
     manualLyricsScroll,
+    lyricsResumeTimer,
+    drawerOpen,
+    libraryHasMore,
     menu,
     palette,
     statusTimer,
@@ -146,6 +153,12 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     selectSearchHit('playlists'),
   );
   built.libraryList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
+    const len = ctx.currentLibraryItems.value.length;
+    const hasMore = ctx.libraryHasMore.value;
+    if (isLibraryFooterIndex(idx, len, hasMore)) {
+      if (hasMore && opts.onLibraryListEnd) opts.onLibraryListEnd();
+      return;
+    }
     const item = ctx.currentLibraryItems.value[idx];
     if (item && opts.onSelectLibraryItem) {
       opts.onSelectLibraryItem(item);
@@ -186,19 +199,19 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
       opts.onSelectArtistAlbum(item.id);
     }
   });
-  const playSelectedEntityTrack = (list: { getSelectedIndex: () => number }): void => {
-    const item = ctx.currentRouteItems.value[list.getSelectedIndex()] as unknown as
+  const playSelectedEntityTrack = (idx: number): void => {
+    const item = ctx.currentRouteItems.value[idx] as unknown as
       | { uri?: string; name?: string }
       | undefined;
     if (item?.uri && opts.onSelectEntityTrack) {
       opts.onSelectEntityTrack(item.uri, item.name ?? item.uri);
     }
   };
-  built.albumList.on(SelectRenderableEvents.ITEM_SELECTED, () => {
-    playSelectedEntityTrack(built.albumList);
+  built.albumList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
+    playSelectedEntityTrack(idx);
   });
-  built.playlistList.on(SelectRenderableEvents.ITEM_SELECTED, () => {
-    playSelectedEntityTrack(built.playlistList);
+  built.playlistList.on(SelectRenderableEvents.ITEM_SELECTED, (idx) => {
+    playSelectedEntityTrack(idx);
   });
   // Paging trigger: reaching the last row loads the next page in place.
   const watchListEnd = (kind: 'artist' | 'album' | 'playlist', list: AnySelect): void => {
@@ -211,9 +224,18 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   watchListEnd('artist', built.artistList);
   watchListEnd('album', built.albumList);
   watchListEnd('playlist', built.playlistList);
+  let libraryEndTimer: ReturnType<typeof setTimeout> | null = null;
   built.libraryList.on(SelectRenderableEvents.SELECTION_CHANGED, (idx: number) => {
-    if (idx >= built.libraryList.options.length - 1 && opts.onLibraryListEnd) {
-      opts.onLibraryListEnd();
+    const hasMore = ctx.libraryHasMore.value;
+    if (!hasMore) return;
+    const isFooter = isLibraryFooterIndex(idx, ctx.currentLibraryItems.value.length, hasMore);
+    const totalOptions = built.libraryList.options.length;
+    if ((isFooter || idx >= Math.max(0, totalOptions - 5)) && opts.onLibraryListEnd) {
+      clearTimeout(libraryEndTimer as unknown as NodeJS.Timeout);
+      libraryEndTimer = setTimeout(() => {
+        libraryEndTimer = null;
+        opts.onLibraryListEnd?.();
+      }, 150);
     }
   });
   built.paletteInput.on(InputRenderableEvents.CHANGE, (value: string) => {
@@ -232,16 +254,22 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   });
   renderer.on('resize', (w: number) => {
     ctx.termWidth.value = w;
-    // Keep overlays capped to terminal width to avoid clipping.
-    const pw = Math.min(60, w - 2);
-    const mw = Math.min(44, w - 2);
-    (built.palette as unknown as { width: number }).width = pw > 0 ? pw : 20;
-    (built.menu as unknown as { width: number }).width = mw > 0 ? mw : 20;
-    // Re-apply layout visibility for the new width; migrate focus off a
-    // sidebar that just disappeared.
+    // Keep overlays capped to terminal width to avoid clipping, centered.
+    const pw = Math.min(60, Math.max(20, w - 2));
+    const pl = Math.max(0, Math.floor((w - pw) / 2));
+    const mw = Math.min(44, Math.max(20, w - 2));
+    const ml = Math.max(0, Math.floor((w - mw) / 2));
+    const pal = built.palette as unknown as { width?: number; left?: number };
+    if (typeof pal.width !== 'undefined') pal.width = pw;
+    if (typeof pal.left !== 'undefined') pal.left = pl;
+    const men = built.menu as unknown as { width?: number; left?: number };
+    if (typeof men.width !== 'undefined') men.width = mw;
+    if (typeof men.left !== 'undefined') men.left = ml;
+    const prevFocus = focus.current;
     ctx.helpers.showRoute(ctx.route.current, true, true);
-    if (!ctx.built.sidebar.visible && ctx.focus.current === 'sidebar') {
-      ctx.helpers.setFocusArea('main');
+    if (!ctx.built.sidebar.visible && prevFocus === 'sidebar') {
+      focus.current = 'main';
+      ctx.helpers.updateFocusVisuals();
     }
     ctx.helpers.paintViz();
   });

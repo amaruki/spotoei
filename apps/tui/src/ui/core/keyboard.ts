@@ -4,6 +4,7 @@ import { HOME_PANELS, cycleHomePanel, focusedHomeList, focusHomePanel } from './
 import { handleEntityBrowseKeys } from './keyboardEntity';
 import { handleLibraryQueueKeys } from './keyboardLists';
 import { handleSearchKeys } from './keyboardSearch';
+import { createMotionAccumulator, handleVimMotion } from './keyboardMotion';
 import { routeKind } from './navigationStack';
 import type { Route, UiCoreContext } from './types';
 // Key dispatcher for the full TUI. Implements focus isolation: when an
@@ -11,6 +12,9 @@ import type { Route, UiCoreContext } from './types';
 // do not trigger global hotkeys (like Space to pause or 'q' to quit).
 export function createKeyDispatcher(ctx: UiCoreContext) {
   const { built, focus, manualLyricsScroll, opts, palette, route, state } = ctx;
+  const sched = (): void => { if (!state.lyrics || state.lyrics.kind !== 'synced') return; built.lyricsResumeHint.visible = manualLyricsScroll.value; if (ctx.lyricsResumeTimer.value) clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout); if (manualLyricsScroll.value) ctx.lyricsResumeTimer.value = setTimeout(() => { manualLyricsScroll.value = false; built.lyricsResumeHint.visible = false; ctx.helpers.setStatus('Resumed lyric sync'); }, 5000); else if (ctx.lyricsResumeTimer.value) { clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout); ctx.lyricsResumeTimer.value = null; } };
+  const resume = (): void => { if (!manualLyricsScroll.value) return; if (ctx.lyricsResumeTimer.value) clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout); ctx.lyricsResumeTimer.value = null; manualLyricsScroll.value = false; built.lyricsResumeHint.visible = false; ctx.helpers.setStatus('Resumed lyric sync'); };
+  const motionAcc = createMotionAccumulator();
   return (e: {
     name: string;
     sequence: string;
@@ -33,6 +37,7 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         ctx.helpers.setPaletteOpen(false);
         return;
       }
+      if (e.name === 'tab') return;
       if (e.name === 'up' || e.name === 'k') {
         const cur = built.paletteList.getSelectedIndex();
         built.paletteList.setSelectedIndex(Math.max(0, cur - 1));
@@ -45,6 +50,10 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         return;
       }
       if (e.name === 'return') {
+        if (palette.filtered.length === 0) {
+          ctx.helpers.setStatus('No matching command');
+          return;
+        }
         const idx = built.paletteList.getSelectedIndex();
         const cmd = palette.filtered[idx];
         ctx.helpers.setPaletteOpen(false);
@@ -57,7 +66,6 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         }
         return;
       }
-      // Typing characters are consumed by paletteInput; do NOT trigger global hotkeys!
       return;
     }
 
@@ -138,6 +146,11 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         return;
       }
     }
+    // Vim motion handling: digits, gg, G, j, k, down, up, PageDown, PageUp
+    if (handleVimMotion(ctx, e, motionAcc, sched)) {
+      return;
+    }
+
 
     // 4. Sidebar navigation focus handling
     if (focus.current === 'sidebar') {
@@ -225,41 +238,22 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         return;
       }
       if (e.name === 'tab') {
-        ctx.helpers.setFocusArea('sidebar');
+        const order = ['sidebar', 'main'] as const;
+        const idx = order.indexOf(focus.current as typeof order[number]);
+        if (e.shift) {
+          const prev = (idx - 1 + order.length) % order.length;
+          ctx.helpers.setFocusArea(order[prev] as typeof focus.current);
+        } else {
+          const next = (idx + 1) % order.length;
+          ctx.helpers.setFocusArea(order[next] as typeof focus.current);
+        }
         return;
       }
     }
 
-    // 6. Quick number navigation when not typing in an input
-    if (routeKind(route.current) !== 'search' && !built.clientIdInput.focused) {
-      const numRoutes: Record<string, Route> = {
-        '1': { kind: 'home', tab: 'for_you' },
-        '2': { kind: 'browse', path: {} },
-        '3': { kind: 'search' },
-        '4': { kind: 'library', section: 'saved_tracks' },
-        '5': { kind: 'queue' },
-        '6': { kind: 'lyrics' },
-        '7': { kind: 'settings' },
-      };
-      const dest = numRoutes[e.name];
-      if (dest) {
-        ctx.helpers.showRoute(dest);
-        ctx.helpers.setFocusArea('main');
-        return;
-      }
-    }
-    // 7. Lyrics scroll navigation
+    // 6. Lyrics resume on enter/r
     if (routeKind(route.current) === 'lyrics' && focus.current === 'main') {
-      if (e.name === 'up' || e.name === 'k') {
-        manualLyricsScroll.value = true;
-        built.lyricsScroll.scrollBy(-2);
-        return;
-      }
-      if (e.name === 'down' || e.name === 'j') {
-        manualLyricsScroll.value = true;
-        built.lyricsScroll.scrollBy(2);
-        return;
-      }
+      if (e.name === 'r' || e.name === 'R' || e.name === 'return') { if (manualLyricsScroll.value) resume(); return; }
     }
 
     if (opts.onKey) {
