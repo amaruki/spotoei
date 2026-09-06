@@ -308,7 +308,15 @@ async function runSession(args: string[]): Promise<number> {
           ui.setStatus('Welcome! Press [a] or [Enter] to authenticate with Spotify', true);
         }
       } else {
-        // initUi starts Home after the UI handle exists. Library loads on navigation.
+        void clients.webApi
+          ?.getDevices?.()
+          .then((devices) => {
+            const spotoei = devices?.find((d) => d.name.toLowerCase().includes('spotoei'));
+            if (spotoei && !spotoei.is_active) {
+              void clients.webApi?.transferPlayback?.(spotoei.id, false).catch(() => {});
+            }
+          })
+          .catch(() => {});
       }
 
       wireSubscriptions(

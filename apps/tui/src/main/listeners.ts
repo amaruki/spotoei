@@ -42,7 +42,15 @@ export function wireSubscriptions(
     if (ui) ui.setAuth(next);
     else state.currentInfo.auth = next;
     if (!wasAuthed && next.state === 'authenticated') {
-      // setAuth routes to Home and starts its loader. Preserve its status.
+      void clients.webApi
+        ?.getDevices?.()
+        .then((devices) => {
+          const spotoei = devices?.find((d) => d.name.toLowerCase().includes('spotoei'));
+          if (spotoei && !spotoei.is_active) {
+            void clients.webApi?.transferPlayback?.(spotoei.id, false).catch(() => {});
+          }
+        })
+        .catch(() => {});
     }
   });
 
