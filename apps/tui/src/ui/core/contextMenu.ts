@@ -53,7 +53,15 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
           : hit.type === 'artist'
             ? 'artist'
             : 'playlist';
-    return { kind: targetKind, id: entity.id, uri: entity.uri, name: entity.name ?? entity.id };
+    const firstArtist = (hit.track as { artists?: Array<{ id?: string; uri?: string; name?: string }> })?.artists?.[0];
+    return {
+      kind: targetKind,
+      id: entity.id,
+      uri: entity.uri,
+      name: entity.name ?? entity.id,
+      artistUri: firstArtist?.uri ?? (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : undefined),
+      artistName: firstArtist?.name,
+    };
   }
   if (kind === 'library') {
     const item = ctx.currentLibraryItems.value[built.libraryList.getSelectedIndex()] as
@@ -68,7 +76,16 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
           : item.uri.startsWith('spotify:artist:')
             ? 'artist'
             : 'playlist';
-    return { kind: targetKind, id: item.id, uri: item.uri, name: item.name };
+    const trackItem = item as { artists?: Array<{ id?: string; uri?: string; name?: string }>; artist?: string };
+    const firstArtist = trackItem.artists?.[0];
+    return {
+      kind: targetKind,
+      id: item.id,
+      uri: item.uri,
+      name: item.name,
+      artistUri: firstArtist?.uri ?? (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : undefined),
+      artistName: firstArtist?.name ?? trackItem.artist,
+    };
   }
   if (kind === 'artist' || kind === 'album' || kind === 'playlist') {
     const list =
@@ -80,7 +97,16 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
     const entity = asEntity(ctx.currentRouteItems.value[list.getSelectedIndex()]);
     if (!entity?.id) return null;
     const targetKind = kind === 'artist' ? 'album' : 'track';
-    return { kind: targetKind, id: entity.id, uri: entity.uri, name: entity.name ?? entity.id };
+    const trackEntity = entity as EntityLike & { artists?: Array<{ id?: string; uri?: string; name?: string }> };
+    const firstArtist = trackEntity.artists?.[0];
+    return {
+      kind: targetKind,
+      id: entity.id,
+      uri: entity.uri,
+      name: entity.name ?? entity.id,
+      artistUri: firstArtist?.uri ?? (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : undefined),
+      artistName: firstArtist?.name,
+    };
   }
   if (kind === 'home') {
     const parts = partitionHomeRows(ctx.currentHomeItems.value as never) as unknown as Record<
@@ -100,11 +126,14 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
       return { kind: 'browse-entry', id: row.id, name: row.label ?? row.id };
     }
     if (row?.kind === 'track' && row.track?.id) {
+      const firstArtist = (row.track as { artists?: Array<{ id?: string; uri?: string; name?: string }> })?.artists?.[0];
       return {
         kind: 'track',
         id: row.track.id,
         uri: row.track.uri,
         name: row.track.name ?? row.track.id,
+        artistUri: firstArtist?.uri ?? (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : undefined),
+        artistName: firstArtist?.name,
       };
     }
     if (row?.kind === 'artist' && row.artist?.id) {
@@ -119,10 +148,20 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
   }
   const path = (route.current as { path?: { category?: string } }).path;
   if (kind === 'browse' && path?.category) {
-    const entry = asEntity(ctx.currentRouteItems.value[built.browseList.getSelectedIndex()]) as
-      | (EntityLike & { label?: string })
-      | null;
+    const raw = ctx.currentRouteItems.value[built.browseList.getSelectedIndex()];
+    const entry = asEntity(raw) as (EntityLike & { label?: string }) | null;
     if (!entry?.id) return null;
+    // Tracks-mode rows carry full track data: expose a playable target
+    // so Play/Queue/Like work instead of entry lookup.
+    if (raw && typeof raw === 'object' && 'durationMs' in raw) {
+      const uri = (raw as { uri?: unknown }).uri;
+      return {
+        kind: 'track',
+        id: entry.id,
+        uri: typeof uri === 'string' ? uri : undefined,
+        name: entry.name ?? entry.id,
+      };
+    }
     return { kind: 'browse-entry', id: entry.id, name: entry.label ?? entry.name ?? entry.id };
   }
   return null;

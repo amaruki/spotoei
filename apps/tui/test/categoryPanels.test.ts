@@ -159,8 +159,9 @@ describe('category panels', () => {
       .find((line) => line.includes('Top Tracks') && line.includes('Top Artists'));
     expect(row).toBeDefined();
     // Equal columns: both panel boxes have the same width.
-    const firstBox = row?.indexOf('┌─Top Tracks') ?? -1;
-    const secondBox = row?.indexOf('┌─Top Artists') ?? -1;
+    // Equal columns: both panel boxes have the same width (a11y active marker ▶ included).
+    const firstBox = row?.indexOf('Top Tracks') ?? -1;
+    const secondBox = row?.indexOf('Top Artists') ?? -1;
     expect(firstBox).toBeGreaterThanOrEqual(0);
     expect(secondBox).toBeGreaterThan(firstBox);
     const firstWidth = secondBox - firstBox;

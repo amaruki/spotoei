@@ -1,5 +1,5 @@
 import { BoxRenderable, type CliRenderer, SelectRenderable } from '@opentui/core';
-import { COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_PANEL_BG } from '../theme';
+import { COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
 import { getNavOptions } from '../views/nav';
 import type { UiViewState } from '../types';
 
@@ -14,11 +14,14 @@ export function buildSidebar(renderer: CliRenderer, state: UiViewState): Sidebar
     width: 24,
     height: '100%',
     flexShrink: 0,
-    borderStyle: 'single',
+    borderStyle: 'rounded',
     borderColor: COLOR_BORDER,
     focusedBorderColor: COLOR_BORDER_FOCUS,
     backgroundColor: COLOR_PANEL_BG,
-    title: 'Navigation',
+    title: ' ♫ Spotoei ',
+    titleColor: COLOR_BORDER_FOCUS,
+    bottomTitle: ' [Tab] Focus ',
+    bottomTitleAlignment: 'center',
     flexDirection: 'column',
     paddingLeft: 1,
     paddingRight: 1,
@@ -27,7 +30,7 @@ export function buildSidebar(renderer: CliRenderer, state: UiViewState): Sidebar
   });
   const nav = new SelectRenderable(renderer, {
     id: 'nav',
-    options: getNavOptions(state.auth.state === 'authenticated'),
+    options: getNavOptions(state.auth.state === 'authenticated', Boolean(state.isPrivateSession)),
     showScrollIndicator: false,
     showDescription: true,
     itemSpacing: 0,

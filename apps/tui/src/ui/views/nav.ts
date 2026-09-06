@@ -1,7 +1,12 @@
 // Sidebar navigation entries. Locked-down entries (🔒) are shown when
 // the user is unauthenticated so they still see the route shape but
 // understand nothing will load until they sign in.
-export function getNavOptions(isAuthenticated: boolean) {
+export function getStatusBadge(isPrivateSession: boolean): string {
+  return isPrivateSession ? '🕶 [Private]' : '';
+}
+
+export function getNavOptions(isAuthenticated: boolean, isPrivateSession: boolean = false) {
+  const privateSuffix = isPrivateSession ? ' 🕶' : '';
   if (!isAuthenticated) {
     return [
       { name: '🔒 Home', description: 'Requires login', value: 'home' },
@@ -9,7 +14,11 @@ export function getNavOptions(isAuthenticated: boolean) {
       { name: '🔒 Search', description: 'Requires login', value: 'search' },
       { name: '🔒 Library', description: 'Requires login', value: 'library' },
       { name: '🔒 Queue', description: 'Requires login', value: 'queue' },
-      { name: '⚙ Settings', description: 'Setup & Auth', value: 'settings' },
+      {
+        name: `⚙ Settings${privateSuffix}`,
+        description: isPrivateSession ? 'Private Session active' : 'Setup & Auth',
+        value: 'settings',
+      },
     ];
   }
   return [
@@ -18,6 +27,10 @@ export function getNavOptions(isAuthenticated: boolean) {
     { name: 'Search', description: 'Find music', value: 'search' },
     { name: 'Library', description: 'Saved tracks', value: 'library' },
     { name: 'Queue', description: 'Upcoming', value: 'queue' },
-    { name: 'Settings', description: 'Auth & info', value: 'settings' },
+    {
+      name: `Settings${privateSuffix}`,
+      description: isPrivateSession ? 'Private Session active' : 'Auth & info',
+      value: 'settings',
+    },
   ];
 }

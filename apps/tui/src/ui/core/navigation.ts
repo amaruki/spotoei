@@ -12,28 +12,18 @@ import {
   searchPanelLists,
 } from './categoryPanels';
 import { defaultRoute, popRoute, pushRoute, routeFromLegacy, routeKind } from './navigationStack';
-import type { FocusArea, Route, UiCoreContext } from './types';
+import type { AnySelect, FocusArea, Route, UiCoreContext } from './types';
 
 export function createNavigationHelpers(ctx: UiCoreContext) {
   const { built, focus, manualLyricsScroll, opts, route, state } = ctx;
   const saveRoutePosition = (r: Route): void => {
     const kind = routeKind(r);
     if (kind === 'home') {
-      homePanelLists(built).forEach((list, i) => {
-        ctx.positions.saveKey(panelPositionKey(r, 'home', HOME_PANELS[i] ?? String(i)), {
-          selected: list.getSelectedIndex(),
-          scroll: 0,
-        });
-      });
+      homePanelLists(built).forEach((l, i) => ctx.positions.saveKey(panelPositionKey(r, 'home', HOME_PANELS[i] ?? String(i)), { selected: l.getSelectedIndex(), scroll: 0 }));
       return;
     }
     if (kind === 'search') {
-      searchPanelLists(built).forEach((list, i) => {
-        ctx.positions.saveKey(panelPositionKey(r, 'search', SEARCH_PANELS[i] ?? String(i)), {
-          selected: list.getSelectedIndex(),
-          scroll: 0,
-        });
-      });
+      searchPanelLists(built).forEach((l, i) => ctx.positions.saveKey(panelPositionKey(r, 'search', SEARCH_PANELS[i] ?? String(i)), { selected: l.getSelectedIndex(), scroll: 0 }));
       return;
     }
     const list = listForRoute(r);
@@ -104,9 +94,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     built.sidebar.visible = !loginMode && !isVizFull && sidebarByWidth;
     built.playbackBar.visible = !loginMode;
 
-    if (finalKind === 'lyrics') {
-      manualLyricsScroll.value = false;
-    }
+    if (manualLyricsScroll.value) { manualLyricsScroll.value = false; if (ctx.lyricsResumeTimer.value) clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout); ctx.lyricsResumeTimer.value = null; built.lyricsResumeHint.visible = false; }
     ctx.helpers.setNavSelected(next);
 
     // Narrow terminals stack the 2x2 grids vertically.
@@ -276,5 +264,27 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     }
   };
 
-  return { showRoute, navigateBack, setFocusArea, toggleSidebar };
+  const getActiveList = (): AnySelect | null => {
+    if (ctx.palette.open) return built.paletteList;
+    if (ctx.menu.open) return built.menuList;
+    if (focus.current === 'sidebar') return built.nav;
+    if (focus.current === 'main') return listForRoute(route.current);
+    return null;
+  };
+  const moveActiveList = (delta: number): boolean => {
+    const list = getActiveList();
+    if (!list) return false;
+    if (delta > 0) list.moveDown(delta);
+    else if (delta < 0) list.moveUp(-delta);
+    return true;
+  };
+  const jumpActiveList = (to: 'top' | 'bottom', targetIndex?: number): boolean => {
+    const list = getActiveList();
+    if (!list) return false;
+    if (typeof targetIndex === 'number') list.setSelectedIndex(Math.max(0, Math.min(list.options.length - 1, targetIndex)));
+    else if (to === 'top') list.setSelectedIndex(0);
+    else list.setSelectedIndex(Math.max(0, list.options.length - 1));
+    return true;
+  };
+  return { showRoute, navigateBack, setFocusArea, toggleSidebar, getActiveList, moveActiveList, jumpActiveList };
 }

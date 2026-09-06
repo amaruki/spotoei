@@ -52,14 +52,17 @@ export interface UiCoreContext {
     value: { tracks: number[]; artists: number[]; albums: number[]; playlists: number[] };
   };
   manualLyricsScroll: { value: boolean };
+  lyricsResumeTimer: { value: ReturnType<typeof setTimeout> | null };
+  drawerOpen: { value: boolean };
+  libraryHasMore: { value: boolean | undefined };
   menu: {
     open: boolean;
     prevFocus: FocusArea;
     items: ContextMenuItem[];
   };
   palette: {
-    commands: Array<{ name: string; description: string; action: () => void }>;
-    filtered: Array<{ name: string; description: string; action: () => void }>;
+    commands: Array<{ name: string; description: string; action: () => void; isAvailable?: () => boolean }>;
+    filtered: Array<{ name: string; description: string; action: () => void; isAvailable?: () => boolean }>;
     open: boolean;
     prevFocus: FocusArea;
   };
@@ -68,6 +71,7 @@ export interface UiCoreContext {
   helpers: {
     getFooterHelp: () => string;
     setStatus: (msg: string, persist?: boolean) => void;
+    clearStatusLayer: () => void;
     refreshNav: () => void;
     setNavSelected: (target: Route) => void;
     showRoute: (next: Route | string, force?: boolean, replace?: boolean) => void;
@@ -89,6 +93,9 @@ export interface UiCoreContext {
     closeContextMenu: () => void;
     isContextMenuOpen: () => boolean;
     runMenuSelected: () => void;
+    getActiveList: () => AnySelect | null;
+    moveActiveList: (delta: number) => boolean;
+    jumpActiveList: (to: 'top' | 'bottom', targetIndex?: number) => boolean;
   };
 }
 

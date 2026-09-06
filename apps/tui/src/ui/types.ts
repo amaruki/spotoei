@@ -54,6 +54,19 @@ export interface UiViewState {
   };
   lyrics?: LyricsDocumentT;
   statusMessage?: string;
+  isPrivateSession?: boolean;
+  audioConfig?: UiAudioConfig;
+}
+
+export interface UiAudioConfig {
+  deviceMode?: string;
+  audioBackend?: string;
+  bitrate?: string;
+  crossfadeDurationMs?: number;
+  normalisation?: boolean;
+  pregain?: number;
+  cachePath?: string;
+  cacheSizeMb?: number;
 }
 
 export interface VisualizerFrame {
@@ -82,6 +95,8 @@ export interface ContextTarget {
   id: string;
   uri?: string;
   name: string;
+  artistUri?: string;
+  artistName?: string;
 }
 
 export interface ContextMenuItem {
@@ -104,11 +119,11 @@ export interface Ui {
   setVisualizerFrame(frame: VisualizerFrame | null): void;
   setSearchResults(query: string, results: SearchResponseT): void;
   setSearchFilter(filter: SearchFilter): void;
-  setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }, opts?: { append?: boolean }): void;
+  setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }, opts?: { append?: boolean; isStale?: boolean; hasMore?: boolean }): void;
   setLibraryLoading(loading: boolean): void;
   setLibraryLines(lines: string[], empty: boolean): void;
-  setQueueSnapshot(snap: QueueSnapshotT): void;
-  setHomeItems(rows: HomeRow[], meta?: { error?: string; rangeLabel?: string }): void;
+  setQueueSnapshot(snap: QueueSnapshotT, opts?: { isStale?: boolean }): void;
+  setHomeItems(rows: HomeRow[], meta?: { error?: string; rangeLabel?: string; isStale?: boolean }): void;
   setArtistAlbums(
     items: Array<{
       id: string;
@@ -117,7 +132,7 @@ export interface Ui {
       artists: Array<{ id?: string; name: string; uri?: string }>;
       releaseDate?: string;
     }>,
-    opts?: { append?: boolean },
+    opts?: { append?: boolean; isStale?: boolean },
   ): void;
   setAlbumTracks(
     items: Array<{
@@ -127,7 +142,7 @@ export interface Ui {
       artists: Array<{ id?: string; name: string; uri?: string }>;
       durationMs: number;
     }>,
-    opts?: { append?: boolean },
+    opts?: { append?: boolean; isStale?: boolean },
   ): void;
   setPlaylistTracks(
     items: Array<{
@@ -137,9 +152,8 @@ export interface Ui {
       artists: Array<{ id?: string; name: string; uri?: string }>;
       durationMs: number;
     }>,
-    opts?: { append?: boolean },
+    opts?: { append?: boolean; isStale?: boolean },
   ): void;
-  setArtistHeader(artist: { name: string } | null): void;
   setAlbumHeader(album: { name: string; artists: Array<{ name: string }> } | null): void;
   setPlaylistHeader(playlist: { name: string; owner?: { displayName?: string } } | null): void;
   setBrowseCategories(cats: Array<{ id: string; label: string; entries: unknown[] }>): void;
@@ -152,9 +166,11 @@ export interface Ui {
       source: unknown;
     }>,
   ): void;
+  setBrowseTracks(tracks: Array<{ id: string; uri: string; name: string; artists: Array<{ name: string }>; durationMs?: number }>): void;
+  setBrowseBanner(banner: string | null): void;
   setLyrics(doc: LyricsDocumentT | null): void;
   setSearchLoading(loading: boolean): void;
-  setPaletteCommands(cmds: Array<{ name: string; description: string; action: () => void }>): void;
+  setPaletteCommands(cmds: Array<{ name: string; description: string; action: () => void; isAvailable?: () => boolean }>): void;
   openPalette(): void;
   closePalette(): void;
   isPaletteOpen(): boolean;
@@ -166,6 +182,9 @@ export interface Ui {
   setPlaybackPosition(pos: PlaybackPositionDataT): void;
   setAuth(auth: AuthStatusDataT): void;
   focusClientIdInput(): void;
+  isAnyInputFocused(): boolean;
+  setAudioConfig(config: Partial<UiAudioConfig>): void;
+  setPrivateSession?(active: boolean): void;
   start(): Promise<void>;
   shutdown(): Promise<void>;
 }
@@ -187,4 +206,5 @@ export interface UiOptions {
   onAuthenticate?: () => void | Promise<void>;
   onRouteChange?: (route: Route) => void;
   onCycleVisualizerMode?: () => void;
+  vimTimeoutMs?: number;
 }
