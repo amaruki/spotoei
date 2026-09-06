@@ -10,9 +10,9 @@ export function buildStatusLayer(renderer: CliRenderer): StatusLayerNodes {
   const statusLayer = new BoxRenderable(renderer, {
     id: 'status-layer',
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: '100%',
+    top: 1,
+    right: 2,
+    width: 38,
     height: 3,
     borderStyle: 'rounded',
     borderColor: COLOR_WARN,
