@@ -7,15 +7,13 @@ import {
   GENRES_ENTRIES,
   MOODS_ENTRIES,
   NEW_RELEASES_ENTRIES,
-  SEARCH_ALL_ENTRIES,
 } from '../src/browse/data';
 
 describe('DISCOVER_ENTRIES', () => {
-  it('contains top_artists, new_releases, and search_all', () => {
+  it('contains top_artists and new_releases', () => {
     const ids = DISCOVER_ENTRIES.map((e) => e.id);
     expect(ids).toContain('top_artists');
     expect(ids).toContain('new_releases');
-    expect(ids).toContain('search_all');
   });
 
   it('all entries are enabled', () => {
@@ -72,16 +70,5 @@ describe('DECADES_ENTRIES', () => {
     expect(ids).toContain('2000s');
     expect(ids).toContain('2010s');
     expect(ids).toContain('2020s');
-  });
-});
-
-describe('SEARCH_ALL_ENTRIES', () => {
-  it('contains entries for tracks, albums, artists, and playlists', () => {
-    expect(SEARCH_ALL_ENTRIES.length).toBe(4);
-    const ids = SEARCH_ALL_ENTRIES.map((e) => e.id);
-    expect(ids).toContain('search_tracks');
-    expect(ids).toContain('search_albums');
-    expect(ids).toContain('search_artists');
-    expect(ids).toContain('search_playlists');
   });
 });

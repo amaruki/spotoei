@@ -6,7 +6,7 @@ export function browseCategoryOptions(categories: BrowseCategoryT[]): Array<{
 }> {
   return categories.map((c) => ({
     name: `▸ ${c.label}`,
-    description: `${c.entries.length} entries`,
+    description: c.entries.length > 0 ? `${c.entries.length} entries` : 'Live from Spotify',
   }));
 }
 

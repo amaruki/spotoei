@@ -3,9 +3,9 @@ import { describe, expect, it } from 'bun:test';
 import { buildBrowseCategories, DEFAULT_BROWSE_CONFIG } from '../src/browse';
 
 describe('buildBrowseCategories', () => {
-  it('returns all 10 default categories with empty config', () => {
+  it('returns all 9 default categories with empty config', () => {
     const cats = buildBrowseCategories(DEFAULT_BROWSE_CONFIG);
-    expect(cats.length).toBe(10);
+    expect(cats.length).toBe(9);
     const ids = cats.map((c) => c.id);
     expect(ids).toContain('discover');
     expect(ids).toContain('charts');
@@ -16,15 +16,19 @@ describe('buildBrowseCategories', () => {
     expect(ids).toContain('genres');
     expect(ids).toContain('decades');
     expect(ids).toContain('editorial');
-    expect(ids).toContain('search_all');
+    expect(ids).not.toContain('search_all');
   });
 
-  it('renders charts as disabled placeholder when config has no charts', () => {
+  it('renders working search fallback when config has no charts', () => {
     const cats = buildBrowseCategories(DEFAULT_BROWSE_CONFIG);
     const charts = cats.find((c) => c.id === 'charts');
     expect(charts).toBeDefined();
-    expect(charts?.entries[0]?.id).toBe('charts_unconfigured');
-    expect(charts?.entries[0]?.enabled).toBe(false);
+    expect(charts!.entries.length).toBeGreaterThan(0);
+    for (const e of charts!.entries) {
+      expect(e.enabled).toBe(true);
+      expect(e.source.kind).toBe('search');
+    }
+    expect(charts?.entries[0]?.id).toBe('charts_top_hits');
   });
 
   it('renders user-configured charts as enabled entries', () => {
@@ -69,11 +73,15 @@ describe('buildBrowseCategories', () => {
     }
   });
 
-  it('renders editorial as disabled placeholder when config has no editorial', () => {
+  it('renders working search fallback when config has no editorial', () => {
     const cats = buildBrowseCategories(DEFAULT_BROWSE_CONFIG);
     const editorial = cats.find((c) => c.id === 'editorial');
-    expect(editorial?.entries[0]?.id).toBe('editorial_unconfigured');
-    expect(editorial?.entries[0]?.enabled).toBe(false);
+    expect(editorial).toBeDefined();
+    expect(editorial!.entries.length).toBeGreaterThan(0);
+    for (const e of editorial!.entries) {
+      expect(e.enabled).toBe(true);
+      expect(e.source.kind).toBe('search');
+    }
   });
 
   it('renders user-configured editorial playlists as enabled', () => {
@@ -87,40 +95,17 @@ describe('buildBrowseCategories', () => {
     expect(editorial?.entries[0]?.enabled).toBe(true);
   });
 
-  it('search_all has 4 entity-type entries', () => {
-    const cats = buildBrowseCategories(DEFAULT_BROWSE_CONFIG);
-    const search = cats.find((c) => c.id === 'search_all');
-    expect(search?.entries.length).toBe(4);
-    const types = search?.entries.map((e) => {
-      const src = e.source;
-      return src.kind === 'search' ? src.types : [];
-    });
-    expect(types?.[0]).toContain('track');
-    expect(types?.[1]).toContain('album');
-    expect(types?.[2]).toContain('artist');
-    expect(types?.[3]).toContain('playlist');
-  });
-
-  it('discover entry search_all uses wildcard query *', () => {
-    const cats = buildBrowseCategories(DEFAULT_BROWSE_CONFIG);
-    const discover = cats.find((c) => c.id === 'discover');
-    const all = discover?.entries.find((e) => e.id === 'search_all');
-    expect(all?.source.kind).toBe('search');
-    if (all?.source.kind === 'search') {
-      expect(all.source.query).toBe('*');
-    }
-  });
-
   it('static browse categories have enabled entries', () => {
     const cats = buildBrowseCategories(DEFAULT_BROWSE_CONFIG);
     for (const id of [
       'discover',
+      'charts',
       'new_releases',
       'moods',
       'activities',
       'genres',
       'decades',
-      'search_all',
+      'editorial',
     ]) {
       const c = cats.find((x) => x.id === id);
       expect(c).toBeDefined();
@@ -129,5 +114,63 @@ describe('buildBrowseCategories', () => {
         expect(e.enabled).toBe(true);
       }
     }
+  });
+
+  it('keeps the registry rich enough to feel like browse', () => {
+    const cats = buildBrowseCategories(DEFAULT_BROWSE_CONFIG);
+    const count = (id: string) => cats.find((c) => c.id === id)?.entries.length ?? 0;
+    expect(count('moods')).toBeGreaterThanOrEqual(10);
+    expect(count('activities')).toBeGreaterThanOrEqual(8);
+    expect(count('genres')).toBeGreaterThanOrEqual(10);
+    expect(count('charts')).toBeGreaterThanOrEqual(3);
+    expect(count('editorial')).toBeGreaterThanOrEqual(2);
+    const total = cats.reduce((n, c) => n + c.entries.length, 0);
+    expect(total).toBeGreaterThanOrEqual(50);
+  });
+
+  it('every enabled search entry can resolve to playable rows', () => {
+    // Contract with handleSearchBrowseEntryInline: a blank query redirects
+    // to Search; otherwise at least one of track/playlist/album types must
+    // be present (direct tracks, playlist-tracks fallback, album-tracks
+    // fallback). Anything else dead-ends on "No tracks found".
+    const cats = buildBrowseCategories(DEFAULT_BROWSE_CONFIG);
+    for (const cat of cats) {
+      for (const entry of cat.entries) {
+        if (!entry.enabled || entry.source.kind !== 'search') continue;
+        const query = entry.source.query.trim();
+        const types = entry.source.types as string[];
+        const renderable =
+          query === '' ||
+          types.includes('track') ||
+          types.includes('playlist') ||
+          types.includes('album');
+        expect(renderable).toBe(true);
+      }
+    }
+  });
+
+  it('charts fallback entries carry working search queries', () => {
+    const cats = buildBrowseCategories(DEFAULT_BROWSE_CONFIG);
+    const charts = cats.find((c) => c.id === 'charts');
+    const queries = (charts?.entries ?? []).map((e) =>
+      e.source.kind === 'search' ? e.source.query : '',
+    );
+    expect(queries).toEqual(['top hits', 'viral hits', 'tag:new', 'global hits']);
+    for (const e of charts?.entries ?? []) {
+      expect(e.enabled).toBe(true);
+      if (e.source.kind === 'search') {
+        expect(e.source.query.trim().length).toBeGreaterThan(0);
+        expect(e.source.types.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('editorial fallback entries carry working search queries', () => {
+    const cats = buildBrowseCategories(DEFAULT_BROWSE_CONFIG);
+    const editorial = cats.find((c) => c.id === 'editorial');
+    const queries = (editorial?.entries ?? []).map((e) =>
+      e.source.kind === 'search' ? e.source.query : '',
+    );
+    expect(queries).toEqual(['top albums', 'best songs', 'classic hits']);
   });
 });

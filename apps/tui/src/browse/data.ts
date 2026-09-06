@@ -79,6 +79,41 @@ export const MOODS_ENTRIES: BrowseEntryT[] = [
     enabled: true,
     source: { kind: 'search', query: 'party dance', types: ['playlist'] },
   },
+  {
+    id: 'relax',
+    label: 'Relax',
+    description: 'Unwind and decompress',
+    enabled: true,
+    source: { kind: 'search', query: 'relax calm', types: ['playlist', 'track'] },
+  },
+  {
+    id: 'romance',
+    label: 'Romance',
+    description: 'Intimate and romantic melodies',
+    enabled: true,
+    source: { kind: 'search', query: 'romance love', types: ['playlist'] },
+  },
+  {
+    id: 'sad',
+    label: 'Sad & Melancholy',
+    description: 'Emotional and reflective songs',
+    enabled: true,
+    source: { kind: 'search', query: 'sad melancholic', types: ['playlist', 'track'] },
+  },
+  {
+    id: 'ambient',
+    label: 'Ambient',
+    description: 'Atmospheric soundscapes',
+    enabled: true,
+    source: { kind: 'search', query: 'ambient atmospheric', types: ['playlist'] },
+  },
+  {
+    id: 'energy',
+    label: 'High Energy',
+    description: 'Fast and motivational tracks',
+    enabled: true,
+    source: { kind: 'search', query: 'high energy', types: ['playlist', 'track'] },
+  },
 ];
 
 export const ACTIVITIES_ENTRIES: BrowseEntryT[] = [
@@ -116,6 +151,27 @@ export const ACTIVITIES_ENTRIES: BrowseEntryT[] = [
     description: 'Acoustic and jazz background tunes',
     enabled: true,
     source: { kind: 'search', query: 'dinner jazz acoustic', types: ['playlist'] },
+  },
+  {
+    id: 'meditation',
+    label: 'Meditation',
+    description: 'Mindful breathing and peace',
+    enabled: true,
+    source: { kind: 'search', query: 'meditation mindfulness', types: ['playlist'] },
+  },
+  {
+    id: 'reading',
+    label: 'Reading',
+    description: 'Quiet acoustic background',
+    enabled: true,
+    source: { kind: 'search', query: 'reading acoustic quiet', types: ['playlist'] },
+  },
+  {
+    id: 'travel',
+    label: 'Travel & Commute',
+    description: 'Soundtracks for the journey',
+    enabled: true,
+    source: { kind: 'search', query: 'road trip travel', types: ['playlist'] },
   },
 ];
 
@@ -165,6 +221,34 @@ export const GENRES_ENTRIES: BrowseEntryT[] = [
       query: 'genre:electronic',
       types: ['playlist', 'track', 'album'],
     },
+  },
+  {
+    id: 'rnb',
+    label: 'R&B',
+    description: 'Smooth rhythm and blues',
+    enabled: true,
+    source: { kind: 'search', query: 'r&b soul', types: ['playlist', 'track'] },
+  },
+  {
+    id: 'metal',
+    label: 'Metal',
+    description: 'Heavy riffs and distortion',
+    enabled: true,
+    source: { kind: 'search', query: 'heavy metal', types: ['playlist', 'album'] },
+  },
+  {
+    id: 'country',
+    label: 'Country',
+    description: 'Americana and modern country',
+    enabled: true,
+    source: { kind: 'search', query: 'country americana', types: ['playlist', 'track'] },
+  },
+  {
+    id: 'electronic',
+    label: 'Electronic',
+    description: 'Beats, house and techno',
+    enabled: true,
+    source: { kind: 'search', query: 'electronic edm', types: ['playlist', 'track'] },
   },
 ];
 
@@ -248,5 +332,60 @@ export const SEARCH_ALL_ENTRIES: BrowseEntryT[] = [
     description: 'Search public playlists',
     enabled: true,
     source: { kind: 'search', query: '', types: ['playlist'] },
+  },
+];
+
+export const CHARTS_FALLBACK_ENTRIES: BrowseEntryT[] = [
+  {
+    id: 'charts_top_hits',
+    label: 'Top Hits',
+    description: 'Current popular hits across genres',
+    enabled: true,
+    source: { kind: 'search', query: 'top hits', types: ['playlist', 'track'] },
+  },
+  {
+    id: 'charts_viral',
+    label: 'Viral Hits',
+    description: 'Trending tracks on the rise',
+    enabled: true,
+    source: { kind: 'search', query: 'viral hits', types: ['playlist', 'track'] },
+  },
+  {
+    id: 'charts_new',
+    label: 'New & Fresh',
+    description: 'Freshly released tracks',
+    enabled: true,
+    source: { kind: 'search', query: 'tag:new', types: ['playlist', 'album', 'track'] },
+  },
+  {
+    id: 'charts_global',
+    label: 'Global Hits',
+    description: 'Top international songs',
+    enabled: true,
+    source: { kind: 'search', query: 'global hits', types: ['playlist', 'track'] },
+  },
+];
+
+export const EDITORIAL_FALLBACK_ENTRIES: BrowseEntryT[] = [
+  {
+    id: 'editorial_albums',
+    label: 'Top Albums',
+    description: 'Curated complete records',
+    enabled: true,
+    source: { kind: 'search', query: 'top albums', types: ['album', 'playlist'] },
+  },
+  {
+    id: 'editorial_songs',
+    label: 'Best Songs',
+    description: 'Critically acclaimed tracks',
+    enabled: true,
+    source: { kind: 'search', query: 'best songs', types: ['playlist', 'track'] },
+  },
+  {
+    id: 'editorial_classics',
+    label: 'Classic Hits',
+    description: 'Timeless master recordings',
+    enabled: true,
+    source: { kind: 'search', query: 'classic hits', types: ['playlist', 'album'] },
   },
 ];
