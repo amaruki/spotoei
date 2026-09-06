@@ -14,6 +14,12 @@ pub fn keyring_entry(account_id: &str) -> Result<keyring::Entry, AuthError> {
         .map_err(|e| AuthError::KeyringUnavailable(e.to_string()))
 }
 
+pub fn streaming_keyring_entry(account_id: &str) -> Result<keyring::Entry, AuthError> {
+    let user = format!("streaming-refresh:{account_id}");
+    keyring::Entry::new(KEYRING_SERVICE, &user)
+        .map_err(|e| AuthError::KeyringUnavailable(e.to_string()))
+}
+
 pub async fn load_from_keyring(account_id: &str) -> Result<Option<AccessToken>, AuthError> {
     let entry = keyring_entry(account_id)?;
     match entry.get_password() {
@@ -26,6 +32,36 @@ pub async fn load_from_keyring(account_id: &str) -> Result<Option<AccessToken>, 
         },
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(AuthError::KeyringUnavailable(e.to_string())),
+    }
+}
+
+pub async fn load_streaming_session() -> Result<Option<AccessToken>, AuthError> {
+    if memory_only() {
+        return Ok(None);
+    }
+    let entry = streaming_keyring_entry("default")?;
+    match entry.get_password() {
+        Ok(s) => match serde_json::from_str::<AccessToken>(&s) {
+            Ok(at) => Ok(Some(at)),
+            Err(_) => Ok(None),
+        },
+        Err(_) => Ok(None),
+    }
+}
+
+pub async fn save_streaming_session(at: &AccessToken) -> Result<(), AuthError> {
+    if memory_only() {
+        return Ok(());
+    }
+    let entry = streaming_keyring_entry("default")?;
+    let s = serde_json::to_string(at).map_err(|e| AuthError::Config(e.to_string()))?;
+    let _ = entry.set_password(&s);
+    Ok(())
+}
+
+pub async fn delete_streaming_session() {
+    if let Ok(entry) = streaming_keyring_entry("default") {
+        let _ = entry.delete_credential();
     }
 }
 

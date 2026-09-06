@@ -275,7 +275,7 @@ impl super::LibrespotEngine {
         // The auth manager is authoritative for identity: always connect with
         // a fresh web token. The librespot disk cache is still handed to the
         // session for its internals, but never trusted to pick the user.
-        let (token, _) = self.auth.get_web_token().await.map_err(|e| {
+        let (token, _) = self.auth.get_streaming_token().await.map_err(|e| {
             ConnectError::Fatal(format!("Spotify authentication required: {:?}", e))
         })?;
         let credentials = librespot::core::authentication::Credentials::with_access_token(token);

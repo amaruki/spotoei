@@ -42,15 +42,32 @@ export function wireSubscriptions(
     if (ui) ui.setAuth(next);
     else state.currentInfo.auth = next;
     if (!wasAuthed && next.state === 'authenticated') {
-      void clients.webApi
-        ?.getDevices?.()
-        .then((devices) => {
+      void (async () => {
+        const hasStreaming = await clients.auth?.streamingStatus?.().catch(() => false);
+        if (!hasStreaming) {
+          const ui = getUi();
+          if (ui) ui.setStatus('Authenticating Audio Streaming (Step 2/2)...', true);
+          try {
+            const res = await clients.auth.beginStreaming();
+            if (res.authUrl) {
+              const { openBrowser, copyToClipboard } = await import('../system');
+              openBrowser(res.authUrl);
+              copyToClipboard(res.authUrl);
+            }
+          } catch {
+            // Fall back to manual retry
+          }
+        }
+        try {
+          const devices = await clients.webApi?.getDevices?.();
           const spotoei = devices?.find((d) => d.name.toLowerCase().includes('spotoei'));
           if (spotoei && !spotoei.is_active) {
             void clients.webApi?.transferPlayback?.(spotoei.id, false).catch(() => {});
           }
-        })
-        .catch(() => {});
+        } catch {
+          // ignore device probe
+        }
+      })();
     }
   });
 

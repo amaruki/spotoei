@@ -32,7 +32,8 @@ const validateAuthToken = (data: unknown) => {
 export interface AuthClient {
   status(): Promise<AuthStatusDataT>;
   begin(scopes?: string[]): Promise<AuthStatusDataT>;
-  logout(): Promise<AuthStatusDataT>;
+  beginStreaming(): Promise<AuthStatusDataT>;
+  streamingStatus(): Promise<boolean>;
   setClientId(clientId: string): Promise<void>;
   getWebToken(): Promise<string>;
   clearToken(): void;
@@ -173,7 +174,20 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
       cachedToken = null;
       return res;
     },
-
+    async beginStreaming(): Promise<AuthStatusDataT> {
+      const id = newRequestId();
+      const cmd = makeAuthBeginStreaming(id);
+      return sendCommand<AuthStatusDataT>(cmd, validateAuthStatus);
+    },
+    async streamingStatus(): Promise<boolean> {
+      const id = newRequestId();
+      const cmd = makeAuthStreamingStatus(id);
+      const res = await sendCommand<{ authenticated: boolean }>(cmd, (data) => ({
+        ok: true,
+        value: data as { authenticated: boolean },
+      }));
+      return res?.authenticated ?? false;
+    },
     async logout(): Promise<AuthStatusDataT> {
       const id = newRequestId();
       const cmd = makeAuthLogout(id);

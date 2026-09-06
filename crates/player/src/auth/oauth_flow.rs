@@ -100,6 +100,79 @@ impl AuthManager {
         Ok(snap)
     }
 
+    pub async fn has_streaming_session(&self) -> bool {
+        if let Ok(Some(st)) = storage::load_streaming_session().await {
+            !st.access_token.is_empty()
+        } else {
+            false
+        }
+    }
+
+    pub async fn begin_streaming(self: &Arc<Self>) -> Result<AuthStatus, AuthError> {
+        if std::env::var("SPOTOEI_MOCK_AUTH").is_ok() {
+            return self.begin_mock().await;
+        }
+        self.cancel_in_flight().await;
+
+        let verifier = generate_verifier();
+        let challenge = s256_challenge(&verifier);
+        let csrf = generate_state();
+
+        let port = KEYMASTER_PORT; // 8989
+        let listener = match tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await {
+            Ok(l) => l,
+            Err(e) => {
+                let snap = {
+                    let mut s = self.state.lock().await;
+                    s.pkce = None;
+                    self.snapshot_locked(&s, None)
+                };
+                if let Ok(value) = serde_json::to_value(&snap) {
+                    self.emit("auth.changed", value).await;
+                }
+                return Err(AuthError::Http(format!("bind 127.0.0.1:{port}: {e}")));
+            }
+        };
+        let bound_port = listener
+            .local_addr()
+            .map_err(|e| AuthError::Http(format!("local_addr: {e}")))?
+            .port();
+        let redirect_uri = format!("http://127.0.0.1:{bound_port}/login");
+
+        let scope_str = "streaming user-read-playback-state user-modify-playback-state";
+        let url = format!(
+            "{SPOTIFY_ACCOUNTS}/authorize?client_id={cid}&response_type=code&redirect_uri={ru}&code_challenge_method=S256&code_challenge={cc}&state={st}&scope={sc}",
+            cid = urlencoding::encode(KEYMASTER_CLIENT_ID),
+            ru = urlencoding::encode(&redirect_uri),
+            cc = urlencoding::encode(&challenge),
+            st = urlencoding::encode(&csrf),
+            sc = urlencoding::encode(scope_str),
+        );
+        let snap = {
+            let mut s = self.state.lock().await;
+            s.pkce = Some(PkceTx {
+                verifier: verifier.clone(),
+                state: csrf.clone(),
+            });
+            s.last_auth_url = Some(url.clone());
+            s.state = AuthState::Authenticating;
+            self.snapshot_locked(&s, Some(url))
+        };
+        if let Ok(value) = serde_json::to_value(&snap) {
+            self.emit("auth.changed", value).await;
+        }
+
+        let this = Arc::clone(self);
+        let (cancel_tx, cancel_rx) = oneshot::channel();
+        *self.cancel.lock().await = Some(cancel_tx);
+        let handle = tokio::spawn(async move {
+            if let Err(e) = this.serve_callback(listener, bound_port, cancel_rx).await {
+                warn!(error = %e, "auth callback server failed");
+            }
+        });
+        *self.join_handle.lock().await = Some(handle);
+        Ok(snap)
+    }
     async fn begin_mock(self: &Arc<Self>) -> Result<AuthStatus, AuthError> {
         let refresh = std::env::var("SPOTOEI_MOCK_REFRESH_TOKEN")
             .unwrap_or_else(|_| format!("mock-refresh-{}", now_ms()));
@@ -170,6 +243,7 @@ impl AuthManager {
         }
         // Drop the playback credentials too: otherwise the next session setup
         // silently resumes the previous user's connection.
+        storage::delete_streaming_session().await;
         storage::delete_librespot_credentials_cache();
         self.bump_epoch();
         if let Ok(value) = serde_json::to_value(&snap) {
@@ -192,12 +266,53 @@ impl AuthManager {
         if pkce.state != state {
             return Err(AuthError::OAuth("state mismatch".into()));
         }
+        let auth_url = {
+            let s = self.state.lock().await;
+            s.last_auth_url.clone()
+        };
+        let is_streaming_auth = auth_url
+            .as_deref()
+            .map(|u| u.contains(KEYMASTER_CLIENT_ID))
+            .unwrap_or(false);
+
+        let exchange_cid = if is_streaming_auth {
+            KEYMASTER_CLIENT_ID.to_string()
+        } else {
+            self.client_id.read().await.clone()
+        };
+
         let (at, _account_id) = self
-            .exchange_code(code, &pkce.verifier, "127.0.0.1", port)
+            .exchange_code_with_client(&exchange_cid, code, &pkce.verifier, "127.0.0.1", port)
             .await?;
         let account_id = at.account_id.clone();
         let scopes = at.scopes.clone();
         let token_for_store = at.clone();
+
+        if is_streaming_auth {
+            let _ = storage::save_streaming_session(&token_for_store).await;
+            storage::delete_librespot_credentials_cache();
+            self.bump_epoch();
+            let snap = {
+                let mut s = self.state.lock().await;
+                s.pkce = None;
+                s.last_auth_url = None;
+                self.snapshot_locked(&s, None)
+            };
+            if let Ok(value) = serde_json::to_value(&snap) {
+                self.emit("auth.changed", value).await;
+            }
+            self.emit(
+                "auth.completed",
+                json!({
+                    "accountId": account_id,
+                    "scopes": scopes,
+                    "streaming": true,
+                }),
+            )
+            .await;
+            return Ok(());
+        }
+
         let snap = {
             let mut s = self.state.lock().await;
             s.current = Some(at);

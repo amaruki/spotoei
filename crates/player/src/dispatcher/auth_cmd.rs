@@ -35,6 +35,19 @@ pub async fn dispatch(command: &str, cmd: &Command, auth: &Arc<AuthManager>) -> 
                 ),
             }
         }
+        "auth.begin_streaming" => {
+            match auth.begin_streaming().await {
+                Ok(st) => ok(&cmd.id, serde_json::to_value(&st).unwrap_or(Value::Null)),
+                Err(e) => err(
+                    &cmd.id,
+                    ErrorBody::new(ErrorCode::AuthFailed, format!("auth.begin_streaming failed: {e}")),
+                ),
+            }
+        }
+        "auth.streaming_status" => {
+            let has_streaming = auth.has_streaming_session().await;
+            ok(&cmd.id, serde_json::json!({ "authenticated": has_streaming }))
+        }
         "auth.logout" => match auth.logout().await {
             Ok(st) => ok(&cmd.id, serde_json::to_value(&st).unwrap_or(Value::Null)),
             Err(e) => err(

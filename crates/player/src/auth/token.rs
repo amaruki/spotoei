@@ -57,14 +57,62 @@ impl AuthManager {
         Ok((token_for_return, expires_at))
     }
 
+    /// Return a usable access token minted specifically for the Keymaster client ID,
+    /// used exclusively by Librespot AP & login5 streaming audio decryption.
+    pub async fn get_streaming_token(&self) -> Result<(String, u64), AuthError> {
+        if std::env::var("SPOTOEI_MOCK_AUTH").is_ok() {
+            return self.get_web_token_mock().await;
+        }
+        let _guard = self.refresh_lock.lock().await;
+        if let Ok(Some(st)) = storage::load_streaming_session().await {
+            if st.expires_at > now_ms() + 30_000 {
+                return Ok((st.access_token, st.expires_at));
+            }
+            if !st.refresh_token.trim().is_empty() {
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(10))
+                    .build()
+                    .map_err(|e| AuthError::Http(e.to_string()))?;
+                let body = [
+                    ("grant_type", "refresh_token"),
+                    ("refresh_token", st.refresh_token.as_str()),
+                    ("client_id", KEYMASTER_CLIENT_ID),
+                ];
+                let resp = client
+                    .post(format!("{SPOTIFY_ACCOUNTS}/api/token"))
+                    .form(&body)
+                    .send()
+                    .await
+                    .map_err(|e| AuthError::Http(e.to_string()))?;
+                if resp.status().is_success() {
+                    if let Ok(parsed) = resp.json::<TokenResponse>().await {
+                        let new_at = AccessToken {
+                            access_token: parsed.access_token.clone(),
+                            refresh_token: parsed.refresh_token.unwrap_or(st.refresh_token),
+                            expires_at: now_ms() + parsed.expires_in * 1000,
+                            account_id: st.account_id,
+                            scopes: st.scopes,
+                        };
+                        let _ = storage::save_streaming_session(&new_at).await;
+                        return Ok((new_at.access_token, new_at.expires_at));
+                    }
+                }
+            }
+        }
+        // Fall back to the primary token if no separate streaming token exists yet
+        drop(_guard);
+        self.get_web_token().await
+    }
+
     async fn get_web_token_mock(&self) -> Result<(String, u64), AuthError> {
         let s = self.state.lock().await;
         let at = s.current.as_ref().ok_or(AuthError::NotAuthenticated)?;
         Ok((at.access_token.clone(), at.expires_at))
     }
 
-    pub(super) async fn exchange_code(
+    pub(super) async fn exchange_code_with_client(
         &self,
+        client_id: &str,
         code: &str,
         verifier: &str,
         host: &str,
@@ -74,7 +122,6 @@ impl AuthManager {
             .timeout(std::time::Duration::from_secs(10))
             .build()
             .map_err(|e| AuthError::Http(e.to_string()))?;
-        let client_id = self.client_id.read().await.clone();
         let is_login_path = client_id == KEYMASTER_CLIENT_ID || client_id == NCSPOT_CLIENT_ID;
         let redirect_path = if is_login_path {
             KEYMASTER_PATH
@@ -86,7 +133,7 @@ impl AuthManager {
             ("grant_type", "authorization_code"),
             ("code", code),
             ("redirect_uri", &redirect_uri),
-            ("client_id", &client_id),
+            ("client_id", client_id),
             ("code_verifier", verifier),
         ];
         let resp = client

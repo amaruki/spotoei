@@ -10,6 +10,13 @@ export function makeAuthBegin(id: string, scopes?: string[]): CommandT {
   return makeCommand(id, 'auth.begin', scopes ? { scopes } : {});
 }
 
+export function makeAuthBeginStreaming(id: string): CommandT {
+  return makeCommand(id, 'auth.begin_streaming', {});
+}
+
+export function makeAuthStreamingStatus(id: string): CommandT {
+  return makeCommand(id, 'auth.streaming_status', {});
+}
 export function makeAuthLogout(id: string): CommandT {
   return makeCommand(id, 'auth.logout', {});
 }

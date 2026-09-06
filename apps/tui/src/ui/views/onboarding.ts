@@ -41,14 +41,14 @@ ${fg(COLOR_SUCCESS)(redirectUri)} ${fg(COLOR_DIM)('(127.0.0.1 — ensure Dashboa
 ${fg(COLOR_DIM)('Waiting for Spotify login callback…')}
 ${fg(COLOR_DIM)('Press [A] to re-open browser  •  Press [C] to edit Client ID')}`;
   }
-  return t`${bold('== Welcome to Spotoei — Step 2 of 2: Authenticate ==')}${keyringWarning}
-${fg(COLOR_SUCCESS)('✔ Client ID configured')} (${fg(COLOR_DIM)(clientRes.source ?? '')})
-${fg(COLOR_DIM)(`Redirect URI: ${redirectUri} (127.0.0.1, not localhost)`)}
+  return t`${bold('== Welcome to Spotoei — Spotify Setup ==')}${keyringWarning}
+${fg(COLOR_SUCCESS)('✔ Client IDs configured')} (${fg(COLOR_DIM)('Dual client: Web API + Librespot Streaming')})
+${fg(COLOR_DIM)(`Redirect URI: ${redirectUri}`)}
 
-${bold('Press [A] or [Enter]')} to open browser and log in with Spotify!
+${bold('Press [A] or [Enter]')} to log in with Spotify!
+${fg(COLOR_TEXT)('Note: Setup requires two brief browser permissions (Web API + Streaming audio).')}
 ${fg(COLOR_DIM)('Press [C] to edit Client ID  •  Press [Q] to quit  •  ?: palette')}`;
 }
-
 export function onboardingHint(state: UiViewState): string {
   if (state.auth.state === 'authenticated') return '';
   return onboardingStep(state) === 'client-id'

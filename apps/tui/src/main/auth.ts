@@ -15,14 +15,36 @@ export function createAuthActions(ctx: AppContext) {
       }
       return;
     }
-    if (ui) ui.setStatus('Opening browser for authentication...', true);
+    const isWebAuthed = ctx.state.currentInfo?.auth?.state === 'authenticated';
+    const hasStreaming = await clients.auth.streamingStatus().catch(() => false);
+
+    if (isWebAuthed && !hasStreaming) {
+      if (ui) ui.setStatus('Opening browser for Audio Streaming permission (Step 2/2)...', true);
+      try {
+        const result = await clients.auth.beginStreaming();
+        if (result.authUrl) {
+          const opened = openBrowser(result.authUrl);
+          const copied = copyToClipboard(result.authUrl);
+          let msg = opened
+            ? 'Browser opened for Audio Streaming permission (Step 2/2)!'
+            : 'Please complete Audio Streaming login in your browser';
+          if (copied) msg += ' (URL copied to clipboard)';
+          if (ui) ui.setStatus(msg, true);
+        }
+      } catch (err) {
+        if (ui) ui.setStatus(`Streaming auth error: ${err instanceof Error ? err.message : String(err)}`, true);
+      }
+      return;
+    }
+
+    if (ui) ui.setStatus('Opening browser for Web API permission (Step 1/2)...', true);
     try {
       const result = await clients.auth.begin();
       if (result.authUrl) {
         const opened = openBrowser(result.authUrl);
         const copied = copyToClipboard(result.authUrl);
         let msg = opened
-          ? 'Browser opened for authentication!'
+          ? 'Browser opened for Web API permission (Step 1/2)!'
           : 'Please complete login in your browser';
         if (copied) {
           msg += ' (URL copied to clipboard)';
