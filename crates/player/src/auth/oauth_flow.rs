@@ -31,11 +31,7 @@ impl AuthManager {
         let csrf = generate_state();
 
         let is_login_flow = client_id == KEYMASTER_CLIENT_ID || client_id == NCSPOT_CLIENT_ID;
-        let default_port = if client_id == KEYMASTER_CLIENT_ID {
-            KEYMASTER_PORT
-        } else {
-            8989
-        };
+        let default_port = KEYMASTER_PORT; // 8989
         let port: u16 = std::env::var("SPOTOEI_REDIRECT_PORT")
             .ok()
             .and_then(|p| p.parse().ok())

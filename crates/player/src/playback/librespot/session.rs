@@ -19,7 +19,37 @@ pub struct LibrespotActive {
     pub created_epoch: u64,
 }
 
+/// How a session-connect attempt ended.
+enum ConnectError {
+    /// Spotify rejected the token on the playback services; retrying once
+    /// with a fresh token may recover.
+    Credentials,
+    /// Anything else, with the message for the caller.
+    Fatal(String),
+}
+
+impl ConnectError {
+    fn message(self) -> String {
+        match self {
+            ConnectError::Credentials => "Spotify rejected the playback credentials".to_string(),
+            ConnectError::Fatal(message) => message,
+        }
+    }
+}
+
 pub type SinkFn = Box<dyn Fn() -> Box<dyn librespot::playback::audio_backend::Sink> + Send + 'static>;
+
+/// Session client ID for the Spotify connection. This MUST be the client
+/// the access token was minted for: login5, client-token, and audio key
+/// requests are bound to it, and presenting a different client (e.g. the
+/// librespot default while the token belongs to the user's own app) is
+/// rejected with `INVALID_CREDENTIALS` even though the AP login and the
+/// Web API accept the same token.
+pub fn resolve_session_client_id(_configured: &str) -> String {
+    // librespot AP and spclient/login5 streaming decryption
+    // require the official Spotify client ID (Keymaster).
+    librespot::core::config::SessionConfig::default().client_id
+}
 
 pub fn resolve_sink(
     requested_backend: super::super::types::AudioBackend,
@@ -182,6 +212,23 @@ impl super::LibrespotEngine {
             return Err("Spotify authentication required".to_string());
         }
 
+        match self.connect_active(wanted_epoch).await {
+            Ok(act) => Ok(act),
+            Err(ConnectError::Credentials) => {
+                tracing::warn!("playback credentials rejected; refreshing token and retrying once");
+                self.auth.invalidate_token().await;
+                self.connect_active(wanted_epoch)
+                    .await
+                    .map_err(|e| e.message())
+            }
+            Err(ConnectError::Fatal(message)) => Err(message),
+        }
+    }
+
+    /// Build a fresh librespot session. A credentials rejection is reported
+    /// distinctly so the caller can retry once with a fresh token; every
+    /// other outcome (including the Spirc-less fallback) resolves here.
+    async fn connect_active(&self, wanted_epoch: u64) -> Result<LibrespotActive, ConnectError> {
         let config_dir = std::env::var("XDG_CONFIG_HOME")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|_| {
@@ -223,21 +270,18 @@ impl super::LibrespotEngine {
             Some(&files_cache),
             None,
         )
-        .map_err(|e| format!("Failed to create librespot cache: {:?}", e))?;
+        .map_err(|e| ConnectError::Fatal(format!("Failed to create librespot cache: {:?}", e)))?;
 
         // The auth manager is authoritative for identity: always connect with
         // a fresh web token. The librespot disk cache is still handed to the
         // session for its internals, but never trusted to pick the user.
-        let (token, _) = self
-            .auth
-            .get_web_token()
-            .await
-            .map_err(|e| format!("Spotify authentication required: {:?}", e))?;
-        let credentials =
-            librespot::core::authentication::Credentials::with_access_token(token);
+        let (token, _) = self.auth.get_web_token().await.map_err(|e| {
+            ConnectError::Fatal(format!("Spotify authentication required: {:?}", e))
+        })?;
+        let credentials = librespot::core::authentication::Credentials::with_access_token(token);
 
         let session_config = librespot::core::config::SessionConfig {
-            client_id: librespot::core::config::SessionConfig::default().client_id,
+            client_id: resolve_session_client_id(&self.auth.client_id().await),
             device_id: device_id.clone(),
             autoplay: Some(false),
             ..Default::default()
@@ -279,7 +323,7 @@ impl super::LibrespotEngine {
             <librespot::playback::mixer::softmixer::SoftMixer as librespot::playback::mixer::Mixer>::open(
                 librespot::playback::mixer::MixerConfig::default(),
             )
-            .map_err(|e| format!("Failed to open softmixer: {:?}", e))?,
+            .map_err(|e| ConnectError::Fatal(format!("Failed to open softmixer: {:?}", e)))?,
         );
         let volume_getter = mixer.get_soft_volume();
 
@@ -365,6 +409,10 @@ impl super::LibrespotEngine {
                 Some(Arc::new(spirc_instance))
             }
             Err(e) => {
+                tracing::warn!("Spirc::new failed with error: {:?}", e);
+                if super::reauth::is_credentials_error(&e) {
+                    return Err(ConnectError::Credentials);
+                }
                 tracing::warn!(
                     "Spirc Spotify Connect registration skipped ({:?}); local native player will function directly",
                     e
@@ -484,5 +532,20 @@ mod tests {
         assert_eq!(player_config.normalisation_pregain_db, -3.5);
         assert_eq!(player_config.normalisation_knee_db, 5.0);
         assert_eq!(cfg.crossfade_duration_ms, 2000);
+    }
+
+    #[test]
+    fn test_session_uses_official_keymaster_client_id() {
+        let fallback = librespot::core::config::SessionConfig::default().client_id;
+        assert_eq!(
+            resolve_session_client_id("d420a117a32841c2b3474932e49fb54b"),
+            fallback,
+        );
+    }
+    fn test_session_client_id_falls_back_when_unset() {
+        let fallback = librespot::core::config::SessionConfig::default().client_id;
+        assert!(!fallback.is_empty());
+        assert_eq!(resolve_session_client_id(""), fallback);
+        assert_eq!(resolve_session_client_id("   "), fallback);
     }
 }

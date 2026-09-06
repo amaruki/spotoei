@@ -22,8 +22,8 @@ export const DEFAULT_BROWSE: BrowseConfigT = DEFAULT_BROWSE_CONFIG;
 
 export const KEYMASTER_CLIENT_ID = '65b708073fc0480ea92a077233ca87bd';
 export const NCSPOT_CLIENT_ID = 'd420a117a32841c2b3474932e49fb54b';
-export const DEFAULT_CLIENT_ID = NCSPOT_CLIENT_ID;
-export const KEYMASTER_REDIRECT_PORT = 8898;
+export const DEFAULT_CLIENT_ID = KEYMASTER_CLIENT_ID;
+export const KEYMASTER_REDIRECT_PORT = 8989;
 export const DEFAULT_REDIRECT_PORT = 8989;
 
 
@@ -49,17 +49,13 @@ export function resolveRedirectPort(): number {
     // ignore
   }
 
-  const cRes = resolveClientId();
-  if (cRes.clientId === KEYMASTER_CLIENT_ID) {
-    return KEYMASTER_REDIRECT_PORT;
-  }
-  return DEFAULT_REDIRECT_PORT;
+  return DEFAULT_REDIRECT_PORT; // 8989
 }
 
 export function getRedirectUri(port?: number): string {
   const p = port ?? resolveRedirectPort();
   const cRes = resolveClientId();
-  if ((cRes.clientId === NCSPOT_CLIENT_ID || cRes.clientId === KEYMASTER_CLIENT_ID) && (p === 8989 || p === KEYMASTER_REDIRECT_PORT)) {
+  if ((cRes.clientId === NCSPOT_CLIENT_ID || cRes.clientId === KEYMASTER_CLIENT_ID) && (p === 8989 || p === 8898)) {
     return `http://127.0.0.1:${p}/login`;
   }
   return `http://127.0.0.1:${p}/callback`;

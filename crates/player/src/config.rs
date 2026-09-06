@@ -37,5 +37,5 @@ pub fn resolve_client_id() -> String {
     if !from_config.is_empty() {
         return from_config;
     }
-    auth::NCSPOT_CLIENT_ID.to_string()
+    auth::KEYMASTER_CLIENT_ID.to_string()
 }
