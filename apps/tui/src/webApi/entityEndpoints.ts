@@ -46,14 +46,27 @@ export class EntityEndpoints {
     id: string,
     includeGroups?: string,
     offset = 0,
-    limit = 20,
+    limit = 10,
   ): Promise<EntityPageResult<CatalogAlbumT>> {
+    // Spotify cut the artist-albums page size from 50 to 10 (default 5).
+    // Sending limit > 10 now returns HTTP 400 "Invalid limit".
+    const safeLimit = Math.min(10, Math.max(1, Math.floor(limit) || 10));
+    const safeOffset = Math.max(0, Math.floor(offset) || 0);
     const params = new URLSearchParams();
-    if (includeGroups) params.set('include_groups', includeGroups);
-    params.set('offset', String(offset));
-    params.set('limit', String(limit));
+    if (includeGroups) {
+      const allowed = new Set(['album', 'single', 'appears_on', 'compilation']);
+      const filtered = includeGroups
+        .split(',')
+        .map((g) => g.trim())
+        .filter((g) => allowed.has(g));
+      if (filtered.length > 0) params.set('include_groups', filtered.join(','));
+    }
+    params.set('offset', String(safeOffset));
+    params.set('limit', String(safeLimit));
     try {
-      const json = await this.transport.request(`/artists/${id}/albums?${params.toString()}`);
+      const json = await this.transport.request(
+        `/artists/${encodeURIComponent(id)}/albums?${params.toString()}`,
+      );
       const items = toArray(pickObjectKey(json, 'items'));
       const albums: CatalogAlbumT[] = [];
       for (const item of items) {
@@ -67,12 +80,12 @@ export class EntityEndpoints {
       return {
         items: albums,
         total,
-        offset,
-        limit,
-        hasMore: offset + albums.length < total,
+        offset: safeOffset,
+        limit: safeLimit,
+        hasMore: safeOffset + albums.length < total,
       };
     } catch {
-      return { items: [], total: 0, offset, limit, hasMore: false };
+      return { items: [], total: 0, offset: safeOffset, limit: safeLimit, hasMore: false };
     }
   }
 
@@ -166,58 +179,46 @@ export class EntityEndpoints {
     timeRange: 'short_term' | 'medium_term' | 'long_term' = 'medium_term',
     limit = 5,
   ): Promise<CatalogTrackT[]> {
-    try {
-      const json = await this.transport.request(
-        `/me/top/tracks?time_range=${timeRange}&limit=${limit}`,
-      );
-      const items = toArray(pickObjectKey(json, 'items'));
-      const tracks: CatalogTrackT[] = [];
-      for (const item of items) {
-        const mapped = mapTrack(item);
-        if (mapped) tracks.push(mapped);
-      }
-      return tracks;
-    } catch {
-      return [];
+    const json = await this.transport.request(
+      `/me/top/tracks?time_range=${timeRange}&limit=${limit}`,
+    );
+    const items = toArray(pickObjectKey(json, 'items'));
+    const tracks: CatalogTrackT[] = [];
+    for (const item of items) {
+      const mapped = mapTrack(item);
+      if (mapped) tracks.push(mapped);
     }
+    return tracks;
   }
 
   async getUserTopArtists(
     timeRange: 'short_term' | 'medium_term' | 'long_term' = 'medium_term',
     limit = 5,
   ): Promise<CatalogArtistT[]> {
-    try {
-      const json = await this.transport.request(
-        `/me/top/artists?time_range=${timeRange}&limit=${limit}`,
-      );
-      const items = toArray(pickObjectKey(json, 'items'));
-      const artists: CatalogArtistT[] = [];
-      for (const item of items) {
-        const mapped = mapArtist(item);
-        if (mapped) artists.push(mapped);
-      }
-      return artists;
-    } catch {
-      return [];
+    const json = await this.transport.request(
+      `/me/top/artists?time_range=${timeRange}&limit=${limit}`,
+    );
+    const items = toArray(pickObjectKey(json, 'items'));
+    const artists: CatalogArtistT[] = [];
+    for (const item of items) {
+      const mapped = mapArtist(item);
+      if (mapped) artists.push(mapped);
     }
+    return artists;
   }
 
   async getRecentlyPlayed(limit = 20): Promise<Array<{ track: CatalogTrackT; playedAt: string }>> {
-    try {
-      const json = await this.transport.request(`/me/player/recently-played?limit=${limit}`);
-      const items = toArray(pickObjectKey(json, 'items'));
-      const result: Array<{ track: CatalogTrackT; playedAt: string }> = [];
-      for (const item of items) {
-        if (item === null || typeof item !== 'object') continue;
-        const rec = item as Record<string, unknown>;
-        const track = mapTrack(rec.track);
-        if (!track) continue;
-        const playedAt = typeof rec.played_at === 'string' ? rec.played_at : '';
-        result.push({ track, playedAt });
-      }
-      return result;
-    } catch {
-      return [];
+    const json = await this.transport.request(`/me/player/recently-played?limit=${limit}`);
+    const items = toArray(pickObjectKey(json, 'items'));
+    const result: Array<{ track: CatalogTrackT; playedAt: string }> = [];
+    for (const item of items) {
+      if (item === null || typeof item !== 'object') continue;
+      const rec = item as Record<string, unknown>;
+      const track = mapTrack(rec.track);
+      if (!track) continue;
+      const playedAt = typeof rec.played_at === 'string' ? rec.played_at : '';
+      result.push({ track, playedAt });
     }
+    return result;
   }
 }

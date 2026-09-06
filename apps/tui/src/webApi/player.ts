@@ -2,6 +2,94 @@
 
 import type { Transport } from './transport';
 
+let lastNonZeroVolume = 50;
+
+/**
+ * Toggles playback mute state via the Spotify Web API.
+ * If currentState is provided (true = muted, false = unmuted), it toggles to the opposite state.
+ * If currentState is omitted, it queries the player state to check if volume is currently 0.
+ */
+export async function toggleMute(
+  transport: Transport,
+  currentState?: boolean,
+): Promise<void> {
+  let isMuted = currentState;
+  if (isMuted === undefined) {
+    try {
+      const state = (await transport.request('/me/player')) as {
+        device?: { volume_percent?: number | null };
+      } | null;
+      const vol = state?.device?.volume_percent;
+      if (typeof vol === 'number') {
+        if (vol > 0) {
+          lastNonZeroVolume = vol;
+        }
+        isMuted = vol === 0;
+      } else {
+        isMuted = false;
+      }
+    } catch {
+      isMuted = false;
+    }
+  }
+
+  if (isMuted) {
+    const restoreVol = Math.min(100, Math.max(1, lastNonZeroVolume || 50));
+    await transport.request(`/me/player/volume?volume_percent=${restoreVol}`, {}, 'PUT');
+  } else {
+    await transport.request('/me/player/volume?volume_percent=0', {}, 'PUT');
+  }
+}
+
+/**
+ * Relative seek forward/backward by offsetMs from currentPositionMs.
+ * Clamps target position to >= 0.
+ */
+export async function seekRelative(
+  transport: Transport,
+  currentPositionMs: number,
+  offsetMs: number,
+): Promise<void> {
+  const target = Math.max(0, Math.floor(currentPositionMs + offsetMs));
+  await transport.request(`/me/player/seek?position_ms=${target}`, {}, 'PUT');
+}
+
+export interface DeviceInfo {
+  id: string;
+  name: string;
+  is_active: boolean;
+  type: string;
+}
+
+export async function getDevices(transport: Transport): Promise<DeviceInfo[]> {
+  try {
+    const json = await transport.request('/me/player/devices');
+    if (
+      json &&
+      typeof json === 'object' &&
+      'devices' in json &&
+      Array.isArray((json as Record<string, unknown>).devices)
+    ) {
+      return (
+        json as {
+          devices: DeviceInfo[];
+        }
+      ).devices;
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+export async function transferPlayback(
+  transport: Transport,
+  deviceId: string,
+  play = true,
+): Promise<void> {
+  await transport.request('/me/player', { device_ids: [deviceId], play }, 'PUT');
+}
+
 export class PlayerEndpoints {
   constructor(private transport: Transport) {}
 
@@ -11,7 +99,20 @@ export class PlayerEndpoints {
     position_ms?: number;
     device_id?: string;
   }): Promise<void> {
-    const query = opts.device_id ? `?device_id=${encodeURIComponent(opts.device_id)}` : '';
+    let deviceId = opts.device_id;
+    if (!deviceId) {
+      try {
+        const devices = await getDevices(this.transport);
+        if (devices && devices.length > 0) {
+          const active = devices.find((d) => d.is_active);
+          const spotoei = devices.find((d) => d.name.toLowerCase().includes('spotoei'));
+          deviceId = active?.id ?? spotoei?.id ?? devices[0]?.id;
+        }
+      } catch {
+        // ignore device probe failure
+      }
+    }
+    const query = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
     const body: Record<string, unknown> = {};
     if (opts.uris) body.uris = opts.uris;
     if (opts.context_uri) body.context_uri = opts.context_uri;
@@ -39,9 +140,17 @@ export class PlayerEndpoints {
     );
   }
 
+  async seekRelative(currentPositionMs: number, offsetMs: number): Promise<void> {
+    await seekRelative(this.transport, currentPositionMs, offsetMs);
+  }
+
   async setVolume(volumePercent: number): Promise<void> {
     const vol = Math.min(100, Math.max(0, Math.round(volumePercent)));
     await this.transport.request(`/me/player/volume?volume_percent=${vol}`, {}, 'PUT');
+  }
+
+  async toggleMute(currentState?: boolean): Promise<void> {
+    await toggleMute(this.transport, currentState);
   }
 
   async shuffle(state: boolean): Promise<void> {
@@ -61,31 +170,12 @@ export class PlayerEndpoints {
     }
   }
 
-  async getDevices(): Promise<
-    Array<{ id: string; name: string; is_active: boolean; type: string }>
-  > {
-    try {
-      const json = await this.transport.request('/me/player/devices');
-      if (
-        json &&
-        typeof json === 'object' &&
-        'devices' in json &&
-        Array.isArray((json as Record<string, unknown>).devices)
-      ) {
-        return (
-          json as {
-            devices: Array<{ id: string; name: string; is_active: boolean; type: string }>;
-          }
-        ).devices;
-      }
-    } catch {
-      // ignore
-    }
-    return [];
+  async getDevices(): Promise<DeviceInfo[]> {
+    return getDevices(this.transport);
   }
 
   async transferPlayback(deviceId: string, play = true): Promise<void> {
-    await this.transport.request('/me/player', { device_ids: [deviceId], play }, 'PUT');
+    return transferPlayback(this.transport, deviceId, play);
   }
 
   async getArtistGenres(artistId: string): Promise<string[]> {
