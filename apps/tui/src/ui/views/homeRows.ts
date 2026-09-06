@@ -30,11 +30,11 @@ export function homeRowOptions(
           const t = (row as { track: CatalogTrackT }).track;
           return { name: `${dim}♪ ${t.name}${stale}`, description: `${formatArtists(t.artists)} · ${formatTime(t.durationMs)} · ${row.artist.name}` };
         }
-        return { name: `${dim}👤 ${row.artist.name}${stale}`, description: 'Enter: open artist' };
+        return { name: `${dim}👤 ${row.artist.name}${stale}`, description: 'Artist' };
       }
       case 'discover': {
         if (row.track) {
-          return { name: `${dim}♪ ${row.track.name}${stale}`, description: `${formatArtists(row.track.artists)} · ${formatTime(row.track.durationMs)} · ${row.label}` };
+          return { name: `${dim}♪ ${row.track.name}${stale}`, description: `${formatArtists(row.track.artists)} · ${formatTime(row.track.durationMs)}` };
         }
         return { name: `${dim}▸ ${row.label}${stale}`, description: row.description };
       }

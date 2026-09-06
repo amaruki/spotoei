@@ -132,7 +132,17 @@ export function createPanelSetters(ctx: UiCoreContext) {
         discover: parts.discover,
       };
       for (const panel of panels) {
-        const options = homeRowOptions(byKey[panel.key] as never, panel.empty);
+        const rawRows = byKey[panel.key] as import('../views/homeRows').HomeRow[];
+        if (panel.key === 'discover') {
+          const headerRow = rawRows.find((r) => r.kind === 'header');
+          if (headerRow && headerRow.text.startsWith('Discover · ')) {
+            const sub = headerRow.text.replace('Discover · ', '');
+            built.homeDiscover.title = `Discover · ${sub}`;
+          }
+        }
+        const hasContent = rawRows.some((r) => r.kind !== 'header');
+        const effectiveRows = hasContent ? rawRows.filter((r) => r.kind !== 'header') : rawRows;
+        const options = homeRowOptions(effectiveRows as never, panel.empty);
         if (meta?.error && panel.key === 'tracks') {
           options.push({
             name: `⚠ ${meta.error}`,
