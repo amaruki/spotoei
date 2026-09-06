@@ -15,6 +15,8 @@ export interface PlaybackBarInput {
   title: string;
   artist: string;
   album?: string;
+  genre?: string;
+  hasCoverArt?: boolean;
   positionMs: number;
   durationMs: number;
   shuffle: boolean;
@@ -28,16 +30,15 @@ export interface PlaybackBarContent {
   variant: 'wide' | 'medium' | 'narrow';
   line1: string;
   line2: string;
+  line3: string;
+  hasCoverArt: boolean;
 }
-
-// Three tiers per spec §15: >=120 full, 80–119 compact (no album,
 // short hints), <80 minimal. Width must come from the renderer, not
 // process.stdout, so tests and remotes render the right tier.
 export const WIDE_BREAKPOINT = 120;
 export const NARROW_BREAKPOINT = 80;
 
-function renderFullProgressBar(pos: string, dur: string, pct: number, width: number): string {
-  const availableWidth = Math.max(20, width - 4);
+function renderFullProgressBar(pos: string, dur: string, pct: number, availableWidth: number): string {
   const timePrefix = `${pos} `;
   const pctStr = `${Math.round(pct * 100)}%`;
   const timeSuffix = ` ${dur} (${pctStr})`;
@@ -53,47 +54,60 @@ export function buildPlaybackBarContent(input: PlaybackBarInput): PlaybackBarCon
   const dur = formatTime(input.durationMs);
   const rawTitle = input.title || '(no track)';
   const rawArtist = input.artist || '—';
+  const hasCover = Boolean(input.hasCoverArt && input.state !== 'idle');
+
+  // Cover art 3-row box prefix (6 columns + 1 space = 7 columns)
+  const artPrefix1 = hasCover ? '╭────╮ ' : '';
+  const artPrefix2 = hasCover ? '│ 💽 │ ' : '';
+  const artPrefix3 = hasCover ? '╰────╯ ' : '';
+  const artColWidth = hasCover ? 7 : 0;
+
+  // Available inner content width (width minus 4 for borders/padding, minus cover art width)
+  const innerWidth = Math.max(20, input.width - 4 - artColWidth);
 
   if (input.width < NARROW_BREAKPOINT) {
-    const title = truncate(rawTitle, Math.max(10, input.width - 25));
-    const artist = truncate(rawArtist, Math.max(8, input.width - 30));
+    const title = truncate(rawTitle, Math.max(10, innerWidth - 25));
+    const artist = truncate(rawArtist, Math.max(8, innerWidth - 30));
     return {
       variant: 'narrow',
-      line1: `${icon} ${title} — ${artist}  ${pos} / ${dur}`,
-      line2: 'Space Pause · n Next · V Visualizer · ?: palette',
+      line1: `${artPrefix1}${icon} ${title}`,
+      line2: `${artPrefix2}${pos} / ${dur}`,
+      line3: `${artPrefix3}${artist}`,
+      hasCoverArt: hasCover,
     };
   }
 
   const pct = input.durationMs > 0 ? Math.min(1, Math.max(0, input.positionMs / input.durationMs)) : 0;
-  const progressBar = renderFullProgressBar(pos, dur, pct, input.width);
+  const progressBar = renderFullProgressBar(pos, dur, pct, innerWidth);
 
-  if (input.width < WIDE_BREAKPOINT) {
-    const title = truncate(rawTitle, Math.max(12, Math.floor(input.width * 0.35)));
-    const artist = truncate(rawArtist, Math.max(8, Math.floor(input.width * 0.22)));
-    const badges = `Shuf ${input.shuffle ? 'on' : 'off'}  Rep ${input.repeat}  Q:${input.queueCount}`;
-    const left = `${icon} ${title} — ${artist}`;
-    const availableWidth = Math.max(20, input.width - 4);
-    const spacePadding = Math.max(2, availableWidth - left.length - badges.length);
-    const line1 = `${left}${' '.repeat(spacePadding)}${badges}`;
-    return {
-      variant: 'medium',
-      line1,
-      line2: progressBar,
-    };
-  }
+  // Badges: shuffle, repeat, volume
+  const shuf = input.shuffle ? 'on' : 'off';
+  const vol = `${input.volume}%`;
+  const badges = input.width < WIDE_BREAKPOINT
+    ? `Shuf: ${shuf}  Rep: ${input.repeat}  Vol: ${vol}`
+    : `🔀 Shuf: ${shuf}   🔁 Rep: ${input.repeat}   🔉 ${vol}`;
 
-  const title = truncate(rawTitle, Math.max(15, Math.floor(input.width * 0.32)));
-  const artist = truncate(rawArtist, Math.max(10, Math.floor(input.width * 0.20)));
-  const albumStr = input.album ? ` • ${truncate(input.album, Math.max(10, Math.floor(input.width * 0.18)))}` : '';
-  const badges = `Shuffle ${input.shuffle ? 'on' : 'off'}  Repeat ${input.repeat}  Queue: ${input.queueCount}  Vol: ${input.volume}%`;
-  const left = `${icon} ${title} — ${artist}${albumStr}`;
-  const availableWidth = Math.max(20, input.width - 4);
-  const spacePadding = Math.max(2, availableWidth - left.length - badges.length);
-  const line1 = `${left}${' '.repeat(spacePadding)}${badges}`;
+  // Row 1: Title (left) & Badges (right)
+  const titleCap = Math.max(10, innerWidth - badges.length - 4);
+  const title = truncate(rawTitle, titleCap);
+  const left1 = `${icon} ${title}`;
+  const pad1 = Math.max(2, innerWidth - left1.length - badges.length);
+  const line1 = `${artPrefix1}${left1}${' '.repeat(pad1)}${badges}`;
+
+  // Row 2: Full-width progress bar
+  const line2 = `${artPrefix2}${progressBar}`;
+
+  // Row 3: Artist • Album • Genre
+  const albumPart = input.album ? `  •  Album: ${input.album}` : '';
+  const genrePart = input.genre ? `  •  Genre: ${input.genre}` : '';
+  const rawMeta = `${rawArtist}${albumPart}${genrePart}`;
+  const line3 = `${artPrefix3}${truncate(rawMeta, innerWidth)}`;
 
   return {
-    variant: 'wide',
+    variant: input.width < WIDE_BREAKPOINT ? 'medium' : 'wide',
     line1,
-    line2: progressBar,
+    line2,
+    line3,
+    hasCoverArt: hasCover,
   };
 }

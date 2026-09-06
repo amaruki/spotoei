@@ -83,6 +83,7 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
       const barLen = Math.max(10, width - 4 - 6 - 12);
       const emptyBar = '─'.repeat(barLen);
       built.playbackProgressText.content = t`${fg(COLOR_DIM)(`0:00 ${emptyBar} 0:00 (0%)`)}`;
+      built.statusText.content = t`${fg(COLOR_DIM)('Select a song to start listening')}`;
       return;
     }
 
@@ -98,7 +99,9 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
       state: pbState,
       title: track.name || 'Untitled',
       artist: formatArtists(track.artists),
-      album: track.album,
+      album: track.album ?? (track as { albumName?: string }).albumName,
+      genre: (track as { genre?: string }).genre,
+      hasCoverArt: Boolean(track.album || (track as { albumName?: string }).albumName || (track as { image?: { url?: string } }).image?.url),
       positionMs: posMs,
       durationMs: durMs,
       shuffle: pb?.shuffle ?? false,
@@ -115,6 +118,7 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     } else {
       built.playbackProgressText.content = t`${fg(COLOR_DIM)(content.line2)}`;
     }
+    built.statusText.content = t`${fg(COLOR_DIM)(content.line3)}`;
   };
 
   const setHeader = (): void => {
@@ -124,26 +128,16 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
   const setStatus = (msg: string, persist = false): void => {
     state.statusMessage = msg;
     const isQuota = msg.includes(QUOTA_BANNER) || /QUOTA_EXCEEDED/i.test(msg) || /quota/i.test(msg);
-    const useLayer = persist || isQuota;
     try {
-      if (useLayer) {
-        built.statusLayerText.content = t`${fg(COLOR_WARN)(bold(`⚠ ${msg}`))}`;
-        built.statusLayer.visible = true;
-        built.statusText.content = t`${fg(COLOR_DIM)(getFooterHelp())}`;
-        return;
-      }
-      if (built.statusLayer.visible) {
-        built.statusLayer.visible = false;
-      }
-      built.statusText.content = t`${fg(COLOR_DIM)(msg)}`;
+      built.statusLayerText.content = t`${fg(COLOR_WARN)(bold(msg))}`;
+      built.statusLayer.visible = true;
       clearTimeout(statusTimer.value as unknown as NodeJS.Timeout);
-      statusTimer.value = setTimeout(() => {
-        state.statusMessage = undefined;
-        try {
-          built.statusText.content = t`${fg(COLOR_DIM)(getFooterHelp())}`;
-        } catch {
-        }
-      }, 2500);
+      if (!persist) {
+        statusTimer.value = setTimeout(() => {
+          state.statusMessage = undefined;
+          built.statusLayer.visible = false;
+        }, 2500);
+      }
     } catch {
       if (persist) process.stderr.write(`${msg}\n`);
     }
