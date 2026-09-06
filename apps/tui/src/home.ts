@@ -21,7 +21,7 @@ export class HomeManager {
     timeRange: TimeRangeT = 'medium_term',
     forceRefresh = false,
   ): Promise<HomeForYouDataT> {
-    const cacheKey = `home:v1:foryou:${timeRange}`;
+    const cacheKey = `home:v2:foryou:${timeRange}`;
     if (!forceRefresh && this.cache) {
       try {
         const cached = this.cache.getQuery<HomeForYouDataT>(this.accountId, cacheKey);
@@ -54,7 +54,7 @@ export class HomeManager {
   }
 
   async loadRecentlyPlayed(forceRefresh = false): Promise<HomeRecentlyPlayedDataT> {
-    const cacheKey = 'home:v1:recently_played';
+    const cacheKey = 'home:v2:recently_played';
     if (!forceRefresh && this.cache) {
       try {
         const cached = this.cache.getQuery<HomeRecentlyPlayedDataT>(this.accountId, cacheKey);

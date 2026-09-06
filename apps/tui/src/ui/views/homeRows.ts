@@ -1,6 +1,6 @@
 import type { CatalogArtistT, CatalogTrackT } from 'spotoei-protocol';
-import { formatArtists } from '../formatters';
-import { formatTime } from '../formatters';
+import { formatArtists, formatTime } from '../formatters';
+import { STALE_PREFIX, STALE_SUFFIX } from '../theme';
 
 export type HomeRow =
   | { kind: 'context'; text: string }
@@ -12,34 +12,37 @@ export type HomeRow =
 export function homeRowOptions(
   rows: HomeRow[],
   emptyLabel = '(nothing here yet)',
+  opts?: { isStale?: boolean },
 ): Array<{ name: string; description: string }> {
   if (rows.length === 0) {
-    return [{ name: emptyLabel, description: 'Try another Home tab' }];
+    return [{ name: `${opts?.isStale ? STALE_PREFIX : ''}${emptyLabel}${opts?.isStale ? STALE_SUFFIX : ''}`, description: 'Try another Home tab' }];
   }
+  const dim = opts?.isStale ? STALE_PREFIX : '';
+  const stale = opts?.isStale ? STALE_SUFFIX : '';
   return rows.map((row) => {
     switch (row.kind) {
       case 'context':
-        return { name: `▶ ${row.text}`, description: 'Now playing' };
+        return { name: `${dim}▶ ${row.text}${stale}`, description: 'Now playing' };
       case 'header':
-        return { name: `── ${row.text} ──`, description: '' };
+        return { name: `${dim}── ${row.text} ──${stale}`, description: '' };
       case 'artist': {
         if ((row as { track?: CatalogTrackT }).track) {
           const t = (row as { track: CatalogTrackT }).track;
-          return { name: `♪ ${t.name}`, description: `${formatArtists(t.artists)} · ${formatTime(t.durationMs)} · ${row.artist.name}` };
+          return { name: `${dim}♪ ${t.name}${stale}`, description: `${formatArtists(t.artists)} · ${formatTime(t.durationMs)} · ${row.artist.name}` };
         }
-        return { name: `👤 ${row.artist.name}`, description: 'Enter: open artist' };
+        return { name: `${dim}👤 ${row.artist.name}${stale}`, description: 'Enter: open artist' };
       }
       case 'discover': {
         if (row.track) {
-          return { name: `♪ ${row.track.name}`, description: `${formatArtists(row.track.artists)} · ${formatTime(row.track.durationMs)} · ${row.label}` };
+          return { name: `${dim}♪ ${row.track.name}${stale}`, description: `${formatArtists(row.track.artists)} · ${formatTime(row.track.durationMs)} · ${row.label}` };
         }
-        return { name: `▸ ${row.label}`, description: row.description };
+        return { name: `${dim}▸ ${row.label}${stale}`, description: row.description };
       }
       case 'track': {
         const local = row.playedAt ? ` · ${formatPlayedAt(row.playedAt)}` : '';
         const liked = row.saved ? ' ♥' : '';
         return {
-          name: `♪ ${row.track.name}${liked}`,
+          name: `${dim}♪ ${row.track.name}${liked}${stale}`,
           description: `${formatArtists(row.track.artists)} · ${formatTime(row.track.durationMs)}${local}`,
         };
       }
