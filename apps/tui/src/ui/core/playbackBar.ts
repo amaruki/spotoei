@@ -67,11 +67,9 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     const pbState =
       pb?.state === 'playing' ? 'playing' : pb?.state === 'paused' ? 'paused' : 'idle';
 
-    const authIndicator =
-      state.auth.state === 'authenticated' ? '● Online' : '○ Offline / Login Required';
-
-    const privateBadge = state.isPrivateSession ? '  •  🕶 [Private]' : '';
-    built.playbackBar.title = ` Playback [${pbState.toUpperCase()}]  •  Spotoei ${authIndicator}${privateBadge} `;
+    const stateLabel = pbState === 'playing' ? '▶ Now Playing' : pbState === 'paused' ? '⏸ Paused' : 'Now Playing';
+    const privateBadge = state.isPrivateSession ? ' • 🕶 Private' : '';
+    built.playbackBar.title = ` ${stateLabel}${privateBadge} `;
     built.playbackBar.titleColor = pbState === 'playing' ? COLOR_SUCCESS : pbState === 'paused' ? COLOR_WARN : COLOR_TEXT;
     if (!track) {
       const stateIcon =
@@ -81,7 +79,10 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
             ? fg(COLOR_WARN)(bold('⏸ PAUSED'))
             : fg(COLOR_DIM)('■ IDLE');
       built.playbackTrackText.content = t`${stateIcon}  ${fg(COLOR_DIM)('No track playing — select a song from Library [r] or Search [/]')}`;
-      built.playbackProgressText.content = t`${fg(COLOR_DIM)('0:00  ────────────────────────────────────────────────────────────  0:00 (0%)')}`;
+      const width = ctx.termWidth.value;
+      const barLen = Math.max(10, width - 4 - 6 - 12);
+      const emptyBar = '─'.repeat(barLen);
+      built.playbackProgressText.content = t`${fg(COLOR_DIM)(`0:00 ${emptyBar} 0:00 (0%)`)}`;
       return;
     }
 
@@ -107,7 +108,13 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
       width,
     });
     built.playbackTrackText.content = t`${fg(COLOR_TEXT)(content.line1)}`;
-    built.playbackProgressText.content = t`${fg(COLOR_DIM)(content.line2)}`;
+    const barMatch = content.line2.match(/^(\S+\s+)([━]*)([─]*)(\s+.*)$/);
+    if (barMatch) {
+      const [, prefix, filled, empty, suffix] = barMatch;
+      built.playbackProgressText.content = t`${fg(COLOR_TEXT)(prefix)}${fg(COLOR_SUCCESS)(filled)}${fg(COLOR_DIM)(empty)}${fg(COLOR_DIM)(suffix)}`;
+    } else {
+      built.playbackProgressText.content = t`${fg(COLOR_DIM)(content.line2)}`;
+    }
   };
 
   const setHeader = (): void => {

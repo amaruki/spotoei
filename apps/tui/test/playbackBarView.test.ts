@@ -30,9 +30,10 @@ describe('playback bar responsive variants', () => {
     const out = buildPlaybackBarContent({ ...base, width: 100 });
     expect(out.variant).toBe('medium');
     expect(out.line1).toContain('Creep');
-    expect(out.line1).toContain('1:24');
+    expect(out.line1).toContain('Q:12');
     expect(out.line1).not.toContain('Pablo Honey');
-    expect(out.line2).toContain('Q:12');
+    expect(out.line2).toContain('1:24');
+    expect(out.line2).toContain('3:48');
   });
 
   it('narrow variant retains state, title and progress without album or genre', () => {

@@ -18,8 +18,6 @@ export function buildPlaybackBar(renderer: CliRenderer): PlaybackBarNodes {
     backgroundColor: COLOR_PANEL_BG,
     title: ' Now Playing ',
     titleColor: COLOR_TEXT,
-    bottomTitle: ' [Space] Play/Pause  [n] Next  [p] Prev  [?] Help ',
-    bottomTitleAlignment: 'right',
     paddingLeft: 1,
     paddingRight: 1,
   });
