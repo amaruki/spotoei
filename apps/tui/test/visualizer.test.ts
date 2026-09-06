@@ -4,7 +4,12 @@
 import { describe, expect, test } from 'bun:test';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess } from 'node:child_process';
-import { VisualizerController } from '../src/visualizer';
+import {
+  VisualizerController,
+  formatBlockMeter,
+  formatSpectrumBar,
+  resampleBands,
+} from '../src/visualizer';
 import { PROTOCOL_VERSION, type VisualizerModeT } from 'spotoei-protocol';
 
 const writeImpl = (_chunk: unknown, cb?: (err: null | Error) => void): boolean => {
@@ -208,9 +213,9 @@ describe('VisualizerController unit tests', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(ctrl.getCurrentFps()).toBe(30);
 
-    // With windowed hysteresis (15s cooldown, 10s stable), 70 fast frames
-    // over ~700ms are insufficient to recover; remain at 30 FPS.
-    for (let i = 0; i < 70; i++) {
+    // With windowed hysteresis (15s cooldown, 10s stable), fast frames
+    // within cooldown without reaching 60 stable frames remain at 30 FPS.
+    for (let i = 0; i < 30; i++) {
       stdout.write(
         JSON.stringify({
           v: PROTOCOL_VERSION,
@@ -239,5 +244,71 @@ describe('VisualizerController unit tests', () => {
     ctrl.stop();
     // The pending promise must reject instead of dangling.
     await expect(sendPromise).rejects.toThrow('visualizer controller stopped');
+  });
+
+  test('formatBlockMeter maps levels to 8 unicode block characters and space for 0', () => {
+    expect(formatBlockMeter(0)).toBe(' ');
+    expect(formatBlockMeter(-0.5)).toBe(' ');
+    expect(formatBlockMeter(NaN)).toBe(' ');
+    expect(formatBlockMeter(0.05)).toBe(' ');
+    expect(formatBlockMeter(0.15)).toBe('▂');
+    expect(formatBlockMeter(0.30)).toBe('▃');
+    expect(formatBlockMeter(0.45)).toBe('▄');
+    expect(formatBlockMeter(0.60)).toBe('▅');
+    expect(formatBlockMeter(0.72)).toBe('▆');
+    expect(formatBlockMeter(0.85)).toBe('▇');
+    expect(formatBlockMeter(1.0)).toBe('█');
+    expect(formatBlockMeter(1.5)).toBe('█');
+  });
+
+  test('resampleBands scales band arrays to target widths cleanly', () => {
+    const bands = [0.0, 0.5, 1.0];
+    expect(resampleBands(bands, 3)).toEqual([0.0, 0.5, 1.0]);
+    const downsampled = resampleBands(bands, 2);
+    expect(downsampled.length).toBe(2);
+    const upsampled = resampleBands(bands, 6);
+    expect(upsampled.length).toBe(6);
+  });
+
+  test('formatSpectrumBar converts 64 bands to unicode block meter string', () => {
+    const bands64 = Array.from({ length: 64 }, (_, i) => i / 63);
+    const bar = formatSpectrumBar(bands64);
+    expect(bar.length).toBe(64);
+    expect(bar.startsWith(' ')).toBe(true);
+    expect(bar.endsWith('█')).toBe(true);
+
+    // Resampled to 16 characters
+    const bar16 = formatSpectrumBar(bands64, 16);
+    expect(bar16.length).toBe(16);
+  });
+  test('VisualizerController tracks 64-band frames and renders bar meter', async () => {
+    const { child, stdout } = makeMockChild();
+    const ctrl = new VisualizerController({ child, initialMode: 'spectrum' });
+    ctrl.start();
+
+    const { promise, resolve } = Promise.withResolvers<void>();
+    ctrl.subscribe(() => {
+      resolve();
+    });
+
+    const bands64 = Array.from({ length: 64 }, (_, i) => Math.sin((i / 64) * Math.PI));
+    stdout.write(
+      JSON.stringify({
+        v: PROTOCOL_VERSION,
+        type: 'event',
+        event: 'visualizer.spectrum',
+        seq: 1,
+        data: { bands: bands64 },
+      }) + '\n',
+    );
+
+    await promise;
+
+    expect(ctrl.getLatestBands().length).toBe(64);
+    const rendered = ctrl.renderBar();
+    expect(rendered.length).toBe(64);
+    expect(rendered).toContain('█');
+
+    ctrl.stop();
   });
 });

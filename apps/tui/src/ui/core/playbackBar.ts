@@ -4,13 +4,11 @@ import { COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
 import { getOnboardingContent } from '../views/onboarding';
 import { getSettingsContent } from '../views/settings';
 import { buildPlaybackBarContent } from '../playbackBarView';
+import { QUOTA_BANNER } from '../../webApi/transport';
 import { routeKind } from './navigationStack';
 import type { UiCoreContext } from './types';
-// Build the live status / progress / footer / header surface. Each
-// closure mutates `ctx.state` and refreshes the matching renderable.
+import { optimisticPlayback } from '../../playback/validator';
 function refreshHomePanels(): void {
-  // Home panels are data-driven through setHomeItems only; playback
-  // state lives in the persistent playback bar, not on this page.
 }
 
 export function createPlaybackBarHelpers(ctx: UiCoreContext) {
@@ -20,35 +18,35 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     const curKind = routeKind(route.current);
     if (state.auth.state !== 'authenticated') {
       if (built.clientIdInput.focused) {
-        return 'Enter: save Client ID  Esc/Tab: exit input';
+        return 'Enter: save Client ID  Esc/Tab: exit input  ?: palette';
       }
-      return 'A/Enter: authenticate  c: edit Client ID  q: quit';
+      return 'A/Enter: authenticate  c: edit Client ID  q: quit  ?: palette';
     }
     if (focus.current === 'sidebar') {
-      return '↑/↓: navigate  Enter: select view  Tab/→: enter view  q: quit';
+      return '↑/↓: navigate  Enter: select view  Tab/→: enter view  q: quit  ?: palette';
     }
     if (curKind === 'search') {
       if (built.searchInput.focused) {
-        return 'Enter: search Spotify  ↓: results  Tab/Esc: navigation  q: quit';
+        return 'Enter: search Spotify  ↓: results  Tab/Esc: navigation  q: quit  ?: palette';
       }
-      return '↑/↓: select  Enter: play/open  x: actions  Tab: category  q: quit';
+      return '↑/↓: select  Enter: play/open  x: actions  Tab: category  ?: palette  q: quit';
     }
     if (curKind === 'library' || curKind === 'queue') {
-      return '↑/↓: browse list  Enter: play/open  x: actions  r: refresh  q: quit';
+      return '↑/↓: browse list  Enter: play/open  x: actions  r: refresh  ?: palette  q: quit';
     }
     if (curKind === 'lyrics') {
-      return '↑/↓: scroll  l/Esc: close lyrics  L: reload lyrics  q: quit';
+      return '↑/↓: scroll  r/Enter: resume sync  l/Esc: close lyrics  L: reload  ?: palette  q: quit';
     }
     if (curKind === 'artist' || curKind === 'album' || curKind === 'playlist') {
-      return '↑/↓: browse  Enter: play/open  x: actions  Esc: back  q: quit';
+      return '↑/↓: browse  Enter: play/open  x: actions  Esc: back  ?: palette  q: quit';
     }
     if (curKind === 'visualizer') {
-      return 'V/Esc: back  m: mode  Space: play/pause  q: quit';
+      return 'V/Esc: back  m: mode  Space: play/pause  ?: palette  q: quit';
     }
     if (curKind === 'home') {
-      return '↑/↓: browse  Enter: play/open  x: actions  Tab: panel  q: quit';
+      return '↑/↓: browse  Enter: play/open  x: actions  Tab: panel  ?: palette  q: quit';
     }
-    return 'Space: play/pause  n: next  p: prev  l: lyrics  S: shuffle  R: repeat  A: autoplay  +/-: vol  Tab: nav  q: quit';
+    return 'Space: play/pause  n: next  p: prev  l: lyrics  S: shuffle  R: repeat  A: autoplay  +/-: vol  Tab: nav  ?: palette  q: quit';
   };
 
   const refreshHome = (): void => {
@@ -64,7 +62,7 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
   };
 
   const renderPlaybackBar = (): void => {
-    const pb = state.playback;
+    const pb = optimisticPlayback.getEffectiveState() ?? state.playback;
     const track = pb?.track;
     const pbState =
       pb?.state === 'playing' ? 'playing' : pb?.state === 'paused' ? 'paused' : 'idle';
@@ -72,8 +70,9 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     const authIndicator =
       state.auth.state === 'authenticated' ? '● Online' : '○ Offline / Login Required';
 
-    built.playbackBar.title = `Playback [${pbState.toUpperCase()}]  •  Spotoei ${authIndicator}`;
-
+    const privateBadge = state.isPrivateSession ? '  •  🕶 [Private]' : '';
+    built.playbackBar.title = ` Playback [${pbState.toUpperCase()}]  •  Spotoei ${authIndicator}${privateBadge} `;
+    built.playbackBar.titleColor = pbState === 'playing' ? COLOR_SUCCESS : pbState === 'paused' ? COLOR_WARN : COLOR_TEXT;
     if (!track) {
       const stateIcon =
         pbState === 'playing'
@@ -89,8 +88,7 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     const width = ctx.termWidth.value;
     const durMs = pb?.durationMs && pb.durationMs > 0 ? pb.durationMs : (track.durationMs ?? 0);
     let posMs = pb?.positionMs ?? 0;
-    // Interpolation: advance displayPos by wall-clock elapsed since last observedAt when playing.
-    const observedAt = (pb as unknown as { _observedAt?: number })?._observedAt;
+    const observedAt = pb?.observedAtMonotonicMs;
     if (pb?.state === 'playing' && observedAt) {
       const elapsed = Date.now() - observedAt;
       posMs = durMs > 0 ? Math.min(durMs, posMs + elapsed) : posMs + elapsed;
@@ -118,24 +116,35 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
 
   const setStatus = (msg: string, persist = false): void => {
     state.statusMessage = msg;
+    const isQuota = msg.includes(QUOTA_BANNER) || /QUOTA_EXCEEDED/i.test(msg) || /quota/i.test(msg);
+    const useLayer = persist || isQuota;
     try {
-      if (persist) {
-        built.statusText.content = t`${fg(COLOR_WARN)(bold(msg))}`;
+      if (useLayer) {
+        built.statusLayerText.content = t`${fg(COLOR_WARN)(bold(`⚠ ${msg}`))}`;
+        built.statusLayer.visible = true;
+        built.statusText.content = t`${fg(COLOR_DIM)(getFooterHelp())}`;
         return;
       }
+      if (built.statusLayer.visible) {
+        built.statusLayer.visible = false;
+      }
+      built.statusText.content = t`${fg(COLOR_DIM)(msg)}`;
       clearTimeout(statusTimer.value as unknown as NodeJS.Timeout);
       statusTimer.value = setTimeout(() => {
         state.statusMessage = undefined;
         try {
           built.statusText.content = t`${fg(COLOR_DIM)(getFooterHelp())}`;
         } catch {
-          // renderer destroyed during shutdown
         }
       }, 2500);
     } catch {
-      // TextBuffer destroyed after renderer shutdown — fallback to stderr
       if (persist) process.stderr.write(`${msg}\n`);
     }
+  };
+
+  const clearStatusLayer = (): void => {
+    built.statusLayer.visible = false;
+    state.statusMessage = undefined;
   };
 
   return {
@@ -146,5 +155,6 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     renderPlaybackBar,
     setHeader,
     setStatus,
+    clearStatusLayer,
   };
 }

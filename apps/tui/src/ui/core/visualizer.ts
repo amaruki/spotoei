@@ -7,10 +7,13 @@ import type { UiCoreContext } from './types';
 // fullscreen buffer and title; metadata rendering is never triggered here,
 // so slow frames cannot block audio or rerender unrelated screens.
 export function createVisualizerHelpers(ctx: UiCoreContext) {
-  const { built, latestVizFrame, state } = ctx;
+  const { built, latestVizFrame, renderer, state } = ctx;
 
   const setVizTitle = (): void => {
-    built.visualizerFullTitle.content = t`${fg(COLOR_DIM)('mode: ')}${fg(COLOR_ACCENT)(bold(state.visualizer.mode))}  ${fg(COLOR_DIM)('fps: ')}${fg(COLOR_TEXT)(String(state.visualizer.fps))}`;
+    const r = renderer as unknown as { targetFps?: number };
+    const rendererFps = r.targetFps ?? 60;
+    const fps = Math.min(state.visualizer.fps, rendererFps);
+    built.visualizerFullTitle.content = t`${fg(COLOR_DIM)('mode: ')}${fg(COLOR_ACCENT)(bold(state.visualizer.mode))}  ${fg(COLOR_DIM)('fps: ')}${fg(COLOR_TEXT)(String(fps))}`;
   };
 
   const paintViz = (): void => {
@@ -21,7 +24,7 @@ export function createVisualizerHelpers(ctx: UiCoreContext) {
     }
     const rawData = latestVizFrame.value.data ?? latestVizFrame.value.bands ?? [];
     const dataArr = Array.isArray(rawData) ? rawData : Array.from(rawData);
-    if (latestVizFrame.value.mode === 'spectrum') {
+    if (latestVizFrame.value.mode === 'spectrum' || latestVizFrame.value.mode === 'winamp') {
       drawBars(fb as unknown as OptimizedBufferLike, dataArr);
     } else {
       drawWave(fb as unknown as OptimizedBufferLike, dataArr);

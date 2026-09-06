@@ -32,19 +32,17 @@ function getBarColor(rowFromBottom: number, totalHeight: number): RGBA {
 
 // Persistent peak state across frames. Module-scope so successive draws see
 // the previous frame's peak position; without it the caps would never fall.
-const peakHeights: number[] = Array.from({ length: 32 }, () => 0);
-const peakFallSpeed: number[] = Array.from({ length: 32 }, () => 0);
+const peakHeights: number[] = Array.from({ length: 64 }, () => 0);
+const peakFallSpeed: number[] = Array.from({ length: 64 }, () => 0);
 
-// Render frequency bins as a 32-bar spectrum with 1/8th vertical resolution
-// and a gravity-falling peak cap above each bar.
 export function drawBars(fb: OptimizedBufferLike, data: number[]): void {
   const bg = RGBA.fromHex(COLOR_PANEL_BG);
   fb.clear(bg);
   const w = fb.width;
   const h = fb.height;
   if (w <= 0 || h <= 0) return;
-
-  const numBars = Math.min(w, 32);
+  const maxBars = data.length > 0 ? Math.min(64, data.length) : 64;
+  const numBars = Math.min(w, maxBars);
   const barWidth = Math.max(1, Math.floor(w / numBars));
   const dataLen = data.length;
 

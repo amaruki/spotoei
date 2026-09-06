@@ -33,6 +33,61 @@ interface PendingRequest {
 
 const MAX_PENDING = 32;
 
+
+/**
+ * Unicode 1/8th block characters for smooth meter rendering (U+2581 to U+2588).
+ */
+export const SPECTRUM_BLOCK_CHARS = [' ', '▂', '▃', '▄', '▅', '▆', '▇', '█'] as const;
+
+/**
+ * Format a single band magnitude in [0.0, 1.0] into a Unicode block character.
+ * Values <= 0 render as empty space (' ').
+ * Values > 0 map cleanly into one of [' ', '▂', '▃', '▄', '▅', '▆', '▇', '█'].
+ */
+export function formatBlockMeter(val: number): string {
+  if (val <= 0 || !Number.isFinite(val)) {
+    return ' ';
+  }
+  const clamped = Math.min(1, Math.max(0, val));
+  const idx = Math.min(7, Math.floor(clamped * 8));
+  return SPECTRUM_BLOCK_CHARS[idx] ?? ' ';
+}
+
+/**
+ * Resample an array of frequency band magnitudes to a target width.
+ */
+export function resampleBands(bands: number[], targetWidth: number): number[] {
+  if (bands.length === 0 || targetWidth <= 0) return [];
+  if (bands.length === targetWidth) return [...bands];
+  const result: number[] = [];
+  for (let i = 0; i < targetWidth; i++) {
+    const start = Math.floor((i / targetWidth) * bands.length);
+    const end = Math.max(start + 1, Math.floor(((i + 1) / targetWidth) * bands.length));
+    let sum = 0;
+    let count = 0;
+    for (let k = start; k < Math.min(bands.length, end); k++) {
+      sum += bands[k] ?? 0;
+      count++;
+    }
+    result.push(count > 0 ? sum / count : (bands[start] ?? 0));
+  }
+  return result;
+}
+
+/**
+ * Format 64-band (or arbitrary) spectrum magnitudes into a string of Unicode block characters.
+ * Suitable for rendering bar meters in TUI playback bars and status lines.
+ */
+export function formatSpectrumBar(bands: number[], targetWidth?: number): string {
+  if (!bands || bands.length === 0) {
+    return targetWidth ? ' '.repeat(targetWidth) : '';
+  }
+  const effectiveBands =
+    targetWidth && targetWidth > 0 && targetWidth !== bands.length
+      ? resampleBands(bands, targetWidth)
+      : bands;
+  return effectiveBands.map(formatBlockMeter).join('');
+}
 export class VisualizerController {
   private child: ChildProcess;
   private timeoutMs: number;
@@ -44,6 +99,8 @@ export class VisualizerController {
   private enabled: boolean = true;
   private listeners: Set<VisualizerFrameListener> = new Set();
   private pending = new Map<string, PendingRequest>();
+  private latestBands: number[] = [];
+  private latestSamples: number[] = [];
   private lineListener: ((line: string) => void) | null = null;
   private running = false;
 
@@ -109,6 +166,7 @@ export class VisualizerController {
         if (msg.event === 'visualizer.spectrum') {
           const result = SpectrumFrame.safeParse(msg.data);
           if (result.success) {
+            this.latestBands = result.data.bands;
             for (const l of this.listeners) {
               try {
                 l(this.mode, result.data.bands);
@@ -120,6 +178,7 @@ export class VisualizerController {
         } else if (msg.event === 'visualizer.waveform') {
           const result = WaveformFrame.safeParse(msg.data);
           if (result.success) {
+            this.latestSamples = result.data.samples;
             for (const l of this.listeners) {
               try {
                 l(this.mode, result.data.samples);
@@ -197,12 +256,27 @@ export class VisualizerController {
     return this.enabled;
   }
 
+  getLatestBands(): number[] {
+    return [...this.latestBands];
+  }
+
+  getLatestSamples(): number[] {
+    return [...this.latestSamples];
+  }
+
+  renderBar(width?: number): string {
+    if (!this.enabled || this.mode === 'off' || this.latestBands.length === 0) {
+      return width ? ' '.repeat(width) : '';
+    }
+    return formatSpectrumBar(this.latestBands, width ?? this.bands);
+  }
+
   private recordFrameLatency(ms: number): void {
     this.frameTimes.push(ms);
     if (this.frameTimes.length > 120) this.frameTimes.shift();
     if (this.frameTimes.length < 10) return;
     const now = performance.now();
-    const sorted = [...this.frameTimes].sort((a, b) => a - b);
+    const sorted = this.frameTimes.toSorted((a, b) => a - b);
     const p95 = sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] ?? 0;
     const drop22 = this.frameTimes.filter((t) => t > 22).length / this.frameTimes.length;
     const drop40 = this.frameTimes.filter((t) => t > 40).length / this.frameTimes.length;

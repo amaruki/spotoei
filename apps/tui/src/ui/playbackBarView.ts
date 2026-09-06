@@ -50,20 +50,28 @@ export function buildPlaybackBarContent(input: PlaybackBarInput): PlaybackBarCon
     return {
       variant: 'narrow',
       line1: `${icon} ${title} — ${artist}  ${pos} / ${dur}`,
-      line2: 'Space Pause · n Next · V Visualizer',
+      line2: 'Space Pause · n Next · V Visualizer · ?: palette',
     };
   }
+  const pct = input.durationMs > 0 ? Math.min(1, Math.max(0, input.positionMs / input.durationMs)) : 0;
   if (input.width < WIDE_BREAKPOINT) {
+    const barLen = 10;
+    const filled = Math.round(pct * barLen);
+    const bar = '━'.repeat(filled) + (filled < barLen ? '─'.repeat(barLen - filled) : '');
     return {
       variant: 'medium',
-      line1: `${icon} ${title} — ${artist}  ${pos} ━━━━━━━━ ${dur}`,
-      line2: `Shuf ${input.shuffle ? 'on' : 'off'} Rep ${input.repeat} Q:${input.queueCount} · Space Pause · n Next`,
+      line1: `${icon} ${title} — ${artist}  ${pos} ${bar} ${dur}`,
+      line2: `Shuf ${input.shuffle ? 'on' : 'off'} Rep ${input.repeat} Q:${input.queueCount} · Space Pause · n Next · ?: palette`,
     };
   }
+  const barLen = 16;
+  const filled = Math.round(pct * barLen);
+  const bar = '━'.repeat(filled) + (filled < barLen ? '─'.repeat(barLen - filled) : '');
+  const pctStr = `${Math.round(pct * 100)}%`;
   const album = input.album ? `\n    Album ${truncate(input.album, Math.max(10, input.width - 40))}` : '';
   return {
     variant: 'wide',
     line1: `${icon} ${title} — ${artist}  Shuffle ${input.shuffle ? 'on' : 'off'} Repeat ${input.repeat} Queue: ${input.queueCount}${album}`,
-    line2: `    ${pos} ━━━━━━━━──── ${dur}  Space Pause · n Next · p Previous · +/- Volume ${input.volume}%`,
+    line2: `    ${pos} ${bar} ${dur} (${pctStr})  Space Pause · n Next · p Previous · +/- Volume ${input.volume}% · ?: palette`,
   };
 }
