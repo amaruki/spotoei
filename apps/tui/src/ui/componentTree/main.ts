@@ -7,7 +7,7 @@ import {
   SelectRenderable,
   TextRenderable,
 } from '@opentui/core';
-import { COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_PANEL_BG } from '../theme';
+import { COLOR_BG, COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
 import type { UiViewState } from '../types';
 import { getSettingsContent } from '../views/settings';
 import { buildEntityViews, type EntityViewNodes } from './entityViews';
@@ -49,6 +49,7 @@ export interface MainNodes extends EntityViewNodes {
   lyrics: BoxRenderable;
   lyricsScroll: ScrollBoxRenderable;
   lyricsText: TextRenderable;
+  lyricsResumeHint: TextRenderable;
   settings: BoxRenderable;
   settingsText: TextRenderable;
   onboarding: BoxRenderable;
@@ -70,14 +71,11 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
   const main = new BoxRenderable(renderer, {
     id: 'main',
     flexGrow: 1,
-    borderStyle: 'single',
-    borderColor: COLOR_BORDER,
-    backgroundColor: COLOR_PANEL_BG,
-    title: 'Now Playing',
+    border: false,
+    backgroundColor: COLOR_BG,
     flexDirection: 'column',
     paddingLeft: 1,
     paddingRight: 1,
-    paddingTop: 1,
   });
   center.add(main);
 
@@ -104,10 +102,11 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     id: 'search-input-box',
     width: '100%',
     height: 3,
-    borderStyle: 'single',
+    borderStyle: 'rounded',
     borderColor: COLOR_BORDER_FOCUS,
     backgroundColor: COLOR_PANEL_BG,
-    title: 'Search Spotify (Type query & press Enter)',
+    title: ' Search Spotify (Type query & press Enter) ',
+    titleColor: COLOR_BORDER_FOCUS,
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: 1,
@@ -129,15 +128,9 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     id: 'search-results-box',
     width: '100%',
     flexGrow: 1,
-    marginTop: 1,
-    borderStyle: 'single',
-    borderColor: COLOR_BORDER,
-    backgroundColor: COLOR_PANEL_BG,
-    title: 'Results (Tab: category, Enter: play/open)',
+    border: false,
+    backgroundColor: COLOR_BG,
     flexDirection: 'column',
-    paddingLeft: 1,
-    paddingRight: 1,
-    paddingTop: 1,
   });
   const searchGrid = buildSearchGrid(renderer);
   searchResultsBox.add(searchGrid.searchRow);
@@ -149,10 +142,14 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     id: 'view-library',
     width: '100%',
     flexGrow: 1,
-    borderStyle: 'single',
+    borderStyle: 'rounded',
     borderColor: COLOR_BORDER,
+    focusedBorderColor: COLOR_BORDER_FOCUS,
     backgroundColor: COLOR_PANEL_BG,
-    title: 'Saved Tracks (Press Enter to play, r to refresh)',
+    title: ' ♥ Library — Saved Tracks ',
+    titleColor: COLOR_TEXT,
+    bottomTitle: ' [Enter] Play  [x] Actions  [/] Filter  [r] Refresh ',
+    bottomTitleAlignment: 'right',
     flexDirection: 'column',
     paddingLeft: 1,
     paddingRight: 1,
@@ -176,10 +173,14 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     id: 'view-queue',
     width: '100%',
     flexGrow: 1,
-    borderStyle: 'single',
+    borderStyle: 'rounded',
     borderColor: COLOR_BORDER,
+    focusedBorderColor: COLOR_BORDER_FOCUS,
     backgroundColor: COLOR_PANEL_BG,
-    title: 'Playback Queue (Press Enter to play)',
+    title: ' ≡ Playback Queue ',
+    titleColor: COLOR_TEXT,
+    bottomTitle: ' [Enter] Play  [x] Actions  [Space] Play/Pause ',
+    bottomTitleAlignment: 'right',
     flexDirection: 'column',
     paddingLeft: 1,
     paddingRight: 1,
@@ -207,7 +208,16 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     id: 'view-settings',
     width: '100%',
     flexGrow: 1,
+    borderStyle: 'rounded',
+    borderColor: COLOR_BORDER,
+    backgroundColor: COLOR_PANEL_BG,
+    title: ' Settings & Account ',
+    titleColor: COLOR_TEXT,
     flexDirection: 'column',
+    paddingLeft: 2,
+    paddingRight: 2,
+    paddingTop: 1,
+    paddingBottom: 1,
     visible: false,
   });
   const settingsText = new TextRenderable(renderer, {
@@ -261,6 +271,7 @@ export function buildMain(renderer: CliRenderer, state: UiViewState): MainNodes 
     lyrics: lyricsView.lyrics,
     lyricsScroll: lyricsView.lyricsScroll,
     lyricsText: lyricsView.lyricsText,
+    lyricsResumeHint: lyricsView.lyricsResumeHint,
     settings,
     settingsText,
     onboarding: onboardingView.onboarding,

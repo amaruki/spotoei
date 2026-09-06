@@ -36,10 +36,10 @@ describe('onboarding steps', () => {
     else process.env.SPOTOEI_CONFIG_DIR = savedDir;
   });
 
-  it('shows client-id step when no Client ID is configured', () => {
+  it('shows authenticate step by default with built-in client ID', () => {
     delete process.env.SPOTOEI_CLIENT_ID;
     process.env.SPOTOEI_CONFIG_DIR = '/tmp/spotoei-onboarding-test-empty';
-    expect(onboardingStep(stateWith('unauthenticated'))).toBe('client-id');
+    expect(onboardingStep(stateWith('unauthenticated'))).toBe('authenticate');
   });
 
   it('shows authenticate step once Client ID exists', () => {

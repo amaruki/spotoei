@@ -200,7 +200,12 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
           const id = newRequestId();
           const cmd = makeAuthGetWebToken(id);
           const data = await sendCommand<AuthTokenDataT>(cmd, validateAuthToken);
-          cachedToken = data;
+          const prevRefreshToken = cachedToken?.refreshToken;
+          const nextRefreshToken = data.refreshToken || prevRefreshToken;
+          cachedToken = {
+            ...data,
+            ...(nextRefreshToken ? { refreshToken: nextRefreshToken } : {}),
+          };
           return data.accessToken;
         } finally {
           refreshPromise = null;
