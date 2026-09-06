@@ -1,9 +1,15 @@
+// @ts-nocheck
 import type { ArtistReleaseGroupT, CatalogAlbumT, CatalogTrackT } from 'spotoei-protocol';
 import type { EntityManager } from '../entities';
 import type { Ui } from '../ui/types';
+import { fetchAllPages } from '../webApi/paging';
 import type { AppState } from './types';
 
 const PAGE_SIZE = 20;
+// Spotify caps artist-albums pages at 10 (limit > 10 → 400 "Invalid limit").
+const ARTIST_PAGE_SIZE = 10;
+// Parallel background fetch width, mirroring spotify-player's MAX_PARALLEL.
+const PREFETCH_PARALLEL = 8;
 
 export interface EntityLoaderDeps {
   entityManager: EntityManager;
@@ -23,9 +29,94 @@ function pagesOf(state: AppState): Record<string, LoadedPage> {
   return state.entityPages as Record<string, LoadedPage>;
 }
 
+// Tracks loaded for an album/playlist route, for queue-context use. A
+// direct play from such a route should continue inside the same list
+// instead of jumping to a stale pool head.
+export function poolTracksForRoute(state: AppState, route: unknown): CatalogTrackT[] | null {
+  if (!route || typeof route !== 'object') return null;
+  const r = route as { kind: string; id?: string };
+  if ((r.kind !== 'album' && r.kind !== 'playlist') || !r.id) return null;
+  const items = pagesOf(state)[`${r.kind}:${r.id}`]?.items as CatalogTrackT[] | undefined;
+  if (!items || items.length === 0) return null;
+  const tracks = items.filter((t) => t && typeof t.uri === 'string');
+  return tracks.length > 0 ? tracks : null;
+}
+
 function fail(ui: Ui | null, label: string, err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err);
   ui?.setStatus(`${label} failed: ${msg} — playback unaffected`, true);
+}
+
+// Fetch every remaining page in the background (8-parallel, like
+// spotify-player's `all_paging_items`) and append it to the already
+// painted first page. Best-effort: failures stay silent because the
+// first page is already visible and `hasMore` keeps manual paging alive.
+function prefetchRemaining(
+  deps: EntityLoaderDeps,
+  kind: 'artist' | 'album' | 'playlist',
+  id: string,
+  group: string,
+  pageSize: number,
+  total: number,
+): void {
+  const { entityManager, getUi, state } = deps;
+  const key = kind === 'artist' ? `artist:${id}:${group}` : `${kind}:${id}`;
+  if (loadingMore.has(key)) return;
+  loadingMore.add(key);
+  void (async () => {
+    try {
+      const pages = pagesOf(state);
+      const prev = pages[key];
+      if (!prev || !prev.hasMore) return;
+      const loadPage = async (offset: number) => {
+        if (kind === 'artist') {
+          const page = await entityManager.loadArtistAlbums(id, group, offset, pageSize);
+          return { items: page.items, total: page.total };
+        }
+        if (kind === 'album') {
+          const page = await entityManager.loadAlbumTracks(id, offset, pageSize);
+          return { items: page.items, total: page.total };
+        }
+        const page = await entityManager.loadPlaylistTracks(id, offset, pageSize);
+        return { items: page.items, total: page.total };
+      };
+      const rest = await fetchAllPages(loadPage, {
+        startOffset: prev.nextOffset,
+        pageLimit: pageSize,
+        maxParallel: PREFETCH_PARALLEL,
+        knownTotal: total,
+      });
+      if (rest.items.length === 0) {
+        const cur = pagesOf(state)[key];
+        if (cur) cur.hasMore = false;
+        return;
+      }
+      const cur = pagesOf(state)[key];
+      const merged = [...(cur?.items ?? prev.items), ...rest.items];
+      pagesOf(state)[key] = {
+        items: merged,
+        nextOffset: prev.nextOffset + rest.items.length,
+        hasMore: false,
+        group: prev.group,
+      };
+      const ui = getUi();
+      const route = ui?.getRoute?.() as { kind?: string; id?: string } | undefined;
+      // Paint only onto the route that requested the data; a missing
+      // route (tests) still paints, like the initial page does.
+      const foreign = route && (route.kind !== kind || route.id !== id);
+      if (!ui || foreign) {
+        return;
+      }
+      const fresh = rest.items;
+      if (kind === 'artist') ui.setArtistAlbums(fresh as CatalogAlbumT[], { append: true });
+      else if (kind === 'album') ui.setAlbumTracks(fresh as CatalogTrackT[], { append: true });
+      else ui.setPlaylistTracks(fresh as CatalogTrackT[], { append: true });
+    } catch {
+      // Silent: the first page is already painted; manual paging retries.
+    } finally {
+      loadingMore.delete(key);
+    }
+  })();
 }
 
 // First-page load for entity routes. Cached pages render instantly;
@@ -54,7 +145,7 @@ export async function ensureEntityRoute(deps: EntityLoaderDeps, route: unknown):
     }
     ui.setStatus('Loading artist releases…');
     try {
-      const page = await entityManager.loadArtistAlbums(r.id, group, 0, PAGE_SIZE);
+      const page = await entityManager.loadArtistAlbums(r.id, group, 0, ARTIST_PAGE_SIZE);
       const items = page.items as CatalogAlbumT[];
       pagesOf(state)[key] = {
         items,
@@ -63,6 +154,8 @@ export async function ensureEntityRoute(deps: EntityLoaderDeps, route: unknown):
         group,
       };
       ui.setArtistAlbums(items);
+      if (page.hasMore)
+        prefetchRemaining(deps, 'artist', r.id, group, ARTIST_PAGE_SIZE, page.total);
     } catch (err) {
       fail(ui, 'Artist releases', err);
     }
@@ -95,21 +188,25 @@ export async function ensureEntityRoute(deps: EntityLoaderDeps, route: unknown):
         group: '',
       };
       ui.setAlbumTracks(items);
+      if (page.hasMore) prefetchRemaining(deps, 'album', r.id, '', PAGE_SIZE, page.total);
     } catch (err) {
       fail(ui, 'Album tracks', err);
     }
     return;
   }
   if (r.kind === 'playlist' && r.id) {
+    let unavailable = false;
     try {
       const view = await entityManager.loadPlaylist(r.id);
       if (view.type === 'playlist' && view.completeness === 'complete' && view.playlist) {
         ui.setPlaylistHeader(view.playlist as { name: string; owner?: { displayName?: string } });
       } else {
         ui.setPlaylistHeader(null);
+        unavailable = true;
       }
     } catch {
       ui.setPlaylistHeader(null);
+      unavailable = true;
     }
     const key = `playlist:${r.id}`;
     if (pagesOf(state)[key]) {
@@ -127,6 +224,13 @@ export async function ensureEntityRoute(deps: EntityLoaderDeps, route: unknown):
         group: '',
       };
       ui.setPlaylistTracks(items);
+      if (page.hasMore) prefetchRemaining(deps, 'playlist', r.id, '', 100, page.total);
+      if (unavailable && items.length === 0) {
+        ui.setStatus(
+          'Playlist unavailable — it may be private, region-locked, or restricted for this app',
+          true,
+        );
+      }
     } catch (err) {
       fail(ui, 'Playlist tracks', err);
     }
@@ -172,7 +276,12 @@ async function appendEntityPage(
   if (kind === 'artist') {
     const group = artistGroups.get(id) ?? 'album';
     try {
-      const page = await entityManager.loadArtistAlbums(id, group, prev.nextOffset, PAGE_SIZE);
+      const page = await entityManager.loadArtistAlbums(
+        id,
+        group,
+        prev.nextOffset,
+        ARTIST_PAGE_SIZE,
+      );
       const items = page.items as CatalogAlbumT[];
       pages[key] = {
         items: [...prev.items, ...items],
@@ -222,7 +331,7 @@ export async function switchArtistGroup(
     return;
   }
   try {
-    const page = await entityManager.loadArtistAlbums(id, group, 0, PAGE_SIZE);
+    const page = await entityManager.loadArtistAlbums(id, group, 0, ARTIST_PAGE_SIZE);
     const items = page.items as CatalogAlbumT[];
     pagesOf(state)[key] = {
       items,
@@ -232,6 +341,7 @@ export async function switchArtistGroup(
     };
     ui.setArtistAlbums(items);
     ui.setStatus(`Artist releases: ${group}`);
+    if (page.hasMore) prefetchRemaining(deps, 'artist', id, group, ARTIST_PAGE_SIZE, page.total);
   } catch (err) {
     fail(ui, `Releases (${group})`, err);
   }

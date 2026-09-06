@@ -1,5 +1,5 @@
 import { BoxRenderable, type CliRenderer, SelectRenderable } from '@opentui/core';
-import { COLOR_BORDER, COLOR_PANEL_BG } from '../theme';
+import { COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
 
 export interface PanelNodes {
   box: BoxRenderable;
@@ -20,10 +20,12 @@ export function makeListPanel(
     flexShrink: 1,
     flexBasis: 0,
     minWidth: 0,
-    borderStyle: 'single',
+    borderStyle: 'rounded',
     borderColor: COLOR_BORDER,
+    focusedBorderColor: COLOR_BORDER_FOCUS,
     backgroundColor: COLOR_PANEL_BG,
-    title,
+    title: ` ${title} `,
+    titleColor: COLOR_TEXT,
     flexDirection: 'column',
     paddingLeft: 1,
     paddingRight: 1,

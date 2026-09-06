@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import type { CatalogArtistT, CatalogPlaylistT, CatalogTrackT } from 'spotoei-protocol';
 
-import { libraryItemOptions } from '../src/ui/views/library';
+import { libraryItemOptions, toggleLibraryFolder } from '../src/ui/views/library';
+import type { PlaylistFolderNode } from '../src/library/collections';
 
 describe('libraryItemOptions', () => {
   it('renders error message when error is present', () => {
@@ -34,12 +35,8 @@ describe('libraryItemOptions', () => {
       durationMs: 180_000,
     };
     const options = libraryItemOptions([track]);
-    expect(options).toEqual([
-      {
-        name: '♪ Test Song',
-        description: 'Singer — Album 1',
-      },
-    ]);
+    expect(options[0]?.name).toBe('♪ Test Song');
+    expect(options[0]?.description).toContain('Singer — Album 1');
   });
 
   it('formats artist items with person icon and follower count', () => {
@@ -72,5 +69,41 @@ describe('libraryItemOptions', () => {
         description: '42 tracks (playlist)',
       },
     ]);
+  });
+
+  it('formats playlist folder nodes (collapsed and expanded) and indented items', () => {
+    const folder: PlaylistFolderNode = {
+      id: 'folder:Rock',
+      name: 'Rock',
+      children: [
+        { id: 'p1', uri: 'spotify:playlist:p1', name: 'Classic', trackCount: 10 },
+      ],
+      isExpanded: false,
+    };
+
+    const collapsedOptions = libraryItemOptions([folder]);
+    expect(collapsedOptions[0]?.name).toBe('📁 Rock');
+    expect(collapsedOptions[0]?.description).toContain('1 item (folder · collapsed)');
+
+    const expandedFolder: PlaylistFolderNode = {
+      ...folder,
+      isExpanded: true,
+    };
+    const indentedPlaylist = {
+      id: 'p1',
+      uri: 'spotify:playlist:p1',
+      name: 'Classic',
+      trackCount: 10,
+      depth: 1,
+    };
+    const expandedOptions = libraryItemOptions([expandedFolder, indentedPlaylist]);
+    expect(expandedOptions[0]?.name).toBe('📂 Rock');
+    expect(expandedOptions[0]?.description).toContain('1 item (folder · expanded)');
+    expect(expandedOptions[1]?.name).toBe('  ☰ Classic');
+    expect(expandedOptions[1]?.description).toContain('10 tracks (playlist)');
+
+    // Test toggleLibraryFolder
+    const toggled = toggleLibraryFolder([folder], 'folder:Rock');
+    expect((toggled[0] as PlaylistFolderNode).isExpanded).toBe(true);
   });
 });

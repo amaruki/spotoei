@@ -4,6 +4,13 @@
 import { Cache } from './cache';
 import { WebApiClient } from './webApi';
 import type { LibraryCollectionT, LibraryPageResponseT } from 'spotoei-protocol';
+export interface LibraryCollectionMeta {
+  offset: number;
+  total: number;
+  hasMore: boolean;
+  nextOffset?: number;
+  cursor?: string;
+}
 
 export interface LibraryManagerOptions {
   webApi: WebApiClient;
@@ -17,6 +24,7 @@ export class LibraryManager {
   private cache: Cache;
   private accountId: string;
   private cacheTtlMs: number;
+  private collectionMeta = new Map<LibraryCollectionT, LibraryCollectionMeta>();
 
   constructor(opts: LibraryManagerOptions) {
     this.webApi = opts.webApi;
@@ -25,8 +33,36 @@ export class LibraryManager {
     this.cacheTtlMs = opts.cacheTtlMs ?? 5 * 60 * 1000;
   }
 
-  private makeKey(collection: LibraryCollectionT, offset: number, limit: number): string {
-    return `library:v1:${collection}:${offset}:${limit}`;
+  getCollectionMeta(collection: LibraryCollectionT): LibraryCollectionMeta {
+    const m = this.collectionMeta.get(collection);
+    return m ? { ...m } : { offset: 0, total: 0, hasMore: true };
+  }
+
+  getOffset(collection: LibraryCollectionT): number {
+    return this.getCollectionMeta(collection).offset;
+  }
+
+  getTotal(collection: LibraryCollectionT): number {
+    return this.getCollectionMeta(collection).total;
+  }
+
+  hasMore(collection: LibraryCollectionT): boolean {
+    return this.getCollectionMeta(collection).hasMore;
+  }
+
+  getCursor(collection: LibraryCollectionT): string | undefined {
+    return this.getCollectionMeta(collection).cursor;
+  }
+
+  private makeKey(
+    collection: LibraryCollectionT,
+    offset: number,
+    limit: number,
+    cursor?: string,
+  ): string {
+    return cursor
+      ? `library:v1:${collection}:c:${cursor}:${limit}`
+      : `library:v1:${collection}:${offset}:${limit}`;
   }
 
   private makePrefix(collection: LibraryCollectionT): string {
@@ -38,24 +74,37 @@ export class LibraryManager {
     offset = 0,
     limit = 20,
     forceRefresh = false,
+    cursor?: string,
   ): Promise<LibraryPageResponseT> {
-    const key = this.makeKey(collection, offset, limit);
+    const key = this.makeKey(collection, offset, limit, cursor);
 
     if (!forceRefresh) {
       const cached = this.cache.getQuery<LibraryPageResponseT>(this.accountId, key);
       if (cached) {
         const expired = cached.expiresAt !== null && cached.expiresAt < Date.now();
         if (!expired) {
+          this.updateMeta(collection, cached.payload);
           return cached.payload;
         }
       }
     }
 
-    const fresh = await this.webApi.getLibraryPage(collection, offset, limit);
+    const fresh = await this.webApi.getLibraryPage(collection, offset, limit, cursor);
     if (!fresh.error) {
       this.cache.putQuery(this.accountId, key, fresh, this.cacheTtlMs);
+      this.updateMeta(collection, fresh);
     }
     return fresh;
+  }
+
+  private updateMeta(collection: LibraryCollectionT, page: LibraryPageResponseT): void {
+    this.collectionMeta.set(collection, {
+      offset: page.offset,
+      total: page.total,
+      hasMore: page.hasMore,
+      nextOffset: (page as { nextOffset?: number }).nextOffset ?? page.offset + page.items.length,
+      cursor: (page as { nextCursor?: string }).nextCursor,
+    });
   }
 
   async save(type: 'track' | 'album', id: string): Promise<boolean> {
@@ -101,6 +150,10 @@ export class LibraryManager {
   }
   invalidate(collection: LibraryCollectionT): void {
     this.cache.invalidateQueryPrefix(this.accountId, this.makePrefix(collection));
+    this.collectionMeta.delete(collection);
+    if (collection === 'followed_artists') {
+      (this.webApi as unknown as { resetCursors?: () => void }).resetCursors?.();
+    }
   }
 
   async refresh(collection?: LibraryCollectionT): Promise<LibraryPageResponseT> {
@@ -108,9 +161,10 @@ export class LibraryManager {
       this.invalidate(collection);
       return this.getPage(collection, 0, 20, true);
     }
-    for (const c of ['saved_tracks', 'saved_albums', 'playlists', 'followed_artists'] as const) {
+    for (const c of ['saved_tracks', 'saved_albums', 'playlists', 'followed_artists', 'saved_shows'] as const) {
       this.invalidate(c);
     }
+    (this.webApi as unknown as { resetCursors?: () => void }).resetCursors?.();
     return this.getPage('saved_tracks', 0, 20, true);
   }
 }

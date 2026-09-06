@@ -8,7 +8,7 @@ import {
   fg,
   t,
 } from '@opentui/core';
-import { COLOR_ACCENT, COLOR_BORDER, COLOR_DIM, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
+import { COLOR_ACCENT, COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_DIM, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
 import type { UiViewState } from '../types';
 
 export interface EntityViewNodes {
@@ -34,10 +34,12 @@ function makeListView(
     id,
     width: '100%',
     flexGrow: 1,
-    borderStyle: 'single',
+    borderStyle: 'rounded',
     borderColor: COLOR_BORDER,
+    focusedBorderColor: COLOR_BORDER_FOCUS,
     backgroundColor: COLOR_PANEL_BG,
-    title,
+    title: ` ${title} `,
+    titleColor: COLOR_TEXT,
     flexDirection: 'column',
     paddingLeft: 1,
     paddingRight: 1,

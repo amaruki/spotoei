@@ -153,4 +153,129 @@ describe('LibraryManager', () => {
     await manager.getPage('saved_tracks', 0, 20);
     expect(callCount).toBe(2);
   });
+
+  test('tracks offset, total, and hasMore per collection and paginates past 50 items', async () => {
+    const totalItems = 120;
+    const fakeWebApiClient = {
+      async getLibraryPage(
+        collection: 'saved_tracks' | 'saved_albums' | 'followed_artists' | 'playlists',
+        offset = 0,
+        limit = 20,
+        cursor?: string,
+      ): Promise<LibraryPageResponseT> {
+        const remaining = Math.max(0, totalItems - offset);
+        const count = Math.min(limit, remaining);
+        const items = Array.from({ length: count }, (_, i) => ({
+          id: `track-${offset + i}`,
+          uri: `spotify:track:${offset + i}`,
+          name: `Track ${offset + i}`,
+          durationMs: 200_000,
+          artists: [],
+        }));
+        const nextOffset = offset + count;
+        return {
+          collection,
+          items,
+          total: totalItems,
+          offset,
+          limit,
+          hasMore: nextOffset < totalItems,
+          nextOffset,
+          nextCursor: cursor ? `c-${nextOffset}` : undefined,
+        };
+      },
+    } as unknown as WebApiClient;
+
+    const manager = new LibraryManager({
+      webApi: fakeWebApiClient,
+      cache,
+      accountId: 'test-user',
+    });
+
+    // Page 1: 0..50
+    const page1 = await manager.getPage('saved_tracks', 0, 50);
+    expect(page1.items.length).toBe(50);
+    expect(page1.hasMore).toBe(true);
+    expect(manager.getOffset('saved_tracks')).toBe(0);
+    expect(manager.getTotal('saved_tracks')).toBe(120);
+    expect(manager.hasMore('saved_tracks')).toBe(true);
+    expect(manager.getCollectionMeta('saved_tracks')).toEqual({
+      offset: 0,
+      total: 120,
+      hasMore: true,
+      nextOffset: 50,
+      cursor: undefined,
+    });
+
+    // Page 2: 50..100
+    const page2 = await manager.getPage('saved_tracks', 50, 50);
+    expect(page2.items.length).toBe(50);
+    expect(page2.hasMore).toBe(true);
+    expect(manager.getOffset('saved_tracks')).toBe(50);
+    expect(manager.getTotal('saved_tracks')).toBe(120);
+    expect(manager.hasMore('saved_tracks')).toBe(true);
+    expect(manager.getCollectionMeta('saved_tracks').nextOffset).toBe(100);
+
+    // Page 3: 100..120 (reaches end)
+    const page3 = await manager.getPage('saved_tracks', 100, 50);
+    expect(page3.items.length).toBe(20);
+    expect(page3.hasMore).toBe(false);
+    expect(manager.getOffset('saved_tracks')).toBe(100);
+    expect(manager.hasMore('saved_tracks')).toBe(false);
+    expect(manager.getCollectionMeta('saved_tracks').nextOffset).toBe(120);
+
+    // Invalidate resets collection meta
+    manager.invalidate('saved_tracks');
+    expect(manager.getCollectionMeta('saved_tracks')).toEqual({
+      offset: 0,
+      total: 0,
+      hasMore: true,
+      cursor: undefined,
+    });
+  });
+
+  test('supports cursor-based pagination for followed_artists', async () => {
+    const fakeWebApiClient = {
+      async getLibraryPage(
+        collection: 'saved_tracks' | 'saved_albums' | 'followed_artists' | 'playlists',
+        offset = 0,
+        limit = 20,
+        cursor?: string,
+      ): Promise<LibraryPageResponseT> {
+        const isFirst = !cursor && offset === 0;
+        return {
+          collection,
+          items: [
+            {
+              id: isFirst ? 'artist-1' : 'artist-2',
+              uri: isFirst ? 'spotify:artist:1' : 'spotify:artist:2',
+              name: isFirst ? 'Artist 1' : 'Artist 2',
+            },
+          ],
+          total: 2,
+          offset,
+          limit,
+          hasMore: isFirst,
+          nextOffset: offset + 1,
+          nextCursor: isFirst ? 'cursor-art-1' : undefined,
+        };
+      },
+    } as unknown as WebApiClient;
+
+    const manager = new LibraryManager({
+      webApi: fakeWebApiClient,
+      cache,
+      accountId: 'test-user',
+    });
+
+    const p1 = await manager.getPage('followed_artists', 0, 1);
+    expect(p1.items[0]?.name).toBe('Artist 1');
+    expect(p1.hasMore).toBe(true);
+    expect(manager.getCursor('followed_artists')).toBe('cursor-art-1');
+
+    const p2 = await manager.getPage('followed_artists', 1, 1, false, 'cursor-art-1');
+    expect(p2.items[0]?.name).toBe('Artist 2');
+    expect(p2.hasMore).toBe(false);
+    expect(manager.getCursor('followed_artists')).toBeUndefined();
+  });
 });

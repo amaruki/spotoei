@@ -47,7 +47,7 @@ export class EntityManager {
     id: string,
     group: ArtistReleaseGroupT = 'album',
     offset = 0,
-    limit = 20,
+    limit = 10,
     forceRefresh = false,
   ): Promise<EntityPageResult<CatalogAlbumT>> {
     const key = `artist:v2:${id}:${group}:${offset}`;
@@ -183,6 +183,25 @@ export class EntityManager {
     await this.client.play({ uris });
   }
 
+  async addTracksToPlaylist(
+    playlistId: string,
+    uris: string[],
+    position?: number,
+  ): Promise<{ snapshot_id: string }> {
+    const res = await this.client.addTracksToPlaylist(playlistId, uris, position);
+    this.invalidatePlaylist(playlistId);
+    return res;
+  }
+
+  async removeTracksFromPlaylist(
+    playlistId: string,
+    uris: string[],
+  ): Promise<{ snapshot_id: string }> {
+    const res = await this.client.removeTracksFromPlaylist(playlistId, uris);
+    this.invalidatePlaylist(playlistId);
+    return res;
+  }
+
   // --- Invalidation ---
 
   invalidateArtist(id: string): void {
@@ -210,6 +229,7 @@ export class EntityManager {
     try {
       this.cache.invalidateQuery(this.accountId, `entity:v2:playlist:${id}`);
       this.cache.invalidateQueryPrefix(this.accountId, `playlist:v2:${id}:`);
+      this.cache.invalidateQueryPrefix(this.accountId, `playlist:v1:${id}:`);
     } catch {
       // Non-fatal
     }
