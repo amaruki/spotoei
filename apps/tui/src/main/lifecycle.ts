@@ -4,6 +4,7 @@ import { stopPlayer } from '../player';
 import type { Ui } from '../ui';
 import { deferred } from './utils';
 import type { Deferred } from './types';
+import { reportFailure } from '../diagnostics';
 
 export interface LifecycleHandles {
   ctx: { quit: () => Promise<void> };
@@ -11,17 +12,21 @@ export interface LifecycleHandles {
   ui: Ui;
 }
 
-export function installSignalHandlers(quit: () => Promise<void>): void {
-  process.on('SIGINT', () => void quit());
-  process.on('SIGTERM', () => void quit());
-  process.on('SIGHUP', () => void quit());
+export function installSignalHandlers(quit: () => Promise<void>): () => void {
+  const handler = () => void quit();
+  const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+  for (const signal of signals) process.on(signal, handler);
+  return () => {
+    for (const signal of signals) process.off(signal, handler);
+  };
 }
 
 export function installUncaughtHandler(
   getUi: () => Ui | null,
   getChild: () => ChildProcess | null,
-): void {
-  process.on('uncaughtException', async (err) => {
+): () => void {
+  const handler = async (err: unknown) => {
+    const id = reportFailure('runtime', 'unhandled', err);
     const ui = getUi();
     if (ui) {
       try {
@@ -31,7 +36,7 @@ export function installUncaughtHandler(
       }
     }
     process.stderr.write(
-      `[spotoei:fatal] uncaught exception: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+      `[spotoei:fatal] Unhandled runtime error [${id}]. See the diagnostic log.\n`,
     );
     const child = getChild();
     if (child) {
@@ -42,7 +47,13 @@ export function installUncaughtHandler(
       }
     }
     process.exit(1);
-  });
+  };
+  process.on('uncaughtException', handler);
+  process.on('unhandledRejection', handler);
+  return () => {
+    process.off('uncaughtException', handler);
+    process.off('unhandledRejection', handler);
+  };
 }
 
 export function createShutdownFn(

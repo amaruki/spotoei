@@ -1,11 +1,14 @@
 import type {
   AuthStatusDataT,
+  CatalogTrackT,
   PlaybackChangedDataT,
   PlaybackPositionDataT,
 } from 'spotoei-protocol';
 import { routeKind } from '../ui/core/navigationStack';
+import { resolveQueueView } from '../queue';
+import type { PlayTrackOpts } from './playback';
 import type { createEnrichment } from './enrich';
-import type { AppContext } from './types';
+import type { AppContext, AppState } from './types';
 export function wireSubscriptions(
   ctx: AppContext,
   actions: {
@@ -16,11 +19,7 @@ export function wireSubscriptions(
     loadCurrentLyrics: (force?: boolean) => Promise<void>;
     updateQueueView: () => Promise<void>;
     ensureAutoplayTracks: () => Promise<void>;
-    playTrackOrContext: (opts: {
-      trackUri?: string;
-      contextUri?: string;
-      title: string;
-    }) => Promise<void>;
+    playTrackOrContext: (opts: PlayTrackOpts) => Promise<void>;
     nextTrack: () => Promise<void>;
   },
   enrichment: ReturnType<typeof createEnrichment>,
@@ -43,8 +42,7 @@ export function wireSubscriptions(
     if (ui) ui.setAuth(next);
     else state.currentInfo.auth = next;
     if (!wasAuthed && next.state === 'authenticated') {
-      ui?.setStatus('Successfully authenticated! Loading library…');
-      void actions.loadLibrary();
+      // setAuth routes to Home and starts its loader. Preserve its status.
     }
   });
 
@@ -75,9 +73,16 @@ export function wireSubscriptions(
   });
 
   clients.queueManager.subscribe((snap) => {
-    state.currentInfo.queue = snap;
+    // Same merged view as updateQueueView so subscription repaints
+    // (e.g. after add()) never flash the cloud-only snapshot.
+    const view = resolveQueueView(
+      snap,
+      state.activePlaylistTracks,
+      state.currentInfo.playback?.track ?? null,
+    );
+    state.currentInfo.queue = view;
     const ui = getUi();
-    if (ui) ui.setQueueSnapshot(snap);
+    if (ui) ui.setQueueSnapshot(view);
   });
 
   clients.lyrics.subscribe((doc) => {
@@ -86,19 +91,43 @@ export function wireSubscriptions(
   });
 }
 
+export function endLooksGenuine(
+  pb: { track?: { uri?: string } | null; positionMs: number },
+  state: Pick<AppState, 'activePlaylistTracks' | 'libraryItems'>,
+): boolean {
+  const pos = pb.positionMs;
+  // Half a minute of playback is unambiguous regardless of metadata.
+  if (pos >= 30_000) return true;
+  const uri = pb.track?.uri;
+  const known =
+    (uri ? state.activePlaylistTracks.find((t) => t.uri === uri)?.durationMs : undefined) ??
+    (uri
+      ? state.libraryItems.find(
+          (it): it is CatalogTrackT => 'durationMs' in it && (it as CatalogTrackT).uri === uri,
+        )?.durationMs
+      : undefined);
+  // At the known end (2s tick tolerance) the track really finished.
+  if (known && known > 0) return pos >= known - 2000;
+  // Unknown duration: require at least a few seconds so a stale
+  // position-0 idle can never trigger an advance.
+  return pos >= 5000;
+}
+
 async function advanceAutoplay(
   ctx: AppContext,
   actions: {
-    playTrackOrContext: (opts: {
-      trackUri?: string;
-      contextUri?: string;
-      title: string;
-    }) => Promise<void>;
+    playTrackOrContext: (opts: PlayTrackOpts) => Promise<void>;
     ensureAutoplayTracks: () => Promise<void>;
     nextTrack: () => Promise<void>;
   },
 ): Promise<void> {
   if (ctx.state.isAdvancingAutoplay) return;
+  // Defense against stale/spurious idle events (e.g. a pre-load snapshot
+  // emitted with position ~0): only advance a track that actually played
+  // through. Without this, one bogus idle re-triggers `load`, whose own
+  // stale idle re-triggers advance — an infinite skip loop.
+  const pb = ctx.state.currentInfo.playback;
+  if (!pb || !endLooksGenuine(pb, ctx.state)) return;
   ctx.state.isAdvancingAutoplay = true;
   try {
     if (ctx.state.currentInfo.playback?.repeat === 'track') {
@@ -107,6 +136,7 @@ async function advanceAutoplay(
         await actions.playTrackOrContext({
           trackUri: curT.uri,
           title: curT.name,
+          meta: { durationMs: curT.durationMs, artists: curT.artists, album: curT.album },
         });
       }
     } else if (ctx.state.currentInfo.playback?.autoplay) {

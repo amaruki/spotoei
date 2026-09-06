@@ -22,6 +22,7 @@ export async function runNonTtyMode(
       `spotoei search: "${sanitize(q)}" (${res.hits.length} hit${res.hits.length === 1 ? '' : 's'})\n`,
     );
     printSearchResults(res);
+    await ctx.quit();
     return 0;
   }
 
@@ -64,6 +65,12 @@ function printSearchResults(res: SearchResponseT): void {
       process.stdout.write(`  [artist] ${hit.artist.name}\n`);
     } else if (hit.type === 'playlist') {
       process.stdout.write(`  [playlist] ${hit.playlist.name}\n`);
+    } else if (hit.type === 'show') {
+      process.stdout.write(
+        `  [show] ${hit.show.name}${hit.show.publisher ? ` — ${hit.show.publisher}` : ''}\n`,
+      );
+    } else if (hit.type === 'episode') {
+      process.stdout.write(`  [episode] ${hit.episode.name}\n`);
     }
   }
 }

@@ -58,6 +58,7 @@ export interface AppState {
   isFetchingAutoplay: boolean;
   isAdvancingAutoplay: boolean;
   lastPlaybackState: PlaybackChangedDataT['state'];
+  isPrivateSession?: boolean;
 }
 
 export interface AppContext {

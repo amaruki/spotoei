@@ -1,12 +1,23 @@
-import type { CatalogTrackT, LibraryCollectionT } from 'spotoei-protocol';
+import type { CatalogTrackT, LibraryCollectionT, SearchResponseT } from 'spotoei-protocol';
 
 import { createUi, type Ui } from '../ui';
 import type { ContextTarget } from '../ui/types';
 import { routeKind } from '../ui/core/navigationStack';
-import { ensureBrowseEntry, ensureBrowseLevel, getBrowseTrack, isBrowseTracksMode, resolveBrowseSelection } from './browseLoad';
+import { resolveQueueView } from '../queue';
+import {
+  activateBrowseEntry,
+  browseEntriesKey,
+  ensureBrowseEntry,
+  ensureBrowseLevelLive,
+  getBrowseTrack,
+  getDynamicEntry,
+  isBrowseTracksMode,
+  resolveBrowseSelection,
+} from './browseLoad';
 import { runContextAction } from './contextMenuItems';
-import { ensureEntityRoute, loadMoreEntityItems } from './entityLoaders';
+import { ensureEntityRoute, loadMoreEntityItems, poolTracksForRoute } from './entityLoaders';
 import { ensureHomeTab } from './homeLoad';
+import type { PlayTrackOpts } from './playback';
 import { handleSearchHitSelect, routeForLibraryItem } from './entitySelect';
 import { buildPaletteCommands } from './paletteCommands';
 import type { AppContext } from './types';
@@ -15,19 +26,14 @@ export async function initUi(
   actions: {
     triggerAuth: () => Promise<void>;
     handleSaveClientId: (id: string) => Promise<void>;
-    loadLibrary: (
-      force?: boolean,
-      collection?: LibraryCollectionT,
-    ) => Promise<void>;
+    loadLibrary: (force?: boolean, collection?: LibraryCollectionT) => Promise<void>;
     loadMoreLibrary?: () => Promise<void>;
+    togglePlaylistFolder?: (folderId: string) => void;
     loadCurrentLyrics: (force?: boolean) => Promise<void>;
     updateQueueView: () => Promise<void>;
     ensureAutoplayTracks: () => Promise<void>;
-    playTrackOrContext: (opts: {
-      trackUri?: string;
-      contextUri?: string;
-      title: string;
-    }) => Promise<void>;
+    playRadio?: (opts: { seedUri: string; title?: string }) => Promise<void>;
+    playTrackOrContext: (opts: PlayTrackOpts) => Promise<void>;
     nextTrack: () => Promise<void>;
     previousTrack: () => Promise<void>;
     toggleShuffle: () => Promise<void>;
@@ -37,12 +43,26 @@ export async function initUi(
     changeVolume: (delta: number) => Promise<void>;
     handleKey: (key: Parameters<Parameters<typeof createUi>[1]['onKey']>[0]) => void;
   },
+  makeUi: typeof createUi = createUi,
 ): Promise<Ui> {
   const { clients, state, getUi, quit } = ctx;
   const play = (t: CatalogTrackT) => {
-    const isAlbum = t.uri.startsWith('spotify:album:');
-    if (isAlbum) void actions.playTrackOrContext({ contextUri: t.uri, title: t.name });
-    else void actions.playTrackOrContext({ trackUri: t.uri, title: t.name });
+    if (t.uri.startsWith('spotify:album:')) {
+      void actions.playTrackOrContext({ contextUri: t.uri, title: t.name });
+    } else {
+      // A direct play establishes its own queue context so Next continues
+      // from here (plus radio) instead of a stale pool head.
+      state.activePlaylistTracks = [t];
+      void actions.playTrackOrContext({
+        trackUri: t.uri,
+        title: t.name,
+        meta: {
+          durationMs: t.durationMs,
+          artists: t.artists?.map((a) => a.name) ?? [],
+          album: t.albumName,
+        },
+      });
+    }
     void actions.updateQueueView();
     void actions.ensureAutoplayTracks();
   };
@@ -51,7 +71,14 @@ export async function initUi(
     if (!q) return;
     const currentUi = getUi();
     if (currentUi) {
-      currentUi.setSearchLoading(true);
+      const ck = `search:v1:${q.toLowerCase().replace(/\s+/g, ' ')}:track,album,artist,playlist`;
+      if (
+        !clients.cache.tryGetCached<SearchResponseT>(
+          (state.currentInfo.auth as { accountId?: string } | undefined)?.accountId ?? 'anonymous',
+          ck,
+        )
+      )
+        currentUi.setSearchLoading(true);
       currentUi.setStatus(label ?? `Searching Spotify for "${q}"…`);
     }
     const seq = ++state.searchSequence;
@@ -90,7 +117,7 @@ export async function initUi(
       });
   }
 
-  const ui = await createUi(state.currentInfo, {
+  const ui = await makeUi(state.currentInfo, {
     onKey: actions.handleKey,
     onSearchSubmit: (q) => submitSearch(q),
     onSelectBrowseEntry: async (idx) => {
@@ -103,10 +130,20 @@ export async function initUi(
         return;
       }
       const path = r.path ?? {};
-      // Entry-level inline kinds (new_releases/recommendations) render
-      // tracks without pushing a route; everything else resolves to a
-      // browse sub-route (entry level) or a foreign route. Search routes
-      // are never produced here — browse results stay in Browse.
+      // Live (dynamic) rows first: they are absent from the static
+      // registry, so static resolution would misfire on them.
+      const dynamic = getDynamicEntry(browseEntriesKey(path), idx);
+      if (dynamic) {
+        const nav = activateBrowseEntry(dynamic);
+        if (nav.kind === 'message') {
+          u?.setStatus(nav.text, nav.persist);
+          return;
+        }
+        u?.setRoute(nav.route);
+        if (nav.note) u?.setStatus(nav.note);
+        return;
+      }
+      // Entry inline tracks vs browse sub-route; search never produced here.
       if (!path.category) {
         const nav = resolveBrowseSelection(path, idx);
         if (nav.kind === 'message') {
@@ -132,13 +169,25 @@ export async function initUi(
             .filter((h): h is { type: 'track'; track: CatalogTrackT } => h.type === 'track')
             .map((h) => h.track);
         }
-        void actions.playTrackOrContext({ trackUri: track.uri, title: track.name });
+        void actions.playTrackOrContext({
+          trackUri: track.uri,
+          title: track.name,
+          meta: {
+            durationMs: track.durationMs,
+            artists: track.artists?.map((a) => a.name) ?? [],
+            album: track.albumName,
+          },
+        });
         void actions.updateQueueView();
         void actions.ensureAutoplayTracks();
       });
       void opened;
     },
     onSelectLibraryItem: (item) => {
+      if ('children' in item && typeof (item as { isExpanded?: boolean }).isExpanded === 'boolean') {
+        actions.togglePlaylistFolder?.(item.id);
+        return;
+      }
       const route = routeForLibraryItem(item);
       if (route) {
         getUi()?.setRoute(route);
@@ -152,6 +201,11 @@ export async function initUi(
         void actions.playTrackOrContext({
           trackUri: item.uri,
           title: item.name,
+          meta: {
+            durationMs: item.durationMs,
+            artists: item.artists?.map((a) => a.name) ?? [],
+            album: item.albumName,
+          },
         });
         void actions.updateQueueView();
         void actions.ensureAutoplayTracks();
@@ -159,14 +213,29 @@ export async function initUi(
         void actions.playTrackOrContext({ contextUri: item.uri, title: item.name });
       }
     },
-    onSelectLibrary: (_idx) => {
-      // Playback is handled by onSelectLibraryItem
-    },
+    onSelectLibrary: (_idx) => {},
     onSelectArtistAlbum: (albumId) => {
       getUi()?.setRoute({ kind: 'album', id: albumId });
     },
     onSelectEntityTrack: (trackUri, title) => {
-      void actions.playTrackOrContext({ trackUri, title });
+      // Continue inside the visible album/playlist list when available.
+      const pool = poolTracksForRoute(state, getUi()?.getRoute());
+      if (pool) {
+        const idx = pool.findIndex((t) => t.uri === trackUri);
+        state.activePlaylistTracks = idx >= 0 ? pool.slice(idx) : pool;
+      }
+      const matched = pool?.find((t) => t.uri === trackUri);
+      void actions.playTrackOrContext({
+        trackUri,
+        title,
+        meta: matched
+          ? {
+              durationMs: matched.durationMs,
+              artists: matched.artists?.map((a) => a.name) ?? [],
+              album: matched.albumName,
+            }
+          : undefined,
+      });
       void actions.updateQueueView();
       void actions.ensureAutoplayTracks();
     },
@@ -186,7 +255,13 @@ export async function initUi(
       if (fn) void fn();
     },
     onSelectQueue: (idx) => {
-      const snap = clients.queueManager.getSnapshot();
+      // Resolve against the same merged snapshot the view renders,
+      // otherwise the selected row maps to the wrong track.
+      const snap = resolveQueueView(
+        clients.queueManager.getSnapshot(),
+        state.activePlaylistTracks,
+        state.currentInfo.playback?.track ?? null,
+      );
       const hasCurrent = Boolean(snap.current);
       const item = hasCurrent
         ? idx === 0 && snap.current
@@ -197,6 +272,11 @@ export async function initUi(
         void actions.playTrackOrContext({
           trackUri: item.track.uri,
           title: item.track.name,
+          meta: {
+            durationMs: item.track.durationMs,
+            artists: item.track.artists?.map((a) => a.name) ?? [],
+            album: item.track.albumName,
+          },
         });
         void actions.updateQueueView();
         void actions.ensureAutoplayTracks();
@@ -215,15 +295,17 @@ export async function initUi(
       const curKind = routeKind(route);
       if (curKind === 'home' && route.kind === 'home') {
         state.homeTabs.activeTab = route.tab;
-        void ensureHomeTab(
-          {
-            homeManager: clients.homeManager,
-            entityManager: clients.entityManager,
-            getUi,
-            state,
-          },
-          route.tab,
-        );
+        if (state.currentInfo.auth.state === 'authenticated') {
+          void ensureHomeTab(
+            {
+              homeManager: clients.homeManager,
+              entityManager: clients.entityManager,
+              getUi,
+              state,
+            },
+            route.tab,
+          );
+        }
       }
       if (curKind === 'library') {
         const section = route.kind === 'library' ? route.section : state.librarySection;
@@ -240,6 +322,15 @@ export async function initUi(
       if (curKind === 'lyrics') {
         void actions.loadCurrentLyrics();
       }
+      if (curKind === 'settings') {
+        void clients.playback
+          .getAudioConfig()
+          .then((cfg) => {
+            state.currentInfo.audioConfig = { ...state.currentInfo.audioConfig, ...cfg };
+            getUi()?.setAudioConfig(cfg);
+          })
+          .catch(() => {});
+      }
       if (curKind === 'artist' || curKind === 'album' || curKind === 'playlist') {
         void ensureEntityRoute({ entityManager: clients.entityManager, getUi, state }, route);
       }
@@ -248,13 +339,16 @@ export async function initUi(
         if (!u) return;
         const path = route.path ?? {};
         if (path.entry) {
-          void ensureBrowseEntry(
-            u,
-            path,
-            { entityManager: clients.entityManager, searchClient: clients.searchClient },
-          );
+          void ensureBrowseEntry(u, path, {
+            entityManager: clients.entityManager,
+            searchClient: clients.searchClient,
+          });
         } else {
-          ensureBrowseLevel(u, path);
+          // Live Spotify categories first, offline registry on restriction.
+          const accountId =
+            (state.currentInfo.auth as { accountId?: string } | undefined)?.accountId ??
+            'anonymous';
+          void ensureBrowseLevelLive(u, path, clients.webApi, clients.cache, accountId);
         }
       }
     },
@@ -264,8 +358,6 @@ export async function initUi(
   });
 
   function cycleVisualizerMode(): void {
-    // Single mode path: the controller owns spectrum/winamp/oscilloscope
-    // cycling; the TUI only syncs state and repaints the fullscreen title.
     const next = clients.visualizer.cycleMode();
     state.currentInfo.visualizer = { mode: next, fps: clients.visualizer.getCurrentFps() };
     const u = getUi();
@@ -281,14 +373,13 @@ export async function initUi(
       playTrackOrContext: actions.playTrackOrContext,
       updateQueueView: actions.updateQueueView,
       ensureAutoplayTracks: actions.ensureAutoplayTracks,
+      playRadio: actions.playRadio,
     },
   };
   const runPaletteAction = (action: string, target: ContextTarget): void => {
     void runContextAction(contextDeps, getUi, action, target);
   };
 
-  // Palette command list (split for LoC cap); context entries resolve the
-  // live selection and run through the shared runner.
   ui.setPaletteCommands(
     buildPaletteCommands(ctx, { ...actions, cycleVisualizerMode }, getUi, quit, {
       getTarget: () => getUi()?.getContextTarget() ?? null,
@@ -297,5 +388,17 @@ export async function initUi(
     }),
   );
 
+  // The initial route callback runs before ctx.getUi exists.
+  if (state.currentInfo.auth.state === 'authenticated') {
+    void ensureHomeTab(
+      {
+        homeManager: clients.homeManager,
+        entityManager: clients.entityManager,
+        getUi: () => ui,
+        state,
+      },
+      state.homeTabs.activeTab,
+    );
+  }
   return ui;
 }

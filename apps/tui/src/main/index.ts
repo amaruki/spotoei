@@ -9,7 +9,8 @@ import { initialHomeTabs } from '../home/tabs';
 import { createLyricsClient } from '../lyrics';
 import { createPlaybackClient } from '../playback';
 import { LibraryManager } from '../library';
-import { locatePlayer, restartPlayer, startPlayer, stopPlayer } from '../player';
+import { locatePlayer, startPlayer } from '../player';
+import { diagnostic, reportFailure } from '../diagnostics';
 import { QueueManager } from '../queue';
 import { createSearchClient } from '../search';
 import type { Ui, UiViewState } from '../ui';
@@ -35,8 +36,14 @@ import { createPlaybackActions } from './playback';
 import { createQueueActions } from './queue';
 import type { AppClients, AppContext, AppState } from './types';
 import { initUi } from './ui';
+import { recoverSessions, RESTART_SESSION } from './recovery';
+import { cancelHomeLoad } from './homeLoad';
 
 export async function main(args: string[] = process.argv.slice(2)): Promise<number> {
+  return recoverSessions(() => runSession(args));
+}
+
+async function runSession(args: string[]): Promise<number> {
   if (args.includes('--help') || args.includes('-h')) {
     printHelp();
     return 0;
@@ -53,57 +60,71 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
     return configExit;
   }
 
-  const isTTY = Boolean(process.stdout.isTTY && process.stdin.isTTY);
-  let playerBin: string;
-  try {
-    playerBin = locatePlayer();
-  } catch (e) {
-    process.stderr.write(
-      `spotoei: player binary not found: ${e instanceof Error ? e.message : String(e)}\n`,
-    );
-    return 1;
-  }
-
   const requestQuit = createRequestQuit<number>();
   let child: ChildProcess | null = null;
   let ui: Ui | null = null;
   let isQuitting = false;
-  const quit = createShutdownFn(() => ui, () => child, requestQuit);
-  const quitWithFlag = async () => { isQuitting = true; await quit(); };
-  void requestQuit.promise.then(() => { isQuitting = true; });
-  const ctx: AppContext = { quit: quitWithFlag, child: null as unknown as ChildProcess, clients: null as unknown as AppClients, state: null as unknown as AppState, getUi: () => ui };
-  installSignalHandlers(quitWithFlag);
-  installUncaughtHandler(() => ui, () => child);
+  let restartRequested = false;
+  let stage = 'player.locate';
+  const cleanup: Array<() => void> = [];
+  const quit = createShutdownFn(
+    () => ui,
+    () => child,
+    requestQuit,
+  );
+  const quitWithFlag = async () => {
+    isQuitting = true;
+    if (ctx.state) cancelHomeLoad(ctx.state);
+    await quit();
+  };
+  void requestQuit.promise.then(() => {
+    isQuitting = true;
+  });
+  const ctx: AppContext = {
+    quit: quitWithFlag,
+    child: null as unknown as ChildProcess,
+    clients: null as unknown as AppClients,
+    state: null as unknown as AppState,
+    getUi: () => ui,
+  };
+  const removeSignals = installSignalHandlers(quitWithFlag);
+  const removeUncaught = installUncaughtHandler(
+    () => ui,
+    () => child,
+  );
   try {
     const isTTY = Boolean(process.stdout.isTTY && process.stdin.isTTY);
-    let playerBin: string;
-    try { playerBin = locatePlayer(); } catch (e) { process.stderr.write(`spotoei: ${e instanceof Error ? e.message : String(e)}\n`); return 1; }
+    const playerBin = locatePlayer();
+    diagnostic('runtime', 'startup', { binary: playerBin, tty: isTTY, bun: Bun.version });
     const clientRes = resolveClientId();
     const extraEnv: Record<string, string> = {};
     if (clientRes.clientId) extraEnv.SPOTOEI_CLIENT_ID = clientRes.clientId;
+    stage = 'player.handshake';
     const handshake = await startPlayer(playerBin, extraEnv);
-    child = handshake.child; ctx.child = handshake.child;
-    let restartTimestamps: number[] = [];
+    child = handshake.child;
+    ctx.child = handshake.child;
     const onPlayerExit = async (code: number | null) => {
       if (isQuitting) return;
-      const now = Date.now(); restartTimestamps = restartTimestamps.filter((t) => now - t < 60000); restartTimestamps.push(now);
-      if (restartTimestamps.length > 3) { try { ui?.setStatus('Player unavailable: restart limit exceeded (3/60s)', true); } catch { process.stderr.write('Player unavailable: restart limit exceeded (3/60s)\n'); } return; }
-      try { ui?.setStatus(`Player exited (code ${code ?? 'none'}), restarting...`, true); } catch { process.stderr.write(`Player exited (code ${code ?? 'none'}), restarting...\n`); }
-      try {
-        const crashed = child; if (!crashed) return;
-        const next = await restartPlayer(crashed, playerBin, extraEnv, restartTimestamps.length - 1);
-        child = next.child; ctx.child = next.child; child.on('exit', onPlayerExit);
-        try { ui?.setStatus('Player restarted', false); } catch { process.stderr.write('Player restarted\n'); }
-      } catch (e) { const msg = e instanceof Error ? e.message : String(e); try { ui?.setStatus(`Player unavailable: ${msg}`, true); } catch { process.stderr.write(`Player unavailable: ${msg}\n`); } }
+      diagnostic('sidecar', 'exit', { playerPid: child?.pid, code });
+      restartRequested = true;
+      await quitWithFlag();
     };
     child.on('exit', onPlayerExit);
 
     const auth = createAuthClient({ child });
     const playback = createPlaybackClient({ child });
+    cleanup.push(
+      () => auth.close(),
+      () => playback.close(),
+    );
+    stage = 'auth.status';
     const initialAuth = await auth.status();
+    diagnostic('ipc', 'auth.status', { state: initialAuth.state, scopes: initialAuth.scopes });
+    stage = 'playback.status';
     const initialPlayback = await playback.status();
 
     const cache = new Cache();
+    cleanup.push(() => cache.close());
     const tokenProvider = {
       async getAccessToken(): Promise<string> {
         return auth.getWebToken();
@@ -112,7 +133,41 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
         auth.clearToken();
       },
     };
-    const webApi = new WebApiClient({ tokenProvider });
+    const webApi = new WebApiClient({
+      tokenProvider,
+      restrictionStore: {
+        // Restriction memory persists in SQLite so a cold start skips
+        // endpoints Spotify already refused, instead of re-probing them.
+        // getQuery prunes expired rows on read; failures fall back to
+        // the Transport's in-memory map.
+        getRestriction: (endpoint: string): number | undefined => {
+          try {
+            const cached = cache.getQuery<number>(
+              initialAuth.accountId ?? 'anonymous',
+              `restriction:v1:${endpoint}`,
+            );
+            if (!cached || cached.expiresAt === null || Date.now() >= cached.expiresAt) {
+              return undefined;
+            }
+            return cached.expiresAt;
+          } catch {
+            return undefined;
+          }
+        },
+        setRestriction: (endpoint: string, until: number): void => {
+          try {
+            cache.putQuery(
+              initialAuth.accountId ?? 'anonymous',
+              `restriction:v1:${endpoint}`,
+              1,
+              until - Date.now(),
+            );
+          } catch {
+            // Non-fatal; the in-memory map still suppresses repeats.
+          }
+        },
+      },
+    });
     const searchClient = createSearchClient({
       webApi,
       cache,
@@ -129,6 +184,11 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
     const queueManager = new QueueManager({ webApi });
     const visualizer = createVisualizerController({ child });
     const lyrics = createLyricsClient({ child });
+    cleanup.push(
+      () => searchClient.close(),
+      () => visualizer.stop(),
+      () => lyrics.close(),
+    );
 
     const clients: AppClients = {
       auth,
@@ -158,6 +218,14 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
       visualizer: {
         mode: visualizer.getMode(),
         fps: visualizer.getCurrentFps(),
+      },
+      audioConfig: {
+        deviceMode: 'integrated',
+        audioBackend: 'rodio',
+        bitrate: '320',
+        crossfadeDurationMs: 0,
+        normalisation: true,
+        pregain: 0,
       },
     };
 
@@ -196,6 +264,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
             playTrackOrContext: playbackActions.playTrackOrContext,
             updateQueueView: queueActions.updateQueueView,
             ensureAutoplayTracks: queueActions.ensureAutoplayTracks,
+            playRadio: playbackActions.playRadio,
           },
         },
         () => ui,
@@ -212,6 +281,7 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
     });
 
     if (isTTY) {
+      stage = 'ui.mount';
       ui = await initUi(ctx, {
         ...authActions,
         ...libraryActions,
@@ -221,17 +291,24 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
         handleKey,
       });
 
+      void playback
+        .getAudioConfig()
+        .then((cfg) => {
+          currentInfo.audioConfig = { ...currentInfo.audioConfig, ...cfg };
+          ui?.setAudioConfig(cfg);
+        })
+        .catch(() => {});
+
       if (initialAuth.state !== 'authenticated') {
         const initClientRes = resolveClientId();
         if (!initClientRes.clientId) {
           ui.setStatus('Welcome! Please enter your Spotify Client ID below to begin', true);
           ui.focusClientIdInput();
         } else {
-          ui.setStatus('Welcome! Press [A] or [Enter] to authenticate with Spotify', true);
+          ui.setStatus('Welcome! Press [a] or [Enter] to authenticate with Spotify', true);
         }
       } else {
-        ui.setStatus('Welcome back to Spotoei! Loading library…');
-        void libraryActions.loadLibrary();
+        // initUi starts Home after the UI handle exists. Library loads on navigation.
       }
 
       wireSubscriptions(
@@ -254,17 +331,18 @@ export async function main(args: string[] = process.argv.slice(2)): Promise<numb
       return await runNonTtyMode(ctx, args, handshake, initialAuth, initialPlayback, clients, ui);
     }
   } catch (e) {
+    const id = reportFailure(stage === 'ui.mount' ? 'ui' : 'runtime', stage, e);
+    await quitWithFlag();
     process.stderr.write(
-      `spotoei: initialization failed: ${e instanceof Error ? e.message : String(e)}\n`,
+      `spotoei: initialization failed at ${stage} [${id}]. See the diagnostic log.\n`,
     );
-    if (child) {
-      try {
-        await stopPlayer(child);
-      } catch {
-        // ignore
-      }
-    }
-    return 1;
+    return restartRequested ? RESTART_SESSION : 1;
+  } finally {
+    await quitWithFlag();
+    ui = null;
+    for (const close of cleanup.toReversed()) close();
+    removeSignals();
+    removeUncaught();
   }
-  return 0;
+  return restartRequested ? RESTART_SESSION : 0;
 }

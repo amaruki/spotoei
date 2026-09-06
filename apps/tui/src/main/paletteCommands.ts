@@ -7,6 +7,11 @@ import { switchArtistGroup } from './entityLoaders';
 import { ensureHomeTab } from './homeLoad';
 import { contextActionCommands } from './paletteContextActions';
 import type { AppContext } from './types';
+import { optimisticPlayback } from '../playback/validator';
+import type { PlayTrackOpts } from './playback';
+import { switchPlaybackDeviceModal } from './deviceSwitcher';
+import { handleOpenFromClipboard } from './clipboardPlayback';
+import { getStatusBadge } from '../ui/views/nav';
 
 export interface PaletteActionDeps {
   triggerAuth: () => Promise<void>;
@@ -19,12 +24,14 @@ export interface PaletteActionDeps {
   seekRelative: (deltaMs: number) => Promise<void>;
   changeVolume: (delta: number) => Promise<void>;
   cycleVisualizerMode: () => void;
+  playTrackOrContext?: (opts: PlayTrackOpts) => Promise<void>;
 }
 
 export interface PaletteCommand {
   name: string;
   description: string;
   action: () => void;
+  isAvailable?: () => boolean;
 }
 
 // Full command-palette list extracted from main/ui.ts for the LoC cap.
@@ -186,7 +193,8 @@ export function buildPaletteCommands(
       name: 'Toggle Play/Pause',
       description: 'Space / k',
       action: () => {
-        const pbState = state.currentInfo.playback?.state ?? 'idle';
+        const pbState =
+          (optimisticPlayback.getEffectiveState() ?? state.currentInfo.playback)?.state ?? 'idle';
         if (pbState === 'playing') void clients.playback.pause().catch(() => {});
         else void clients.playback.play().catch(() => {});
       },
@@ -271,6 +279,119 @@ export function buildPaletteCommands(
       name: 'Authenticate with Spotify',
       description: 'OAuth (press A in onboarding)',
       action: actions.triggerAuth,
+    },
+    {
+      name: 'Switch Playback Device...',
+      description: 'Transfer playback to another device',
+      action: () => {
+        void switchPlaybackDeviceModal(ctx, getUi);
+      },
+    },
+    {
+      name: 'Open Spotify Link / URI from Clipboard',
+      description: 'Play track/album/artist/playlist from clipboard (o / Ctrl-V)',
+      action: () => {
+        void handleOpenFromClipboard(ctx, actions, getUi);
+      },
+    },
+    {
+      name: 'Toggle Private Session',
+      description: 'Hide listening activity',
+      action: () => {
+        const next = !ctx.state.isPrivateSession;
+        ctx.state.isPrivateSession = next;
+        if (ctx.state.currentInfo) {
+          ctx.state.currentInfo.isPrivateSession = next;
+        }
+        const u = getUi();
+        if (u) {
+          const badge = getStatusBadge(next);
+          u.setStatus(`Private Session ${next ? `enabled ${badge}` : 'disabled'}`);
+        }
+      },
+    },
+    {
+      name: 'Toggle Device Mode (Integrated/ConnectOnly)',
+      description: 'Switch between local audio playback and Spotify Connect receiver',
+      action: () => {
+        const cur = state.currentInfo.audioConfig?.deviceMode ?? 'integrated';
+        const next = cur === 'connect_only' ? 'integrated' : 'connect_only';
+        void clients.playback
+          .setAudioConfig({ deviceMode: next })
+          .then((cfg) => {
+            state.currentInfo.audioConfig = { ...state.currentInfo.audioConfig, ...cfg };
+            getUi()?.setAudioConfig(cfg);
+            getUi()?.setStatus(
+              `Device Mode: ${next === 'connect_only' ? 'Connect Only (Remote)' : 'Integrated (Local)'}`,
+            );
+          })
+          .catch((e) => {
+            getUi()?.setStatus(
+              `Failed to set device mode: ${e instanceof Error ? e.message : String(e)}`,
+            );
+          });
+      },
+    },
+    {
+      name: 'Cycle Audio Bitrate',
+      description: 'Cycle streaming quality (320k -> 160k -> 96k)',
+      action: () => {
+        const cur = state.currentInfo.audioConfig?.bitrate ?? '320';
+        const next = cur === '320' ? '160' : cur === '160' ? '96' : '320';
+        void clients.playback
+          .setAudioConfig({ bitrate: next })
+          .then((cfg) => {
+            state.currentInfo.audioConfig = { ...state.currentInfo.audioConfig, ...cfg };
+            getUi()?.setAudioConfig(cfg);
+            getUi()?.setStatus(`Audio Bitrate: ${next} kbps`);
+          })
+          .catch((e) => {
+            getUi()?.setStatus(
+              `Failed to set bitrate: ${e instanceof Error ? e.message : String(e)}`,
+            );
+          });
+      },
+    },
+    {
+      name: 'Toggle Audio Normalisation',
+      description: 'Enable or disable volume normalisation',
+      action: () => {
+        const cur = state.currentInfo.audioConfig?.normalisation !== false;
+        const next = !cur;
+        void clients.playback
+          .setAudioConfig({ normalisation: next })
+          .then((cfg) => {
+            state.currentInfo.audioConfig = { ...state.currentInfo.audioConfig, ...cfg };
+            getUi()?.setAudioConfig(cfg);
+            getUi()?.setStatus(`Audio Normalisation: ${next ? 'Enabled' : 'Disabled'}`);
+          })
+          .catch((e) => {
+            getUi()?.setStatus(
+              `Failed to set normalisation: ${e instanceof Error ? e.message : String(e)}`,
+            );
+          });
+      },
+    },
+    {
+      name: 'Adjust Crossfade Duration',
+      description: 'Cycle crossfade duration (Off -> 2s -> 5s -> 8s -> 12s)',
+      action: () => {
+        const cur = state.currentInfo.audioConfig?.crossfadeDurationMs ?? 0;
+        const next =
+          cur === 0 ? 2000 : cur <= 2000 ? 5000 : cur <= 5000 ? 8000 : cur <= 8000 ? 12000 : 0;
+        void clients.playback
+          .setAudioConfig({ crossfadeDurationMs: next })
+          .then((cfg) => {
+            state.currentInfo.audioConfig = { ...state.currentInfo.audioConfig, ...cfg };
+            getUi()?.setAudioConfig(cfg);
+            getUi()?.setStatus(`Crossfade Duration: ${next > 0 ? `${next / 1000}s` : 'Off'}`);
+          })
+          .catch((e) => {
+            getUi()?.setStatus(
+              `Failed to set crossfade: ${e instanceof Error ? e.message : String(e)}`,
+            );
+          });
+      },
     },
     { name: 'Quit Spotoei', description: 'q / Ctrl-C', action: () => void quit() },
   ];

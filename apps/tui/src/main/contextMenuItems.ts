@@ -1,18 +1,16 @@
 import { mutateUrisWithPreservation } from '../entityMutations';
 import { pinDrivingPlaylist } from '../entities/actions';
 import type { ContextMenuItem, ContextTarget, Ui } from '../ui/types';
-
+import { handleAddToPlaylist, handleRemoveFromPlaylist } from './contextPlaylistActions';
 export type { ContextTarget };
 import type { AppContext } from './types';
+import type { PlayTrackOpts } from './playback';
 
 export interface ContextDeps {
-  playTrackOrContext: (opts: {
-    trackUri?: string;
-    contextUri?: string;
-    title: string;
-  }) => Promise<void>;
+  playTrackOrContext: (opts: PlayTrackOpts) => Promise<void>;
   updateQueueView: () => Promise<void>;
   ensureAutoplayTracks: () => Promise<void>;
+  playRadio?: (opts: { seedUri: string; title?: string }) => Promise<void>;
 }
 
 type Deps = AppContext & { contextActions: ContextDeps };
@@ -21,6 +19,7 @@ function spotifyUrl(target: ContextTarget): string {
   const kind = target.kind === 'browse-entry' ? 'playlist' : target.kind;
   return `https://open.spotify.com/${kind}/${target.id}`;
 }
+
 
 // Shared runner used by both the x overlay menu and the palette mirror.
 // Every branch reports its outcome through ui status; failures never
@@ -46,6 +45,57 @@ export async function runContextAction(
       } else {
         ui?.setStatus(`Cannot play ${target.name}: missing Spotify URI`, true);
       }
+      return;
+    }
+    case 'song_radio': {
+      if (!target.uri) {
+        ui?.setStatus(`Cannot start radio for ${target.name}: missing Spotify URI`, true);
+        return;
+      }
+      if (ctx.contextActions.playRadio) {
+        await ctx.contextActions.playRadio({ seedUri: target.uri, title: target.name });
+      } else {
+        await playTrackOrContext({ trackUri: target.uri, title: target.name });
+      }
+      await updateQueueView();
+      await ensureAutoplayTracks();
+      return;
+    }
+    case 'artist_radio': {
+      let artistUri = target.artistUri;
+      let artistName = target.artistName;
+      if (!artistUri && target.kind === 'artist') {
+        artistUri = target.uri;
+        artistName = target.name;
+      }
+      if (!artistUri) {
+        const pool = state.activePlaylistTracks.length > 0 ? state.activePlaylistTracks : state.libraryItems;
+        const trackObj = pool.find(
+          (t: unknown): t is { uri?: string; id?: string; artists?: Array<{ uri?: string; id?: string; name?: string }> } =>
+            typeof t === 'object' && t !== null && ('uri' in t ? (t as { uri?: string }).uri === target.uri : 'id' in t && (t as { id?: string }).id === target.id),
+        );
+        const firstArtist = trackObj?.artists?.[0];
+        if (firstArtist?.uri) {
+          artistUri = firstArtist.uri;
+          artistName = firstArtist.name;
+        } else if (firstArtist?.id) {
+          artistUri = `spotify:artist:${firstArtist.id}`;
+          artistName = firstArtist.name;
+        }
+      }
+      const seed = artistUri ?? target.uri;
+      if (!seed) {
+        ui?.setStatus(`Cannot start artist radio for ${target.name}: missing URI`, true);
+        return;
+      }
+      const radioTitle = artistName ? `${artistName} Radio` : `${target.name} Radio`;
+      if (ctx.contextActions.playRadio) {
+        await ctx.contextActions.playRadio({ seedUri: seed, title: radioTitle });
+      } else {
+        await playTrackOrContext({ contextUri: seed, title: radioTitle });
+      }
+      await updateQueueView();
+      await ensureAutoplayTracks();
       return;
     }
     case 'queue': {
@@ -74,6 +124,14 @@ export async function runContextAction(
           : `Failed to ${action} ${target.name}`,
         !ok,
       );
+      return;
+    }
+    case 'add_to_playlist': {
+      await handleAddToPlaylist(ctx, ui, target);
+      return;
+    }
+    case 'remove_from_playlist': {
+      await handleRemoveFromPlaylist(ctx, ui, target);
       return;
     }
     case 'save':
@@ -195,9 +253,13 @@ export function buildContextMenuItems(
     case 'track':
       return [
         item('Play', 'Enter', () => run('play')),
+        item('Start Song Radio', 'x menu', () => run('song_radio')),
+        item('Start Artist Radio', 'x menu', () => run('artist_radio')),
         item('Add to queue', 'x menu', () => run('queue')),
         item('Like', 'x menu', () => run('like')),
         item('Unlike', 'x menu', () => run('unlike')),
+        item('Add to playlist', 'x menu', () => run('add_to_playlist')),
+        item('Remove from playlist', 'x menu', () => run('remove_from_playlist')),
         item('Go to artist', 'x menu', () => run('open_artist')),
         item('Go to album', 'x menu', () => run('open_album')),
         item('Open in Spotify', 'x menu', () => run('open_spotify')),
@@ -206,6 +268,7 @@ export function buildContextMenuItems(
     case 'artist':
       return [
         item('Play', 'Enter', () => run('play')),
+        item('Start Artist Radio', 'x menu', () => run('artist_radio')),
         item('Follow', 'x menu', () => run('follow')),
         item('Unfollow', 'x menu', () => run('unfollow')),
         item('Open in Spotify', 'x menu', () => run('open_spotify')),

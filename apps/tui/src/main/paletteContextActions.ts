@@ -16,12 +16,17 @@ interface MirroredAction {
 
 const MIRRORED: MirroredAction[] = [
   { name: 'Track: Play', kinds: ['track'], action: 'play' },
+  { name: 'Track: Start song radio', kinds: ['track'], action: 'song_radio' },
+  { name: 'Track: Start artist radio', kinds: ['track'], action: 'artist_radio' },
   { name: 'Track: Add to queue', kinds: ['track'], action: 'queue' },
   { name: 'Track: Like', kinds: ['track'], action: 'like' },
   { name: 'Track: Unlike', kinds: ['track'], action: 'unlike' },
+  { name: 'Track: Add to playlist', kinds: ['track'], action: 'add_to_playlist' },
+  { name: 'Track: Remove from playlist', kinds: ['track'], action: 'remove_from_playlist' },
   { name: 'Track: Open artist', kinds: ['track'], action: 'open_artist' },
   { name: 'Track: Open album', kinds: ['track'], action: 'open_album' },
   { name: 'Artist: Play', kinds: ['artist'], action: 'play' },
+  { name: 'Artist: Start artist radio', kinds: ['artist'], action: 'artist_radio' },
   { name: 'Artist: Follow', kinds: ['artist'], action: 'follow' },
   { name: 'Artist: Unfollow', kinds: ['artist'], action: 'unfollow' },
   { name: 'Artist: Open in Spotify', kinds: ['artist'], action: 'open_spotify' },
@@ -45,6 +50,10 @@ export function contextActionCommands(
   return MIRRORED.map((m) => ({
     name: m.name,
     description: 'x menu',
+    isAvailable: () => {
+      const target = getTarget();
+      return !!target && m.kinds.includes(target.kind);
+    },
     action: () => {
       const target = getTarget();
       if (!target || !m.kinds.includes(target.kind)) {

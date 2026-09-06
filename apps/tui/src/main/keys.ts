@@ -4,6 +4,10 @@ import { routeKind } from '../ui/core/navigationStack';
 import type { ContextTarget } from '../ui/types';
 import { isLowerKey, isUpperKey } from './utils';
 import type { AppContext } from './types';
+import { ensureHomeTab } from './homeLoad';
+import type { PlayTrackOpts } from './playback';
+import { optimisticPlayback } from '../playback/validator';
+import { handleOpenFromClipboard } from './clipboardPlayback';
 
 export function createKeyHandler(
   ctx: AppContext,
@@ -16,11 +20,7 @@ export function createKeyHandler(
     loadCurrentLyrics: (force?: boolean) => Promise<void>;
     updateQueueView: () => Promise<void>;
     ensureAutoplayTracks: () => Promise<void>;
-    playTrackOrContext: (opts: {
-      trackUri?: string;
-      contextUri?: string;
-      title: string;
-    }) => Promise<void>;
+    playTrackOrContext: (opts: PlayTrackOpts) => Promise<void>;
     nextTrack: () => Promise<void>;
     previousTrack: () => Promise<void>;
     toggleShuffle: () => Promise<void>;
@@ -81,27 +81,17 @@ export function createKeyHandler(
       }
     }
 
-    if (key.name === 'escape') {
-      if (ui) {
-        const closed = ui.navigateBack();
-        if (!closed) ui.setFocus('sidebar');
-      }
-      return;
-    }
-    if (key.name === 'tab') {
-      state.activeFocus = state.activeFocus === 'sidebar' ? 'main' : 'sidebar';
-      if (ui) ui.setFocus(state.activeFocus);
-      return;
-    }
     if (key.name === 'space' || key.name === 'k' || key.name === 'K') {
-      const pbState = state.currentInfo.playback?.state ?? 'idle';
+      if (ui?.isAnyInputFocused()) return;
+      const pbState =
+        (optimisticPlayback.getEffectiveState() ?? state.currentInfo.playback)?.state ?? 'idle';
       void (async () => {
         try {
           if (pbState === 'playing') {
-            await clients.webApi.pause().catch(() => {});
+            void clients.webApi?.pause?.().catch(() => {});
             await clients.playback.pause();
           } else {
-            await clients.webApi.play({}).catch(() => {});
+            void clients.webApi?.play?.({}).catch(() => {});
             await clients.playback.play();
           }
         } catch (e) {
@@ -163,6 +153,19 @@ export function createKeyHandler(
     if (isLowerKey(key, 'r')) {
       if (ui) {
         const cur = ui.getRoute();
+        if (cur.kind === 'home') {
+          void ensureHomeTab(
+            {
+              homeManager: clients.homeManager,
+              entityManager: clients.entityManager,
+              getUi,
+              state,
+            },
+            cur.tab,
+            true,
+          );
+          return;
+        }
         const section = cur.kind === 'library' ? cur.section : 'saved_tracks';
         ui.setRoute({ kind: 'library', section });
         void actions.loadLibrary(true, section);
@@ -193,7 +196,7 @@ export function createKeyHandler(
     }
 
     // Full-screen visualizer route with 'V' (Shift+V or v): toggle route
-    if (isUpperKey(key, 'v') || isLowerKey(key, 'v')) {
+    if (!key.ctrl && (isUpperKey(key, 'v') || isLowerKey(key, 'v')) && !ui?.isAnyInputFocused()) {
       if (ui) {
         const cur = ui.getRoute();
         if (routeKind(cur) === 'visualizer') {
@@ -244,6 +247,15 @@ export function createKeyHandler(
         }
         actions.openContextMenuFor(target);
       }
+      return;
+    }
+
+    // Open Spotify link/URI from clipboard with 'o' or 'O' or Ctrl+V
+    if (
+      (key.ctrl && (key.name === 'v' || key.name === 'V')) ||
+      (!ui?.isAnyInputFocused() && (isLowerKey(key, 'o') || isUpperKey(key, 'o')))
+    ) {
+      void handleOpenFromClipboard(ctx, actions, getUi);
       return;
     }
   };
