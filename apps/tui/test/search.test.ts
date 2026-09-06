@@ -213,7 +213,7 @@ describe('WebApiClient and SearchClient', () => {
       expect(interceptedUrl).toBeDefined();
       const parsed = new URL(interceptedUrl!);
       expect(parsed.searchParams.get('limit')).toBe('10');
-      expect(parsed.searchParams.get('type')).toBe('track,album,artist,playlist');
+      expect(parsed.searchParams.get('type')).toBe('track,album,artist,playlist,show,episode');
       expect(parsed.searchParams.get('q')).toBe('radiohead');
     } finally {
       globalThis.fetch = originalFetch;

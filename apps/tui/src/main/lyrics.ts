@@ -1,5 +1,16 @@
+import type { LyricsDocumentT } from 'spotoei-protocol';
+import { getActiveLyricIndex, calculateLyricsScrollOffset } from '../ui/views/lyrics';
 import type { AppContext } from './types';
 
+export function calculateActiveLyricIndex(
+  doc: LyricsDocumentT | null | undefined,
+  progressMs: number,
+): number {
+  if (!doc || doc.kind !== 'synced' || !Array.isArray(doc.lines)) {
+    return -1;
+  }
+  return getActiveLyricIndex(doc.lines, progressMs);
+}
 export function createLyricsActions(ctx: AppContext) {
   const { clients, state, getUi } = ctx;
 
@@ -47,6 +58,41 @@ export function createLyricsActions(ctx: AppContext) {
       }
     }
   };
+  const getActiveLyricLine = (
+    progressMs?: number,
+  ): { index: number; text: string; startMs?: number } | null => {
+    const doc = state.currentInfo.lyrics;
+    if (!doc) return null;
+    if (doc.kind === 'plain') {
+      // Un-synced fallback returns first line or null if empty
+      return doc.lines[0] ? { index: 0, text: doc.lines[0].text } : null;
+    }
+    const curPos =
+      progressMs ??
+      (state.currentInfo.playback as { progress_ms?: number } | null | undefined)?.progress_ms ??
+      state.currentInfo.playback?.positionMs ??
+      0;
+    const idx = getActiveLyricIndex(doc.lines, curPos);
+    if (idx < 0 || !doc.lines[idx]) return null;
+    return { index: idx, text: doc.lines[idx]!.text, startMs: doc.lines[idx]!.startMs };
+  };
 
-  return { loadCurrentLyrics };
+  const syncLyricsProgress = (
+    progressMs?: number,
+  ): { activeIndex: number; isSynced: boolean; scrollOffset: number } => {
+    const doc = state.currentInfo.lyrics;
+    if (!doc || doc.kind !== 'synced') {
+      return { activeIndex: -1, isSynced: false, scrollOffset: 0 };
+    }
+    const curPos =
+      progressMs ??
+      (state.currentInfo.playback as { progress_ms?: number } | null | undefined)?.progress_ms ??
+      state.currentInfo.playback?.positionMs ??
+      0;
+    const activeIndex = getActiveLyricIndex(doc.lines, curPos);
+    const scrollOffset = calculateLyricsScrollOffset(activeIndex);
+    return { activeIndex, isSynced: true, scrollOffset };
+  };
+
+  return { loadCurrentLyrics, getActiveLyricLine, syncLyricsProgress };
 }

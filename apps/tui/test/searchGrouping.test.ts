@@ -22,6 +22,15 @@ const artistHit = (id: string) => ({
   artist: { id, uri: `spotify:artist:${id}`, name: id },
 });
 
+const showHit = (id: string) => ({
+  type: 'show' as const,
+  show: { id, uri: `spotify:show:${id}`, name: id, publisher: 'Pub', totalEpisodes: 5 },
+});
+
+const episodeHit = (id: string) => ({
+  type: 'episode' as const,
+  episode: { id, uri: `spotify:episode:${id}`, name: id, durationMs: 120_000, releaseDate: '2026-01-01' },
+});
 const baseState: UiViewState = {
   protocol: 1,
   playerVersion: '0.1.0',
@@ -56,6 +65,25 @@ describe('search grouping', () => {
     const panels = partitionSearchHits(hits, 'track');
     expect(panels.tracks.length).toBe(1);
     expect(panels.artists).toEqual([]);
+  });
+
+  it('partitions show and episode hits with original indices and filters by show/episode', () => {
+    const hits = [showHit('s1'), trackHit('t1'), episodeHit('e1')] as unknown as SearchResponseT['hits'];
+    const panels = partitionSearchHits(hits);
+    expect(panels.shows.map((r) => r.index)).toEqual([0]);
+    expect(panels.tracks.map((r) => r.index)).toEqual([1]);
+    expect(panels.episodes.map((r) => r.index)).toEqual([2]);
+    expect(renderHit(panels.shows[0]?.hit as never).name).toContain('🎙 s1');
+    expect(renderHit(panels.episodes[0]?.hit as never).name).toContain('🎧 e1');
+
+    const filteredShow = partitionSearchHits(hits, 'show');
+    expect(filteredShow.shows.length).toBe(1);
+    expect(filteredShow.tracks).toEqual([]);
+    expect(filteredShow.episodes).toEqual([]);
+
+    const filteredEp = partitionSearchHits(hits, 'episode');
+    expect(filteredEp.episodes.length).toBe(1);
+    expect(filteredEp.shows).toEqual([]);
   });
 
   it('panel rows resolve to hits, empty panels resolve nothing', async () => {
