@@ -21,6 +21,7 @@ export const Track = z.object({
   album: z.string().optional(),
   durationMs: z.number().int().nonnegative(),
   genre: z.string().optional(),
+  imageUrl: z.string().optional(),
 });
 export type TrackT = z.infer<typeof Track>;
 

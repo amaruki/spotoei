@@ -19,7 +19,7 @@ pub struct LibrespotEngine {
     pub(super) pcm_receiver: crossbeam_channel::Receiver<Vec<f32>>,
     pub(super) config: Arc<Mutex<super::types::LibrespotConfig>>,
     pub(super) last_audio_error: Arc<Mutex<Option<String>>>,
-    pub(super) state_listener: Arc<Mutex<Option<Arc<dyn super::engine::PlaybackStateListener>>>>,
+    pub(super) state_listener: Arc<std::sync::Mutex<Option<Arc<dyn super::engine::PlaybackStateListener>>>>,
 }
 
 impl LibrespotEngine {
@@ -45,7 +45,7 @@ impl LibrespotEngine {
             pcm_receiver,
             config: Arc::new(Mutex::new(config)),
             last_audio_error: Arc::new(Mutex::new(None)),
-            state_listener: Arc::new(Mutex::new(None)),
+            state_listener: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -154,6 +154,11 @@ impl LibrespotEngine {
             album,
             duration_ms: track.duration.max(0) as u64,
             genre: None,
+            image_url: track
+                .album
+                .covers
+                .first()
+                .map(|img| format!("https://i.scdn.co/image/{}", img.id)),
         };
         if let Ok(mut cache) = self.track_metadata_cache.try_lock() {
             cache.insert(t.uri.clone(), t.clone());

@@ -88,11 +88,17 @@ export function createKeyHandler(
       void (async () => {
         try {
           if (pbState === 'playing') {
-            void clients.webApi?.pause?.().catch(() => {});
-            await clients.playback.pause();
+            try {
+              await clients.playback.pause();
+            } catch {
+              void clients.webApi?.pause?.().catch(() => {});
+            }
           } else {
-            void clients.webApi?.play?.({}).catch(() => {});
-            await clients.playback.play();
+            try {
+              await clients.playback.play();
+            } catch {
+              void clients.webApi?.play?.({}).catch(() => {});
+            }
           }
         } catch (e) {
           if (ui) ui.setStatus(`playback: ${e instanceof Error ? e.message : String(e)}`);

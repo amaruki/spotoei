@@ -66,10 +66,12 @@ export function wireSubscriptions(
   });
 
   clients.playback.onPosition((pos: PlaybackPositionDataT) => {
-    if (!state.currentInfo.playback) return;
-    if (pos.revision !== state.currentInfo.playback.revision) return;
-    const ui = getUi();
-    if (ui) ui.setPlaybackPosition(pos);
+    const cur = state.currentInfo.playback;
+    if (!cur) return;
+    if (cur.state === 'playing' || cur.state === 'loading' || pos.revision === cur.revision) {
+      const ui = getUi();
+      if (ui) ui.setPlaybackPosition(pos);
+    }
   });
 
   clients.queueManager.subscribe((snap) => {

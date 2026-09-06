@@ -288,6 +288,7 @@ impl super::LibrespotEngine {
             },
             normalisation_pregain_db: cfg.pregain as f64,
             normalisation_knee_db: 5.0,
+            position_update_interval: Some(std::time::Duration::from_millis(250)),
             ..Default::default()
         };
         // ponytail: librespot PlayerConfig lacks native crossfade in 0.8.0; stored in LibrespotConfig, add DSP mixer curve when sink supports dual-stream

@@ -13,7 +13,7 @@ function refreshHomePanels(): void {
 
 export function createPlaybackBarHelpers(ctx: UiCoreContext) {
   const { built, focus, route, state, statusTimer } = ctx;
-
+  let playbackTickTimer: NodeJS.Timeout | null = null;
   const getFooterHelp = (): string => {
     const curKind = routeKind(route.current);
     if (state.auth.state !== 'authenticated') {
@@ -82,8 +82,13 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
       const width = ctx.termWidth.value;
       const barLen = Math.max(10, width - 4 - 6 - 12);
       const emptyBar = '─'.repeat(barLen);
+      built.playbackCoverBox.visible = false;
       built.playbackProgressText.content = t`${fg(COLOR_DIM)(`0:00 ${emptyBar} 0:00 (0%)`)}`;
       built.statusText.content = t`${fg(COLOR_DIM)('Select a song to start listening')}`;
+      if (playbackTickTimer) {
+        clearInterval(playbackTickTimer);
+        playbackTickTimer = null;
+      }
       return;
     }
 
@@ -95,13 +100,23 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
       const elapsed = Date.now() - observedAt;
       posMs = durMs > 0 ? Math.min(durMs, posMs + elapsed) : posMs + elapsed;
     }
+    const rawImage = (track as { imageUrl?: string }).imageUrl || (track as { image?: { url?: string } }).image?.url;
+    if (rawImage) {
+      built.playbackCoverBox.visible = true;
+      if (built.playbackCoverImage.source !== rawImage) {
+        built.playbackCoverImage.source = rawImage;
+      }
+    } else {
+      built.playbackCoverBox.visible = false;
+    }
+
     const content = buildPlaybackBarContent({
       state: pbState,
       title: track.name || 'Untitled',
       artist: formatArtists(track.artists),
       album: track.album ?? (track as { albumName?: string }).albumName,
       genre: (track as { genre?: string }).genre,
-      hasCoverArt: Boolean(track.album || (track as { albumName?: string }).albumName || (track as { image?: { url?: string } }).image?.url),
+      hasCoverArt: Boolean(rawImage),
       positionMs: posMs,
       durationMs: durMs,
       shuffle: pb?.shuffle ?? false,
@@ -119,6 +134,32 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
       built.playbackProgressText.content = t`${fg(COLOR_DIM)(content.line2)}`;
     }
     built.statusText.content = t`${fg(COLOR_DIM)(content.line3)}`;
+
+    if (pbState === 'playing') {
+      if (!playbackTickTimer) {
+        playbackTickTimer = setInterval(() => {
+          try {
+            const cur = optimisticPlayback.getEffectiveState() ?? state.playback;
+            if (cur?.state === 'playing') {
+              renderPlaybackBar();
+            } else {
+              stopPlaybackTickTimer();
+            }
+          } catch {
+            stopPlaybackTickTimer();
+          }
+        }, 250);
+      }
+    } else {
+      stopPlaybackTickTimer();
+    }
+  };
+
+  const stopPlaybackTickTimer = (): void => {
+    if (playbackTickTimer) {
+      clearInterval(playbackTickTimer);
+      playbackTickTimer = null;
+    }
   };
 
   const setHeader = (): void => {
@@ -157,5 +198,6 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     setHeader,
     setStatus,
     clearStatusLayer,
+    stopPlaybackTickTimer,
   };
 }

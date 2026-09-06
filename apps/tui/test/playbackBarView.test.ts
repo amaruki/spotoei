@@ -20,20 +20,16 @@ describe('playback bar responsive variants', () => {
     expect(out.variant).toBe('wide');
     expect(out.line1).toContain('Creep');
     expect(out.line1).toContain('▶');
-    expect(out.line1).toContain('╭────╮');
-    expect(out.line2).toContain('│ 💽 │');
+    expect(out.hasCoverArt).toBe(true);
     expect(out.line2).toContain('1:24');
     expect(out.line2).toContain('3:48');
-    expect(out.line3).toContain('╰────╯');
     expect(out.line3).toContain('Radiohead');
     expect(out.line3).toContain('Pablo Honey');
   });
 
   it('renders clean layout without box when cover art is absent', () => {
     const out = buildPlaybackBarContent({ ...base, width: 120, hasCoverArt: false });
-    expect(out.line1).not.toContain('╭────╮');
-    expect(out.line2).not.toContain('│ 💽 │');
-    expect(out.line3).not.toContain('╰────╯');
+    expect(out.hasCoverArt).toBe(false);
     expect(out.line1).toContain('Creep');
     expect(out.line3).toContain('Radiohead');
   });

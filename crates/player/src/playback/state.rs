@@ -93,6 +93,9 @@ impl Playback {
                         .unwrap_or_else(|_| format!("spotify:track:{}", track_id));
                     if inner.track.as_ref().map(|t| &t.uri) != Some(&uri) {
                         if let Some(t) = self.engine.resolve_track(&uri) {
+                            if t.duration_ms > 0 {
+                                inner.duration_ms = t.duration_ms;
+                            }
                             inner.track = Some(t);
                         }
                     }
@@ -184,6 +187,7 @@ impl Playback {
                     album,
                     duration_ms: audio_item.duration_ms as u64,
                     genre: None,
+                    image_url: audio_item.covers.first().map(|c| c.url.clone()),
                 };
                 self.engine.remember_track_metadata(&track);
                 let snap = {

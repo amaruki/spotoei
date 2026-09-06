@@ -439,6 +439,8 @@ pub struct Track {
     pub duration_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub genre: Option<String>,
+    #[serde(rename = "imageUrl", default, skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]

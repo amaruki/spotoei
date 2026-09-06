@@ -295,7 +295,7 @@ export function createUiApi(ctx: UiCoreContext): Ui {
     },
     setPlaybackPosition(pos: PlaybackPositionDataT): void {
       if (!state.playback) return;
-      if (pos.revision !== state.playback.revision) return;
+      if (state.playback.state !== 'playing' && state.playback.state !== 'loading' && pos.revision !== state.playback.revision) return;
       state.playback.positionMs = pos.positionMs;
       // Store wall-clock observedAt for interpolation; playbackBar computes
       // displayPos as positionMs + elapsed since observedAt when playing.
@@ -355,9 +355,9 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       // Renderer is already started.
     },
     async shutdown(): Promise<void> {
-      if (statusTimer.value) clearTimeout(statusTimer.value);
-      if (ctx.lyricsResumeTimer?.value)
-        clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout);
+      helpers.stopPlaybackTickTimer?.();
+      clearTimeout(statusTimer.value as NodeJS.Timeout);
+      clearTimeout(ctx.lyricsResumeTimer?.value as NodeJS.Timeout);
       await renderer.destroy();
     },
   };

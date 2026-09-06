@@ -76,6 +76,7 @@ impl PlaybackEngine for FakeEngine {
             album: Some("Test Album".to_string()),
             duration_ms: 240_000,
             genre: None,
+            image_url: None,
         })
     }
     fn context_tracks(&self, context_uri: &str) -> Vec<Track> {
@@ -90,6 +91,7 @@ impl PlaybackEngine for FakeEngine {
                 album: Some("Test Album".to_string()),
                 duration_ms: 180_000,
                 genre: None,
+                image_url: None,
             })
             .collect()
     }

@@ -63,6 +63,9 @@ export function createEnrichment(ctx: AppContext) {
       if (!track.album || track.album === 'Spotify Album') {
         track.album = matchedTrack.albumName;
       }
+      if (!track.imageUrl && matchedTrack.image?.url) {
+        track.imageUrl = matchedTrack.image.url;
+      }
       if ((!track.durationMs || track.durationMs === 240000) && matchedTrack.durationMs) {
         track.durationMs = matchedTrack.durationMs;
         view = { ...next, track, durationMs: matchedTrack.durationMs };
@@ -89,6 +92,7 @@ export function createEnrichment(ctx: AppContext) {
                   artists: t.artists.map((a) => a.name),
                   album: t.albumName,
                   durationMs: t.durationMs,
+                  imageUrl: t.image?.url ?? (state.currentInfo.playback?.track ?? next.track).imageUrl,
                 };
                 const firstA = t.artists[0];
                 if (firstA?.id) {

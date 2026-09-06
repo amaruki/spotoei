@@ -30,6 +30,7 @@ impl PlaybackEngine for super::LibrespotEngine {
             album: None,
             duration_ms: 240_000,
             genre: None,
+            image_url: None,
         })
     }
 
@@ -280,7 +281,7 @@ impl PlaybackEngine for super::LibrespotEngine {
     }
 
     fn attach_state_listener(&self, listener: std::sync::Arc<dyn super::super::engine::PlaybackStateListener>) {
-        if let Ok(mut guard) = self.state_listener.try_lock() {
+        if let Ok(mut guard) = self.state_listener.lock() {
             *guard = Some(listener);
         }
     }
@@ -305,11 +306,11 @@ impl PlaybackEngine for super::LibrespotEngine {
                 album,
                 duration_ms: audio_item.duration_ms as u64,
                 genre: None,
+                image_url: audio_item.covers.first().map(|c| c.url.clone()),
             };
             self.remember_track_metadata(&track);
         }
-
-        if let Ok(guard) = self.state_listener.try_lock() {
+        if let Ok(guard) = self.state_listener.lock() {
             if let Some(listener) = &*guard {
                 listener.on_player_event(event);
             }
