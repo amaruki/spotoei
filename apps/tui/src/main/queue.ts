@@ -1,6 +1,7 @@
 import type { CatalogTrackT } from 'spotoei-protocol';
 
 import { logToFile } from '../config';
+import { resolveQueueView } from '../queue';
 import type { AppContext } from './types';
 
 export function createQueueActions(ctx: AppContext) {
@@ -11,7 +12,16 @@ export function createQueueActions(ctx: AppContext) {
     // Always forward the canonical player queue — do not synthesize.
     await clients.queueManager.refresh().catch(() => {});
     const qSnap = clients.queueManager.getSnapshot();
-    if (ui) ui.setQueueSnapshot(qSnap);
+    // Render the real upcoming tracks: cloud queue when Connect playback
+    // makes it authoritative, otherwise the local pool.
+    if (ui)
+      ui.setQueueSnapshot(
+        resolveQueueView(
+          qSnap,
+          state.activePlaylistTracks,
+          state.currentInfo.playback?.track ?? null,
+        ),
+      );
   };
 
   const ensureAutoplayTracks = async (): Promise<void> => {
@@ -40,15 +50,53 @@ export function createQueueActions(ctx: AppContext) {
         newTracks = await clients.webApi.getRecommendations({ seedTracks: [trackId], limit: 20 });
       }
 
-      // 2. Fallback: Search for more tracks by the current artist
-      if (newTracks.length === 0 && curTrack?.artists && curTrack.artists.length > 0) {
-        const firstArtist = curTrack.artists[0];
-        const artistName = typeof firstArtist === 'string' ? firstArtist : undefined;
-        if (artistName && artistName !== 'Spotify Artist' && artistName !== 'Test Artist') {
-          const searchRes = await clients.webApi.search(artistName, ['track'], 10);
-          newTracks = searchRes.hits
-            .filter((h): h is { type: 'track'; track: CatalogTrackT } => h.type === 'track')
-            .map((h) => h.track);
+      // 2. Fallback: Search for more tracks by artists in the current pool.
+      // Mixed across up to 3 artists so the result feels like radio,
+      // not one artist on loop. Pool/current URIs are excluded.
+      if (newTracks.length === 0) {
+        const names: string[] = [];
+        const seenNames = new Set<string>();
+        const pushName = (value: unknown): void => {
+          if (typeof value !== 'string') return;
+          const cleaned = value.trim();
+          if (
+            !cleaned ||
+            cleaned === 'Spotify Artist' ||
+            cleaned === 'Test Artist' ||
+            cleaned === 'Unknown Artist' ||
+            seenNames.has(cleaned)
+          ) {
+            return;
+          }
+          seenNames.add(cleaned);
+          names.push(cleaned);
+        };
+        for (const artist of curTrack?.artists ?? []) pushName(artist);
+        for (const item of pool) {
+          if (names.length >= 3) break;
+          for (const artist of item.artists ?? []) {
+            pushName(typeof artist === 'string' ? artist : artist?.name);
+          }
+        }
+        if (names.length > 0) {
+          const existingUris = new Set(pool.map((t) => t.uri));
+          if (curUri) existingUris.add(curUri);
+          const results = await Promise.all(
+            names
+              .slice(0, 3)
+              .map((name) => clients.webApi.search(name, ['track'], 5).catch(() => null)),
+          );
+          const merged: CatalogTrackT[] = [];
+          const seenTracks = new Set<string>();
+          for (const res of results) {
+            for (const hit of res?.hits ?? []) {
+              if (hit.type !== 'track') continue;
+              if (existingUris.has(hit.track.uri) || seenTracks.has(hit.track.uri)) continue;
+              seenTracks.add(hit.track.uri);
+              merged.push(hit.track);
+            }
+          }
+          newTracks = merged.toSorted(() => 0.5 - Math.random()).slice(0, 15);
         }
       }
 

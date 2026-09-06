@@ -4,7 +4,7 @@
 // Spotify queue response.
 
 import { WebApiClient } from './webApi';
-import type { QueueSnapshotT } from 'spotoei-protocol';
+import type { CatalogTrackT, QueueSnapshotT, TrackT } from 'spotoei-protocol';
 
 export interface QueueManagerOptions {
   webApi: WebApiClient;
@@ -74,4 +74,59 @@ export class QueueManager {
     }
     return ok;
   }
+}
+
+// The snapshot the queue view should render. Playback here is local-first,
+// so the Spotify cloud queue is empty whenever no Connect session is
+// active — while the local pool holds what will actually play next.
+// Prefer the cloud snapshot when it has content (Connect playback is
+// authoritative there); otherwise build the view from local state so the
+// page never shows "(queue empty)" while tracks are queued locally.
+export function resolveQueueView(
+  cloud: QueueSnapshotT,
+  pool: CatalogTrackT[],
+  playbackTrack?: TrackT | null,
+): QueueSnapshotT {
+  if (cloud.current || cloud.upcoming.length > 0) return cloud;
+  const curUri = playbackTrack?.uri;
+  const curIdx = curUri ? pool.findIndex((t) => t.uri === curUri) : -1;
+  const current: CatalogTrackT | null =
+    curIdx >= 0
+      ? (pool[curIdx] as CatalogTrackT)
+      : playbackTrack
+        ? trackFromPlayback(playbackTrack)
+        : null;
+  const rest = curIdx >= 0 ? pool.slice(curIdx + 1) : pool;
+  const now = Date.now();
+  return {
+    current,
+    upcoming: rest.map((track, i) => ({
+      id: `${track.id}-local-${i}`,
+      track,
+      source: 'context' as const,
+      addedAt: now,
+    })),
+    revision: cloud.revision,
+  };
+}
+
+function trackFromPlayback(track: TrackT): CatalogTrackT {
+  const id = track.uri.startsWith('spotify:track:')
+    ? track.uri.replace('spotify:track:', '')
+    : track.uri;
+  return {
+    id,
+    uri: track.uri,
+    name: track.name,
+    artists:
+      track.artists.length > 0
+        ? track.artists.map((name) => ({
+            id: 'unknown',
+            name,
+            uri: 'spotify:artist:unknown',
+          }))
+        : [{ id: 'unknown', name: 'Unknown', uri: 'spotify:artist:unknown' }],
+    albumName: track.album,
+    durationMs: track.durationMs,
+  };
 }
