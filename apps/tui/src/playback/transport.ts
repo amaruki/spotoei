@@ -10,7 +10,7 @@ import {
 } from 'spotoei-protocol';
 import { getSharedReadline } from '../player';
 import type { PendingRequest } from './types';
-import type { Validator } from './validator';
+import { optimisticPlayback, type Validator } from './validator';
 
 const MAX_PENDING = 32;
 
@@ -19,6 +19,7 @@ export interface PlaybackTransport {
   getLastSnapshot(): PlaybackChangedDataT | null;
   setLastSnapshot(snap: PlaybackChangedDataT): void;
   addChangeListener(listener: (s: PlaybackChangedDataT) => void): () => void;
+  emitChange?: (snap: PlaybackChangedDataT) => void;
   addPositionListener(listener: (p: PlaybackPositionDataT) => void): () => void;
   close(): void;
 }
@@ -60,10 +61,10 @@ export function createPlaybackTransport(child: ChildProcess, timeoutMs = 5_000):
       if (msg.event === 'playback.changed') {
         const result = PlaybackChangedData.safeParse(msg.data);
         if (result.success) {
-          lastSnapshot = result.data;
+          lastSnapshot = optimisticPlayback.reconcile(result.data);
           for (const l of changeListeners) {
             try {
-              l(result.data);
+              l(lastSnapshot);
             } catch {
               // ignore subscriber errors
             }
@@ -153,6 +154,16 @@ export function createPlaybackTransport(child: ChildProcess, timeoutMs = 5_000):
     setLastSnapshot: (snap) => {
       lastSnapshot = snap;
     },
+    emitChange: (snap) => {
+      lastSnapshot = snap;
+      for (const l of changeListeners) {
+        try {
+          l(snap);
+        } catch {
+          // ignore subscriber errors
+        }
+      }
+    },
     addChangeListener: (listener) => {
       changeListeners.add(listener);
       return () => {
@@ -174,6 +185,7 @@ export function createPlaybackTransport(child: ChildProcess, timeoutMs = 5_000):
       pending.clear();
       changeListeners.clear();
       positionListeners.clear();
+      optimisticPlayback.reset();
     },
   };
 }

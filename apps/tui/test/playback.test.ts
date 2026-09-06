@@ -202,4 +202,27 @@ describe('playback integration with player sidecar', () => {
       await stopPlayer(handshake.child);
     }
   });
+
+  test('load honors caller-provided duration override instead of the placeholder', async () => {
+    const bin = locatePlayer();
+    const handshake = await startPlayer(bin);
+    const playback = createPlaybackClient({ child: handshake.child });
+
+    try {
+      const snap = await playback.load({
+        trackUri: 'spotify:track:realDuration',
+        autoplay: true,
+        durationMs: 209720,
+        artists: ['Somebody'],
+        album: 'Album',
+      });
+
+      expect(snap.state).toBe('playing');
+      expect(snap.track?.durationMs).toBe(209720);
+      expect(snap.durationMs).toBe(209720);
+    } finally {
+      playback.close();
+      await stopPlayer(handshake.child);
+    }
+  });
 });

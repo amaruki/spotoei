@@ -13,6 +13,7 @@ import { getSharedReadline } from './readline';
 import { sanitizeStderr } from './sanitize';
 import type { HandshakeResult } from './types';
 import { UI_VERSION } from './types';
+import { diagnostic, redact, reportFailure } from '../diagnostics';
 
 /**
  * Build the explicit allowlist of environment variables passed to the
@@ -37,9 +38,11 @@ function buildCleanEnv(extra: Record<string, string>): Record<string, string | u
     ALSA_CARD: process.env.ALSA_CARD,
     ALSA_DEVICE: process.env.ALSA_DEVICE,
     SPOTOEI_LOG_FILE: getLogPath(),
+    SPOTOEI_LOG_STDERR_ONLY: '1',
     DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS,
     SPOTOEI_MOCK_PLAYER: process.env.SPOTOEI_MOCK_PLAYER,
     SPOTOEI_MOCK_AUTH: process.env.SPOTOEI_MOCK_AUTH,
+    SPOTOEI_AUTH_STORAGE: process.env.SPOTOEI_AUTH_STORAGE,
   };
   for (const [k, v] of Object.entries(extra)) {
     clean[k] = v;
@@ -48,11 +51,11 @@ function buildCleanEnv(extra: Record<string, string>): Record<string, string | u
 }
 
 function onPlayerStderr(chunk: Buffer): void {
-  const text = sanitizeStderr(chunk);
+  const text = redact(sanitizeStderr(chunk));
   if (!process.stdout.isTTY) {
     process.stderr.write(`[player] ${text}`);
   }
-  logToFile(`[player] ${text.trimEnd()}`);
+  logToFile(`[sidecar] ${text.trimEnd()}`);
 }
 
 /**
@@ -81,6 +84,7 @@ export async function startPlayer(
   const rl = getSharedReadline(child);
   const helloId = newRequestId();
   const hello = makeHello(helloId, UI_VERSION);
+  diagnostic('ipc', 'hello.send', { requestId: helloId, playerPid: child.pid, binary: playerBin });
   let timer: NodeJS.Timeout | undefined;
 
   try {
@@ -161,12 +165,16 @@ export async function startPlayer(
       throw new Error(`protocol mismatch: client=${PROTOCOL_VERSION} player=${data.protocol}`);
     }
 
+    diagnostic('ipc', 'hello.ok', { requestId: helloId, playerPid: child.pid, protocol: data.protocol });
     return {
       protocol: data.protocol,
       playerVersion: data.playerVersion,
       capabilities: data.capabilities,
       child,
     };
+  } catch (error) {
+    reportFailure('ipc', 'hello', error);
+    throw error;
   } finally {
     clearTimeout(timer);
   }
