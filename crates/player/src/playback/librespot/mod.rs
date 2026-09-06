@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 
 mod commands;
 pub mod connect_load;
+pub mod reauth;
 mod session;
 mod sink;
 
@@ -21,6 +22,7 @@ pub struct LibrespotEngine {
     pub(super) config: Arc<Mutex<super::types::LibrespotConfig>>,
     pub(super) last_audio_error: Arc<Mutex<Option<String>>>,
     pub(super) state_listener: Arc<std::sync::Mutex<Option<Arc<dyn super::engine::PlaybackStateListener>>>>,
+    pub(super) unavailable: Arc<std::sync::Mutex<reauth::UnavailableTracker>>,
 }
 
 impl LibrespotEngine {
@@ -47,6 +49,7 @@ impl LibrespotEngine {
             config: Arc::new(Mutex::new(config)),
             last_audio_error: Arc::new(Mutex::new(None)),
             state_listener: Arc::new(std::sync::Mutex::new(None)),
+            unavailable: Arc::new(std::sync::Mutex::new(reauth::UnavailableTracker::default())),
         }
     }
 
@@ -129,6 +132,18 @@ impl LibrespotEngine {
     }
     pub async fn last_audio_error(&self) -> Option<String> {
         self.last_audio_error.lock().await.clone()
+    }
+
+    /// Throw the cached access token away and reconnect from scratch. Used
+    /// when Spotify rejects the token on the playback services while the
+    /// Web API still accepts it; without this the player would skip every
+    /// track forever on a token only the audio path dislikes.
+    pub async fn reconnect_with_fresh_token(&self) {
+        self.auth.invalidate_token().await;
+        *self.inner.lock().await = None;
+        if let Err(e) = self.ensure_active().await {
+            tracing::warn!("reconnect with fresh token failed: {}", e);
+        }
     }
 
     /// Fetch track metadata using `librespot::metadata::Track::get` with active session

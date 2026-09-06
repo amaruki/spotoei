@@ -329,6 +329,31 @@ impl PlaybackEngine for super::LibrespotEngine {
     }
 
     fn reconcile_player_event(&self, event: &librespot::playback::player::PlayerEvent) {
+        use librespot::playback::player::PlayerEvent;
+        match event {
+            PlayerEvent::Playing { .. } => {
+                if let Ok(mut tracker) = self.unavailable.lock() {
+                    tracker.note_playing();
+                }
+            }
+            PlayerEvent::Unavailable { .. } => {
+                let reconnect = self
+                    .unavailable
+                    .lock()
+                    .map(|mut tracker| tracker.note_unavailable(super::reauth::now_ms()))
+                    .unwrap_or(false);
+                if reconnect {
+                    tracing::warn!(
+                        "tracks repeatedly unloadable; reconnecting with a fresh token"
+                    );
+                    let engine = self.clone();
+                    tokio::spawn(async move {
+                        engine.reconnect_with_fresh_token().await;
+                    });
+                }
+            }
+            _ => {}
+        }
         if let librespot::playback::player::PlayerEvent::TrackChanged { audio_item } = event {
             let uri = audio_item
                 .track_id
