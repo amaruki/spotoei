@@ -1,4 +1,3 @@
-use std::time::Instant;
 
 use super::state::Playback;
 use super::types::{
@@ -13,16 +12,15 @@ impl Playback {
         }
         let snap = {
             let mut inner = self.inner.lock().await;
-            advance_position_if_playing(&mut inner);
             inner.revision = inner.revision.wrapping_add(1);
             if inner.muted_volume.is_some() {
                 if volume > 0.0 {
-                    inner.muted_volume = Some(volume);
+                    inner.muted_volume = None;
+                    inner.volume = volume;
                 }
             } else {
                 inner.volume = volume;
             }
-            inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
         let effective_volume = {
@@ -37,16 +35,13 @@ impl Playback {
     pub async fn toggle_mute(&self) -> Result<PlaybackChangedPayload, PlaybackError> {
         let snap = {
             let mut inner = self.inner.lock().await;
-            advance_position_if_playing(&mut inner);
             inner.revision = inner.revision.wrapping_add(1);
             if let Some(prev) = inner.muted_volume.take() {
                 inner.volume = prev;
             } else {
-                let save = if inner.volume > 0.0 { inner.volume } else { 0.8 };
-                inner.muted_volume = Some(save);
+                inner.muted_volume = Some(inner.volume);
                 inner.volume = 0.0;
             }
-            inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
         let vol = {
@@ -65,10 +60,8 @@ impl Playback {
     ) -> Result<PlaybackChangedPayload, PlaybackError> {
         let snap = {
             let mut inner = self.inner.lock().await;
-            advance_position_if_playing(&mut inner);
             inner.revision = inner.revision.wrapping_add(1);
             inner.shuffle = shuffle;
-            inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
         self.engine.set_shuffle(shuffle);
@@ -83,10 +76,8 @@ impl Playback {
         };
         let snap = {
             let mut inner = self.inner.lock().await;
-            advance_position_if_playing(&mut inner);
             inner.revision = inner.revision.wrapping_add(1);
             inner.repeat = mode;
-            inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
         self.engine.set_repeat(mode);
@@ -107,10 +98,8 @@ impl Playback {
             if inner.autoplay == autoplay {
                 return Ok(self.snapshot_locked(&inner));
             }
-            advance_position_if_playing(&mut inner);
             inner.revision = inner.revision.wrapping_add(1);
             inner.autoplay = autoplay;
-            inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
         self.emit_changed(&snap).await;
@@ -123,10 +112,8 @@ impl Playback {
             if inner.device_mode == mode {
                 return self.snapshot_locked(&inner);
             }
-            advance_position_if_playing(&mut inner);
             inner.revision = inner.revision.wrapping_add(1);
             inner.device_mode = mode;
-            inner.last_change_at = Instant::now();
             self.snapshot_locked(&inner)
         };
         self.engine.set_device_mode(mode);
@@ -236,9 +223,12 @@ impl Playback {
 pub(super) fn advance_position_if_playing(inner: &mut PlaybackInner) {
     if inner.state == PlaybackState::Playing {
         let elapsed = inner.last_change_at.elapsed().as_millis() as u64;
-        inner.position_ms = inner
-            .position_ms
-            .saturating_add(elapsed)
-            .min(inner.duration_ms);
+        inner.last_change_at = std::time::Instant::now();
+        let target = inner.position_ms.saturating_add(elapsed);
+        inner.position_ms = if inner.duration_ms > 0 {
+            target.min(inner.duration_ms)
+        } else {
+            target
+        };
     }
 }

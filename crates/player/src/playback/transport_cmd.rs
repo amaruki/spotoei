@@ -8,6 +8,14 @@ impl Playback {
         &self,
         req: LoadRequest<'_>,
     ) -> Result<PlaybackChangedPayload, PlaybackError> {
+        self.load_opts(req, false).await
+    }
+
+    pub async fn load_opts(
+        &self,
+        req: LoadRequest<'_>,
+        autoplay: bool,
+    ) -> Result<PlaybackChangedPayload, PlaybackError> {
         let track: Option<Track> = if let Some(tu) = req.track_uri {
             let mut resolved = self.engine.resolve_track(tu);
             if let Some(ref mut t) = resolved {
@@ -31,7 +39,7 @@ impl Playback {
         let snap = {
             let mut inner = self.inner.lock().await;
             inner.revision = inner.revision.wrapping_add(1);
-            inner.state = PlaybackState::Loading;
+            inner.state = if autoplay { PlaybackState::Playing } else { PlaybackState::Loading };
             inner.track = Some(track.clone());
             inner.context_uri = req.context_uri.map(|s| s.to_string());
             inner.position_ms = 0;
@@ -41,7 +49,7 @@ impl Playback {
             self.snapshot_locked(&inner)
         };
         self.emit_changed(&snap).await;
-        self.engine.play_track(&track.uri, true, 0);
+        self.engine.play_track(&track.uri, autoplay, 0);
         Ok(snap)
     }
 

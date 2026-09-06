@@ -124,34 +124,24 @@ async fn load(cmd: &Command, playback: &Playback) -> String {
     let genre = cmd.data.get("genre").and_then(|v| v.as_str());
     let _ = playback.set_autoplay(autoplay).await;
     match playback
-        .load(LoadRequest {
-            context_uri,
-            track_uri,
-            name,
-            artists,
-            album,
-            duration_ms,
-            genre,
-        })
+        .load_opts(
+            LoadRequest {
+                context_uri,
+                track_uri,
+                name,
+                artists,
+                album,
+                duration_ms,
+                genre,
+            },
+            autoplay,
+        )
         .await
     {
-        Ok(snap) => {
-            let final_snap = if autoplay {
-                match playback.play().await {
-                    Ok(s) => s,
-                    Err(_) => snap,
-                }
-            } else {
-                match playback.pause().await {
-                    Ok(s) => s,
-                    Err(_) => snap,
-                }
-            };
-            ok(
-                &cmd.id,
-                serde_json::to_value(&final_snap).unwrap_or(Value::Null),
-            )
-        }
+        Ok(snap) => ok(
+            &cmd.id,
+            serde_json::to_value(&snap).unwrap_or(Value::Null),
+        ),
         Err(PlaybackError) => err(
             &cmd.id,
             ErrorBody::new(ErrorCode::PlaybackFailed, "failed to load track/context"),
