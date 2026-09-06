@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { BrowseConfigT } from 'spotoei-protocol';
@@ -157,10 +157,35 @@ export function readValidConfig(path: string = getConfigPath()): AppConfig {
 
 export { resolveClientId, saveClientId, saveRedirectPort } from './configClient';
 export type { ClientIdResolution } from './configClient';
+export const MAX_LOG_SIZE_BYTES = 2 * 1024 * 1024; // 2 MiB
+let logWriteCounter = 0;
+
+export function rotateLogIfNeeded(logPath: string, maxSize = MAX_LOG_SIZE_BYTES): void {
+  try {
+    if (!existsSync(logPath)) return;
+    const stats = statSync(logPath);
+    if (stats.size >= maxSize) {
+      const backupPath = `${logPath}.1`;
+      try {
+        renameSync(logPath, backupPath);
+      } catch {
+        // Fallback truncation if rename is blocked by lock
+        writeFileSync(logPath, '', 'utf8');
+      }
+    }
+  } catch {
+    // Ignore rotation check errors
+  }
+}
+
 export function logToFile(message: string): void {
   try {
     const logPath = getLogPath();
     mkdirSync(dirname(logPath), { recursive: true });
+    if (logWriteCounter === 0) {
+      rotateLogIfNeeded(logPath);
+    }
+    logWriteCounter = (logWriteCounter + 1) % 100;
     const timestamp = new Date().toISOString();
     appendFileSync(logPath, `[${timestamp}] ${message}\n`, 'utf8');
   } catch {

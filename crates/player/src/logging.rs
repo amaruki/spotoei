@@ -21,6 +21,21 @@ pub fn get_log_file_path() -> std::path::PathBuf {
     let _ = std::fs::create_dir_all(&spotoei_dir);
     spotoei_dir.join("spotoei.log")
 }
+pub const MAX_LOG_BYTES: u64 = 2 * 1024 * 1024; // 2 MiB
+
+pub fn rotate_log_if_needed(path: &std::path::Path) {
+    if let Ok(meta) = std::fs::metadata(path) {
+        if meta.len() >= MAX_LOG_BYTES {
+            let mut backup = path.to_path_buf();
+            let ext = backup
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("log");
+            backup.set_extension(format!("{ext}.1"));
+            let _ = std::fs::rename(path, backup);
+        }
+    }
+}
 
 pub fn init_tracing() {
     use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
@@ -36,7 +51,7 @@ pub fn init_tracing() {
         return;
     }
     let log_path = get_log_file_path();
-
+    rotate_log_if_needed(&log_path);
     if let Ok(file) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)

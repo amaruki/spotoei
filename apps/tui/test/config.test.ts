@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -14,6 +14,8 @@ import {
   DEFAULT_CLIENT_ID,
   KEYMASTER_CLIENT_ID,
   KEYMASTER_REDIRECT_PORT,
+  rotateLogIfNeeded,
+  logToFile,
 } from '../src/config';
 
 describe('configuration and client ID resolution', () => {
@@ -118,5 +120,21 @@ describe('configuration and client ID resolution', () => {
     delete process.env.SPOTOEI_REDIRECT_PORT;
     expect(resolveRedirectPort()).toBe(8080);
     expect(getRedirectUri()).toBe('http://127.0.0.1:8080/callback');
+  });
+
+  it('rotates log file when size reaches threshold', () => {
+    const testLog = join(testConfigDir, 'spotoei.log');
+    process.env.SPOTOEI_LOG_FILE = testLog;
+
+    // Create a dummy log file larger than threshold
+    writeFileSync(testLog, 'x'.repeat(100), 'utf8');
+
+    // Rotate with custom low threshold (50 bytes)
+    rotateLogIfNeeded(testLog, 50);
+
+    expect(existsSync(`${testLog}.1`)).toBe(true);
+    expect(readFileSync(`${testLog}.1`, 'utf8')).toBe('x'.repeat(100));
+
+    delete process.env.SPOTOEI_LOG_FILE;
   });
 });
