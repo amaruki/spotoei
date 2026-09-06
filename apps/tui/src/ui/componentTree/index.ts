@@ -7,12 +7,13 @@ import { buildMain, type MainNodes } from './main';
 import { buildPalette, type PaletteNodes } from './palette';
 import { buildPlaybackBar, type PlaybackBarNodes } from './playbackBar';
 import { buildSidebar, type SidebarNodes } from './sidebar';
+import { buildStatusLayer, type StatusLayerNodes } from './statusLayer';
 
 // Flat handle the controller uses to look up every renderable by id.
 // Mirrors the original `buildRoot` return shape so existing wiring does not
 // need to know about the new region-based builders.
 export interface BuiltUi
-  extends SidebarNodes, MainNodes, PlaybackBarNodes, PaletteNodes, ContextMenuNodes {
+  extends SidebarNodes, MainNodes, PlaybackBarNodes, PaletteNodes, ContextMenuNodes, StatusLayerNodes {
   root: BoxRenderable;
   mainArea: BoxRenderable;
   headerText: TextRenderable;
@@ -61,6 +62,9 @@ export function buildRoot({ renderer, state }: BuildArgs): BuiltUi {
   const menu = buildContextMenu(renderer);
   root.add(menu.menu);
 
+  const statusLayer = buildStatusLayer(renderer);
+  root.add(statusLayer.statusLayer);
+
   return {
     root,
     mainArea,
@@ -70,6 +74,7 @@ export function buildRoot({ renderer, state }: BuildArgs): BuiltUi {
     ...playbackBar,
     ...palette,
     ...menu,
+    ...statusLayer,
   };
 }
 
@@ -78,9 +83,14 @@ export function buildRoot({ renderer, state }: BuildArgs): BuiltUi {
 export async function createUi(initial: UiViewState, opts: UiOptions): Promise<Ui> {
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
-    targetFps: 30,
+    targetFps: 60,
   });
-  return createUiCore(renderer, initial, opts);
+  try {
+    return createUiCore(renderer, initial, opts);
+  } catch (error) {
+    renderer.destroy();
+    throw error;
+  }
 }
 
 // Re-exported here to keep `./ui/index` flat. The real implementations

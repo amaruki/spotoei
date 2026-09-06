@@ -2,6 +2,8 @@
 
 This bundle contains the SPOTOEI MVP specification baseline.
 
+For runtime commands and diagnosis, see [Development runtime](DEVELOPMENT.md).
+
 - `FSD.md` — single Functional Specification Document.
 - `TSD/00-index.md` — technical specification index and locked decisions.
 - `TSD/01-system-architecture.md` — process/layer architecture.

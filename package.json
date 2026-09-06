@@ -9,8 +9,9 @@
   ],
   "type": "module",
   "scripts": {
-    "start": "bun run --filter spotoei-tui start",
-    "dev": "bun run --filter spotoei-tui dev",
+    "start": "bun run apps/tui/src/main.ts",
+    "dev": "bun run scripts/dev.ts",
+    "dev:logs": "bun run scripts/devLogs.ts",
     "build": "bun run --filter spotoei-protocol build && bun run --filter spotoei-tui build",
     "test": "bun test",
     "lint": "oxlint . && bun scripts/check-loc.ts",
