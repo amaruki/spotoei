@@ -49,6 +49,9 @@ export const PlaybackLoadData = z
   .object({
     contextUri: z.string().optional(),
     trackUri: z.string().optional(),
+    // Upcoming queue for the Connect context: current track first, pool
+    // order preserved. Lets remote devices see and walk the same queue.
+    queueUris: z.array(z.string()).max(500).optional(),
     autoplay: z.boolean().optional(),
     name: z.string().optional(),
     artists: z.array(z.string()).optional(),

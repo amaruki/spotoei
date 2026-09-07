@@ -122,12 +122,23 @@ async fn load(cmd: &Command, playback: &Playback) -> String {
     let album = cmd.data.get("album").and_then(|v| v.as_str());
     let duration_ms = cmd.data.get("durationMs").and_then(|v| v.as_u64());
     let genre = cmd.data.get("genre").and_then(|v| v.as_str());
+    let queue_uris = cmd
+        .data
+        .get("queueUris")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .take(500)
+                .collect::<Vec<String>>()
+        });
     let _ = playback.set_autoplay(autoplay).await;
     match playback
         .load_opts(
             LoadRequest {
                 context_uri,
                 track_uri,
+                queue_uris,
                 name,
                 artists,
                 album,
@@ -549,6 +560,7 @@ mod tests {
         pb.load(crate::playback::LoadRequest {
             context_uri: None,
             track_uri: Some("spotify:track:test_cmd"),
+            queue_uris: None,
             name: None,
             artists: None,
             album: None,

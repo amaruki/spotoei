@@ -39,15 +39,57 @@ impl PlaybackEngine for super::LibrespotEngine {
     }
 
     fn play_track(&self, uri: &str, autoplay: bool, position_ms: u32) {
+        self.play_track_in_context(uri, None, &[], autoplay, position_ms);
+    }
+
+    fn play_track_in_context(
+        &self,
+        uri: &str,
+        context_uri: Option<&str>,
+        queue_uris: &[String],
+        autoplay: bool,
+        position_ms: u32,
+    ) {
         let self_clone = self.clone();
         let uri_str = uri.to_string();
+        let context_str = context_uri.map(String::from);
+        let queue = queue_uris.to_vec();
         tokio::spawn(async move {
             match self_clone.ensure_active().await {
                 Ok(act) => {
-                    info!("Spotoei playing track: {}", uri_str);
-                    if let Ok(sp_uri) =
+                    if let Some(spirc) = &act.spirc {
+                        // Route local playback through Connect so remote
+                        // devices see the same track and queue and can control
+                        // it. activate() is a no-op when already active, and
+                        // both commands run in send order.
+                        let _ = spirc.activate();
+                        match super::connect_load::build_connect_load(
+                            &uri_str,
+                            context_str.as_deref(),
+                            &queue,
+                            autoplay,
+                            position_ms,
+                        ) {
+                            Ok(load) => {
+                                info!("Spotoei playing track via Connect: {}", uri_str);
+                                let _ = spirc.load(load.into_spirc_request());
+                            }
+                            Err(e) => {
+                                warn!(
+                                    "Connect load rejected ({}); falling back to direct playback",
+                                    e
+                                );
+                                if let Ok(sp_uri) =
+                                    librespot::core::spotify_uri::SpotifyUri::from_uri(&uri_str)
+                                {
+                                    act.player.load(sp_uri, autoplay, position_ms);
+                                }
+                            }
+                        }
+                    } else if let Ok(sp_uri) =
                         librespot::core::spotify_uri::SpotifyUri::from_uri(&uri_str)
                     {
+                        info!("Spotoei playing track: {}", uri_str);
                         act.player.load(sp_uri, autoplay, position_ms);
                     }
                 }

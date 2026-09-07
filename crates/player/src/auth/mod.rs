@@ -7,12 +7,12 @@
 //! Secret material (verifier, code, access token, refresh token) MUST NOT
 //! appear in stderr logs or in any response sent over the IPC envelope.
 //! The `auth.*` data shapes only carry opaque metadata.
+#[cfg(test)]
+mod auth_session;
 mod callback_server;
 mod constants;
 mod manager;
 mod oauth_flow;
-#[cfg(test)]
-mod auth_session;
 pub(crate) mod storage;
 mod token;
 mod types;

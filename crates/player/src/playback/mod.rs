@@ -42,6 +42,7 @@ mod tests {
             .load(LoadRequest {
                 context_uri: None,
                 track_uri: Some("spotify:track:test12345"),
+                queue_uris: None,
                 name: None,
                 artists: None,
                 album: None,
@@ -128,6 +129,7 @@ mod tests {
         pb.load(LoadRequest {
             context_uri: None,
             track_uri: Some("spotify:track:shorty"),
+            queue_uris: None,
             name: None,
             artists: None,
             album: None,
@@ -165,6 +167,7 @@ mod tests {
         pb.load(LoadRequest {
             context_uri: None,
             track_uri: Some("spotify:track:test_rel"),
+            queue_uris: None,
             name: None,
             artists: None,
             album: None,

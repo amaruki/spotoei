@@ -6,6 +6,7 @@ export interface PlaybackClient {
   load(opts: {
     contextUri?: string;
     trackUri?: string;
+    queueUris?: string[];
     positionMs?: number;
     autoplay?: boolean;
     name?: string;

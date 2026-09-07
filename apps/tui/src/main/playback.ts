@@ -36,9 +36,7 @@ export function createPlaybackActions(ctx: AppContext) {
         album: poolHit.albumName,
       };
     }
-    const libHit = state.libraryItems.find(
-      (it) => it.uri === trackUri,
-    );
+    const libHit = state.libraryItems.find((it) => it.uri === trackUri);
     if (libHit) {
       return {
         durationMs: libHit.durationMs,
@@ -52,6 +50,18 @@ export function createPlaybackActions(ctx: AppContext) {
   const playTrackOrContext = async (opts: PlayTrackOpts): Promise<void> => {
     const ui = getUi();
     const meta = opts.meta ?? (opts.trackUri ? lookupMeta(opts.trackUri) : undefined);
+
+    // Connect context for remote devices: the current track first, then the
+    // rest of the active pool in order. Falls back to the played track alone
+    // when it is not part of the pool.
+    const poolUris = state.activePlaylistTracks.map((t) => t.uri);
+    const poolIdx = opts.trackUri ? poolUris.indexOf(opts.trackUri) : -1;
+    const queueUris =
+      opts.trackUri && poolIdx >= 0
+        ? poolUris.slice(poolIdx)
+        : opts.trackUri
+          ? [opts.trackUri]
+          : [];
     let parsedTitle = opts.title;
     let parsedArtists = meta?.artists;
     if (opts.title.includes(' — ')) {
@@ -73,6 +83,7 @@ export function createPlaybackActions(ctx: AppContext) {
       await clients.playback.load({
         trackUri: opts.trackUri,
         contextUri: opts.contextUri,
+        queueUris,
         autoplay: true,
         ...loadMeta,
       });
@@ -92,7 +103,10 @@ export function createPlaybackActions(ctx: AppContext) {
         ui?.setStatus(`▶ Playing: ${opts.title}`);
       } catch (webErr) {
         logToFile(`[Web Play Error] ${webErr instanceof Error ? webErr.message : String(webErr)}`);
-        ui?.setStatus(`Play failed: ${webErr instanceof Error ? webErr.message : String(webErr)}`, true);
+        ui?.setStatus(
+          `Play failed: ${webErr instanceof Error ? webErr.message : String(webErr)}`,
+          true,
+        );
       }
     }
   };
@@ -353,7 +367,9 @@ export function createPlaybackActions(ctx: AppContext) {
           tracks = await clients.webApi.getRecommendations({ seedArtists: [id], limit: 25 });
         }
       } catch (err) {
-        logToFile(`[Radio Error] Failed recommendations: ${err instanceof Error ? err.message : String(err)}`);
+        logToFile(
+          `[Radio Error] Failed recommendations: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 
@@ -363,11 +379,16 @@ export function createPlaybackActions(ctx: AppContext) {
         const searchHits = await clients.webApi.search(query, ['track'], 25);
         if (Array.isArray(searchHits)) {
           tracks = searchHits
-            .filter((h: unknown): h is Record<string, unknown> => typeof h === 'object' && h !== null && ('type' in h || 'durationMs' in h))
+            .filter(
+              (h: unknown): h is Record<string, unknown> =>
+                typeof h === 'object' && h !== null && ('type' in h || 'durationMs' in h),
+            )
             .map((h) => ('type' in h && h.track ? h.track : h) as unknown as CatalogTrackT);
         }
       } catch (err) {
-        logToFile(`[Radio Error] Fallback search failed: ${err instanceof Error ? err.message : String(err)}`);
+        logToFile(
+          `[Radio Error] Fallback search failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 
@@ -386,7 +407,6 @@ export function createPlaybackActions(ctx: AppContext) {
       ui?.setStatus(`▶ Radio: ${title ?? firstTrack.name}`);
     }
   };
-
 
   return {
     playTrackOrContext,

@@ -79,6 +79,7 @@ export function makePlaybackLoad(
   opts: {
     contextUri?: string;
     trackUri?: string;
+    queueUris?: string[];
     autoplay?: boolean;
     name?: string;
     artists?: string[];
@@ -90,6 +91,7 @@ export function makePlaybackLoad(
   const data: Record<string, unknown> = {};
   if (opts.contextUri !== undefined) data.contextUri = opts.contextUri;
   if (opts.trackUri !== undefined) data.trackUri = opts.trackUri;
+  if (opts.queueUris !== undefined) data.queueUris = opts.queueUris;
   if (opts.autoplay !== undefined) data.autoplay = opts.autoplay;
   if (opts.name !== undefined) data.name = opts.name;
   if (opts.artists !== undefined) data.artists = opts.artists;

@@ -36,6 +36,7 @@ impl Playback {
             None => return Err(PlaybackError),
         };
         self.engine.remember_track_metadata(&track);
+        let queue_uris: Vec<String> = req.queue_uris.unwrap_or_else(|| vec![track.uri.clone()]);
         let snap = {
             let mut inner = self.inner.lock().await;
             inner.revision = inner.revision.wrapping_add(1);
@@ -49,7 +50,8 @@ impl Playback {
             self.snapshot_locked(&inner)
         };
         self.emit_changed(&snap).await;
-        self.engine.play_track(&track.uri, autoplay, 0);
+        self.engine
+            .play_track_in_context(&track.uri, req.context_uri, &queue_uris, autoplay, 0);
         Ok(snap)
     }
 

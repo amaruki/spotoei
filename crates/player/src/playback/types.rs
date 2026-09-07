@@ -510,6 +510,9 @@ pub struct PlaybackError;
 pub struct LoadRequest<'a> {
     pub context_uri: Option<&'a str>,
     pub track_uri: Option<&'a str>,
+    /// Upcoming queue for the Connect context (current track first). Owned
+    /// because it crosses from the IPC dispatcher into the async engine.
+    pub queue_uris: Option<Vec<String>>,
     pub name: Option<&'a str>,
     pub artists: Option<Vec<String>>,
     pub album: Option<&'a str>,

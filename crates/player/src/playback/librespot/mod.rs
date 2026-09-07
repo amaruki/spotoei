@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 mod commands;
+pub mod connect_load;
 mod session;
 mod sink;
 

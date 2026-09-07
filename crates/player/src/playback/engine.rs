@@ -7,6 +7,19 @@ pub trait PlaybackEngine: Send + Sync {
         Vec::new()
     }
     fn play_track(&self, _uri: &str, _autoplay: bool, _position_ms: u32) {}
+    /// Play a track together with its upcoming queue so Connect receivers
+    /// can broadcast and walk the same context. Defaults to plain playback
+    /// for engines without Connect support.
+    fn play_track_in_context(
+        &self,
+        uri: &str,
+        _context_uri: Option<&str>,
+        _queue_uris: &[String],
+        autoplay: bool,
+        position_ms: u32,
+    ) {
+        self.play_track(uri, autoplay, position_ms);
+    }
     fn resume(&self) {}
     fn pause(&self) {}
     fn stop(&self) {}
