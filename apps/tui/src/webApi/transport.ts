@@ -40,6 +40,22 @@ export function isDeprecatedEndpoint(pathname: string): boolean {
 // staleness in case the restriction lifts on re-auth or quota approval.
 const RESTRICTION_TTL_MS = 10 * 60 * 1000;
 
+// Upper bound for honoring Spotify's Retry-After on 429s. Longer bans are
+// still respected, but the local memory of them is capped so a stale ban
+// cannot suppress an endpoint forever.
+const RATE_LIMIT_TTL_MS = 120 * 1000;
+
+/**
+ * Parse a Retry-After header value (delta seconds) into milliseconds.
+ * Returns 0 when the header is missing or unparsable.
+ */
+export function parseRetryAfterMs(value: string | null | undefined): number {
+  if (!value) return 0;
+  const seconds = Number.parseFloat(value.trim());
+  if (!Number.isFinite(seconds) || seconds < 0) return 0;
+  return Math.round(seconds * 1000);
+}
+
 export class ApiError extends Error {
   code:
     | 'API_RATE_LIMITED'
@@ -125,6 +141,10 @@ export class Transport {
   // (pathname -> timestamp when the restriction entry expires).
   private restrictedUntil = new Map<string, number>();
   private restrictionStore?: RestrictionStore;
+  // Endpoints currently serving a Spotify 429 ban (pathname -> timestamp
+  // when the ban entry expires). Repeat calls fail fast without touching
+  // the network, so a hot loop cannot extend Spotify's ban.
+  private rateLimitedUntil = new Map<string, number>();
   private currentRefreshToken?: string;
   constructor(
     tokenProvider: TokenProvider,
@@ -184,6 +204,19 @@ export class Transport {
     } catch {
       // Store failures must never break requests.
     }
+  }
+
+  private isRateLimited(endpoint: string): boolean {
+    const until = this.rateLimitedUntil.get(endpoint);
+    if (until === undefined) return false;
+    if (Date.now() < until) return true;
+    this.rateLimitedUntil.delete(endpoint);
+    return false;
+  }
+
+  private markRateLimited(endpoint: string, retryAfterMs: number): void {
+    const waitMs = Math.min(Math.max(0, retryAfterMs), RATE_LIMIT_TTL_MS);
+    if (waitMs > 0) this.rateLimitedUntil.set(endpoint, Date.now() + waitMs);
   }
 
   async request(
@@ -305,6 +338,7 @@ export class Transport {
         }
         if (res.status === 429) {
           const retryAfter = res.headers.get('Retry-After');
+          this.markRateLimited(new URL(urlStr).pathname, parseRetryAfterMs(retryAfter));
           throw new ApiError(
             'API_RATE_LIMITED',
             `RATE_LIMITED: 429 Too Many Requests (retry after ${retryAfter ?? 'unknown'}s)`,
@@ -346,6 +380,17 @@ export class Transport {
           `FORBIDDEN: 403 endpoint restricted (${endpoint})`,
           403,
           false,
+        );
+      }
+      // A live rate-limit ban short-circuits silently (no request line, no
+      // fetch, no error report): the first refusal was already recorded with
+      // full details, and repeat calls must not extend Spotify's ban.
+      if (this.isRateLimited(endpoint)) {
+        throw new ApiError(
+          'API_RATE_LIMITED',
+          `RATE_LIMITED: 429 endpoint cooling down (${endpoint})`,
+          429,
+          true,
         );
       }
       diagnostic('api', 'request', { method, endpoint });

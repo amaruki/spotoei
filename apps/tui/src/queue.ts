@@ -10,11 +10,18 @@ export interface QueueManagerOptions {
   webApi: WebApiClient;
 }
 
+// Minimum gap between cloud queue fetches. View updates arrive in bursts
+// (every playback transition fans out to the queue view); without a floor,
+// each burst becomes a network call and feeds Spotify rate limiting while
+// the rendered view would not change anyway.
+export const QUEUE_REFRESH_MIN_INTERVAL_MS = 5_000;
+
 export class QueueManager {
   private webApi: WebApiClient;
   private snapshot: QueueSnapshotT = { current: null, upcoming: [], revision: 0 };
   private listeners: Set<(snap: QueueSnapshotT) => void> = new Set();
   private refreshSeq = 0;
+  private lastRefreshAt = 0;
 
   constructor(opts: QueueManagerOptions) {
     this.webApi = opts.webApi;
@@ -33,6 +40,10 @@ export class QueueManager {
   }
 
   async refresh(): Promise<QueueSnapshotT> {
+    if (Date.now() - this.lastRefreshAt < QUEUE_REFRESH_MIN_INTERVAL_MS) {
+      return this.snapshot;
+    }
+    this.lastRefreshAt = Date.now();
     const mySeq = ++this.refreshSeq;
     const fresh = await this.webApi.getQueueSnapshot();
     if (mySeq !== this.refreshSeq) {

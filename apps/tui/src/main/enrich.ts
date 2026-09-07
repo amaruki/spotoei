@@ -5,6 +5,11 @@ import { capitalCase, formatArtistsList } from './utils';
 
 export function createEnrichment(ctx: AppContext) {
   const { clients, state, getUi } = ctx;
+  // Failed genre lookups (usually rate limiting) are remembered briefly so
+  // every playback event does not refetch the same artist. Successes live in
+  // the shared artistGenreCache; failures live here with an expiry.
+  const genreFailureUntil = new Map<string, number>();
+  const GENRE_FAILURE_TTL_MS = 5 * 60 * 1000;
 
   const resolveTrackGenre = async (
     artistId?: string,
@@ -21,6 +26,11 @@ export function createEnrichment(ctx: AppContext) {
     if (state.artistGenreCache.has(id)) {
       return state.artistGenreCache.get(id);
     }
+    const failedUntil = genreFailureUntil.get(id);
+    if (failedUntil !== undefined) {
+      if (Date.now() < failedUntil) return undefined;
+      genreFailureUntil.delete(id);
+    }
     try {
       const genres = await clients.webApi.getArtistGenres(id);
       if (genres && genres.length > 0) {
@@ -32,7 +42,7 @@ export function createEnrichment(ctx: AppContext) {
         return formatted;
       }
     } catch {
-      // ignore
+      genreFailureUntil.set(id, Date.now() + GENRE_FAILURE_TTL_MS);
     }
     return undefined;
   };
@@ -92,7 +102,8 @@ export function createEnrichment(ctx: AppContext) {
                   artists: t.artists.map((a) => a.name),
                   album: t.albumName,
                   durationMs: t.durationMs,
-                  imageUrl: t.image?.url ?? (state.currentInfo.playback?.track ?? next.track).imageUrl,
+                  imageUrl:
+                    t.image?.url ?? (state.currentInfo.playback?.track ?? next.track).imageUrl,
                 };
                 const firstA = t.artists[0];
                 if (firstA?.id) {
