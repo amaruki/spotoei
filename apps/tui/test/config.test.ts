@@ -97,12 +97,12 @@ describe('configuration and client ID resolution', () => {
     expect(resolved.clientId).toBe(validId);
   });
 
-  it('resolves default redirect port 8989 and login redirect URI', () => {
+  it('resolves default redirect port 8989 and callback redirect URI', () => {
     delete process.env.SPOTOEI_REDIRECT_PORT;
     delete process.env.SPOTOEI_CLIENT_ID;
     expect(resolveRedirectPort()).toBe(DEFAULT_REDIRECT_PORT);
     expect(DEFAULT_REDIRECT_PORT).toBe(8989);
-    expect(getRedirectUri()).toBe('http://127.0.0.1:8989/login');
+    expect(getRedirectUri()).toBe('http://127.0.0.1:8989/callback');
   });
 
   it('resolves redirect port from environment variable', () => {

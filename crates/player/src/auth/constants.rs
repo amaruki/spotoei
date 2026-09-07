@@ -9,6 +9,7 @@ pub const SPOTIFY_ACCOUNTS: &str = "https://accounts.spotify.com";
 pub const REDIRECT_PATH: &str = "/callback";
 pub const KEYMASTER_CLIENT_ID: &str = "65b708073fc0480ea92a077233ca87bd";
 pub const NCSPOT_CLIENT_ID: &str = "d420a117a32841c2b3474932e49fb54b";
+pub const USER_DEV_CLIENT_ID: &str = "8b16519257c2463eb13dbd0bba657fed";
 pub const KEYMASTER_PORT: u16 = 8989;
 pub const KEYMASTER_PATH: &str = "/login";
 
