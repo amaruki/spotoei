@@ -53,6 +53,8 @@ ${fg(COLOR_DIM)(`Cache: ${cachePath}`)}
 ${bold('Storage & Capabilities')}
 ${fg(COLOR_TEXT)(String(state.auth.storage ?? 'in-memory'))} • ${fg(COLOR_DIM)(state.capabilities.join(', ') || '(none)')}
 
-${fg(COLOR_ACCENT)('To change Client ID, log out first (onboarding will guide you).')}
-${fg(COLOR_DIM)('Press [A] to re-authenticate')}`;
+${bold('Actions')}
+${fg(COLOR_WARN)(bold('Press [Ctrl+L] to Log Out'))} ${fg(COLOR_DIM)('— clears sessions, keyring tokens, and cache')}
+${fg(COLOR_ACCENT)('Press [Ctrl+A] to Re-authenticate')} ${fg(COLOR_DIM)('— refresh Spotify permissions')}
+`;
 }

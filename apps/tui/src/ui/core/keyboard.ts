@@ -249,9 +249,21 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         }
         return;
       }
+      if (routeKind(route.current) === 'settings') {
+        if (e.ctrl && (e.name === 'l' || e.name === 'L')) {
+          if (opts.onLogout) {
+            void opts.onLogout();
+            return;
+          }
+        }
+        if (e.ctrl && (e.name === 'a' || e.name === 'A')) {
+          if (opts.onAuthenticate) {
+            void opts.onAuthenticate();
+            return;
+          }
+        }
+      }
     }
-
-    // 6. Lyrics resume on enter/r
     if (routeKind(route.current) === 'lyrics' && focus.current === 'main') {
       if (e.name === 'r' || e.name === 'R' || e.name === 'return') { if (manualLyricsScroll.value) resume(); return; }
     }

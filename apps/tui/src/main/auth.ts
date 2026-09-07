@@ -56,6 +56,20 @@ export function createAuthActions(ctx: AppContext) {
     }
   };
 
+  const triggerLogout = async (): Promise<void> => {
+    const ui = getUi();
+    if (ui) ui.setStatus('Logging out and clearing session...', true);
+    try {
+      await clients.auth.logout();
+      if (ui) {
+        ui.setRoute('onboarding');
+        ui.setStatus('Logged out successfully. Press [A] or [Enter] to login again.', true);
+      }
+    } catch (err) {
+      if (ui) ui.setStatus(`Logout error: ${err instanceof Error ? err.message : String(err)}`, true);
+    }
+  };
+
   const handleSaveClientId = async (newClientId: string): Promise<void> => {
     const ui = getUi();
     try {
@@ -74,5 +88,5 @@ export function createAuthActions(ctx: AppContext) {
     }
   };
 
-  return { triggerAuth, handleSaveClientId };
+  return { triggerAuth, triggerLogout, handleSaveClientId };
 }

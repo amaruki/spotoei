@@ -46,6 +46,9 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     if (curKind === 'home') {
       return '↑/↓: browse  Enter: play/open  x: actions  Tab: panel  ?: palette  q: quit';
     }
+    if (curKind === 'settings') {
+      return 'Ctrl+L: log out  Ctrl+A: re-authenticate  Tab: nav  ?: palette  q: quit';
+    }
     return 'Space: play/pause  n: next  p: prev  l: lyrics  S: shuffle  R: repeat  A: autoplay  +/-: vol  Tab: nav  ?: palette  q: quit';
   };
 

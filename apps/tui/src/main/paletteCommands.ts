@@ -277,8 +277,13 @@ export function buildPaletteCommands(
     },
     {
       name: 'Authenticate with Spotify',
-      description: 'OAuth (press A in onboarding)',
+      description: 'OAuth (press A in onboarding or Ctrl+A in settings)',
       action: actions.triggerAuth,
+    },
+    {
+      name: 'Log Out of Spotify',
+      description: 'Clear keyring tokens, session, and cache (Ctrl+L in settings)',
+      action: actions.triggerLogout,
     },
     {
       name: 'Switch Playback Device...',

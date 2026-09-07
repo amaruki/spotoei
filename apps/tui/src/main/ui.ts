@@ -119,6 +119,8 @@ export async function initUi(
 
   const ui = await makeUi(state.currentInfo, {
     onKey: actions.handleKey,
+    onAuthenticate: actions.triggerAuth,
+    onLogout: actions.triggerLogout,
     onSearchSubmit: (q) => submitSearch(q),
     onSelectBrowseEntry: async (idx) => {
       const u = getUi();

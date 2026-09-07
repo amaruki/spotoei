@@ -204,6 +204,7 @@ export interface UiOptions {
   onSelectBrowseEntry?: (index: number) => void;
   onSaveClientId?: (clientId: string) => void | Promise<void>;
   onAuthenticate?: () => void | Promise<void>;
+  onLogout?: () => void | Promise<void>;
   onRouteChange?: (route: Route) => void;
   onCycleVisualizerMode?: () => void;
   vimTimeoutMs?: number;
