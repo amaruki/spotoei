@@ -1,10 +1,12 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
 use tracing::warn;
 
 use crate::event;
 
-use super::constants::DEFAULT_SCOPES;
+use super::constants::{now_ms, DEFAULT_SCOPES};
 use super::storage;
 use super::types::{AuthState, AuthStatus, InnerState, Storage};
 
@@ -16,6 +18,10 @@ pub struct AuthManager {
     pub(super) state: Mutex<InnerState>,
     /// In-flight single-flight refresh lock.
     pub(super) refresh_lock: Mutex<()>,
+    /// Playback session generation. Bumped whenever the auth identity changes
+    /// (logout, new login, client ID reset) so the playback engine drops a
+    /// session that belongs to the previous user instead of resuming it.
+    session_epoch: AtomicU64,
     /// Sink for outgoing protocol events.
     pub(super) events: mpsc::Sender<String>,
     /// Cancellation for the in-flight loopback callback server, if any.
@@ -40,6 +46,7 @@ impl AuthManager {
                 last_auth_url: None,
             }),
             refresh_lock: Mutex::new(()),
+            session_epoch: AtomicU64::new(0),
             events,
             cancel: Mutex::new(None),
             join_handle: Mutex::new(None),
@@ -47,8 +54,57 @@ impl AuthManager {
     }
 
     /// Update the client ID dynamically without restarting the player.
+    /// A token minted for one client is rejected under another, so any
+    /// existing session is dropped and playback is told to reconnect.
     pub async fn set_client_id(&self, client_id: String) {
         *self.client_id.write().await = client_id;
+        let snap = {
+            let mut s = self.state.lock().await;
+            s.current = None;
+            s.pkce = None;
+            s.last_auth_url = None;
+            s.state = AuthState::Unauthenticated;
+            self.snapshot_locked(&s, None)
+        };
+        self.bump_epoch();
+        storage::delete_librespot_credentials_cache();
+        if let Ok(value) = serde_json::to_value(&snap) {
+            self.emit("auth.changed", value).await;
+        }
+    }
+
+    /// Playback generation for the current auth identity.
+    pub fn session_epoch(&self) -> u64 {
+        self.session_epoch.load(Ordering::SeqCst)
+    }
+
+    pub(super) fn bump_epoch(&self) {
+        self.session_epoch.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// Whether an auth session is currently held (used to fail fast instead
+    /// of resurrecting a stale playback session from disk).
+    pub async fn has_current_session(&self) -> bool {
+        self.state.lock().await.current.is_some()
+    }
+
+    /// Force the next `get_web_token` to refresh instead of serving the
+    /// cached access token. Called after the Web API rejects a token with
+    /// HTTP 401: the token is invalid even though its expiry is in the
+    /// future, so the player cache must not serve it again.
+    pub async fn invalidate_token(&self) {
+        if std::env::var("SPOTOEI_MOCK_AUTH").is_ok() {
+            let mut s = self.state.lock().await;
+            if let Some(at) = s.current.as_mut() {
+                at.access_token = format!("mock-access-{}-{}", now_ms(), crate::next_event_seq());
+                at.expires_at = now_ms() + 3600_000;
+            }
+            return;
+        }
+        let mut s = self.state.lock().await;
+        if let Some(at) = s.current.as_mut() {
+            at.expires_at = 0;
+        }
     }
 
     /// Get current client ID.
@@ -89,15 +145,17 @@ impl AuthManager {
                 (Storage::Memory, None)
             }
         };
-        let mut s = self.state.lock().await;
-        s.storage = storage;
-        if let Some(at) = current {
-            s.current = Some(at);
-            s.state = AuthState::Authenticated;
-        } else {
-            s.state = AuthState::Unauthenticated;
-        }
-        let snap = self.snapshot_locked(&s, None);
+        let snap = {
+            let mut s = self.state.lock().await;
+            s.storage = storage;
+            if let Some(at) = current {
+                s.current = Some(at);
+                s.state = AuthState::Authenticated;
+            } else {
+                s.state = AuthState::Unauthenticated;
+            }
+            self.snapshot_locked(&s, None)
+        };
         if let Ok(value) = serde_json::to_value(&snap) {
             self.emit("auth.changed", value).await;
         }

@@ -4,6 +4,7 @@ import {
   makeAuthBegin,
   makeAuthLogout,
   makeAuthGetWebToken,
+  makeAuthInvalidateToken,
   makeAuthSetClientId,
   newRequestId,
   AuthStatusData,
@@ -35,6 +36,10 @@ export interface AuthClient {
   setClientId(clientId: string): Promise<void>;
   getWebToken(): Promise<string>;
   clearToken(): void;
+  // Drop the cached token on both sides of the IPC boundary so the next
+  // getWebToken() is forced to refresh instead of re-serving the token the
+  // Spotify API just rejected with HTTP 401.
+  invalidateToken(): Promise<void>;
   onStatusChange(listener: (status: AuthStatusDataT) => void): () => void;
   close(): void;
 }
@@ -217,6 +222,18 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
 
     clearToken(): void {
       cachedToken = null;
+    },
+
+    async invalidateToken(): Promise<void> {
+      cachedToken = null;
+      try {
+        const id = newRequestId();
+        const cmd = makeAuthInvalidateToken(id);
+        await sendCommand<unknown>(cmd, (data) => ({ ok: true, value: data }));
+      } catch {
+        // Local cache is already cleared; the retry's getWebToken call
+        // surfaces the real error if the player is unreachable.
+      }
     },
 
     onStatusChange(listener: (status: AuthStatusDataT) => void): () => void {

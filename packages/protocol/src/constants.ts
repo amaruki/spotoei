@@ -42,6 +42,7 @@ export const COMMAND_NAMES = [
   'auth.begin',
   'auth.logout',
   'auth.get_web_token',
+  'auth.invalidate_token',
   'auth.set_client_id',
   'playback.load',
   'playback.play',

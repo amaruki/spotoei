@@ -95,9 +95,7 @@ export function mergeTokenRefresh<T extends Record<string, unknown>>(
   refreshed: T,
 ): T & { refresh_token?: string; refreshToken?: string } {
   const prevRefresh =
-    typeof current === 'string'
-      ? current
-      : (current?.refreshToken ?? current?.refresh_token);
+    typeof current === 'string' ? current : (current?.refreshToken ?? current?.refresh_token);
 
   const ref = refreshed as Record<string, unknown>;
   const nextRefresh = ref.refresh_token ?? ref.refreshToken;
@@ -283,7 +281,7 @@ export class Transport {
         }
 
         if (res.status === 401 && retryCount === 0) {
-          this.tokenProvider.invalidateToken?.();
+          await this.tokenProvider.invalidateToken?.();
           return doFetch(retryCount + 1);
         }
         if (res.status === 401) {

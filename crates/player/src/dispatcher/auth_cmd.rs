@@ -62,6 +62,10 @@ pub async fn dispatch(command: &str, cmd: &Command, auth: &Arc<AuthManager>) -> 
                 ),
             ),
         },
+        "auth.invalidate_token" => {
+            auth.invalidate_token().await;
+            ok(&cmd.id, serde_json::json!({ "ok": true }))
+        }
         "auth.set_client_id" => {
             let id = cmd
                 .data

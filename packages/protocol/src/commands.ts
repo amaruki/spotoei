@@ -18,6 +18,10 @@ export function makeAuthGetWebToken(id: string): CommandT {
   return makeCommand(id, 'auth.get_web_token', {});
 }
 
+export function makeAuthInvalidateToken(id: string): CommandT {
+  return makeCommand(id, 'auth.invalidate_token', {});
+}
+
 export function makeAuthSetClientId(id: string, clientId: string): CommandT {
   return makeCommand(id, 'auth.set_client_id', { clientId });
 }
@@ -54,7 +58,6 @@ export function makePlaybackSeekRelative(id: string, offsetMs: number): CommandT
 export function makePlaybackSetVolume(id: string, volume: number): CommandT {
   return makeCommand(id, 'playback.set_volume', { volume });
 }
-
 
 export function makePlaybackToggleMute(id: string): CommandT {
   return makeCommand(id, 'playback.toggle_mute', {});
@@ -114,10 +117,7 @@ export function makePlaybackGetAudioConfig(id: string): CommandT {
   return makeCommand(id, 'playback.get_audio_config', {});
 }
 
-export function makePlaybackSetAudioConfig(
-  id: string,
-  config: AudioConfigOptions = {},
-): CommandT {
+export function makePlaybackSetAudioConfig(id: string, config: AudioConfigOptions = {}): CommandT {
   return makeCommand(id, 'playback.set_audio_config', config as Record<string, unknown>);
 }
 

@@ -26,8 +26,14 @@ impl AuthManager {
         let refreshed = match self.refresh(&at.refresh_token).await {
             Ok(r) => r,
             Err(e) => {
-                let mut s = self.state.lock().await;
-                s.state = AuthState::RefreshFailed;
+                let snap = {
+                    let mut s = self.state.lock().await;
+                    s.state = AuthState::RefreshFailed;
+                    self.snapshot_locked(&s, None)
+                };
+                if let Ok(value) = serde_json::to_value(&snap) {
+                    self.emit("auth.changed", value).await;
+                }
                 return Err(e);
             }
         };
@@ -98,7 +104,9 @@ impl AuthManager {
             .json()
             .await
             .map_err(|e| AuthError::Http(e.to_string()))?;
-        let account_id = "default".to_string();
+        let account_id = fetch_spotify_user_id(&parsed.access_token)
+            .await
+            .unwrap_or_else(|| "default".to_string());
         let at = AccessToken {
             access_token: parsed.access_token,
             refresh_token: parsed.refresh_token.unwrap_or_default(),
@@ -145,6 +153,30 @@ impl AuthManager {
             },
         })
     }
+}
+
+/// Resolve the Spotify user id for a fresh access token so per-account caches
+/// stay isolated. Falls back to `None` when the profile request fails; the
+/// caller keeps the previous placeholder instead of failing the login.
+async fn fetch_spotify_user_id(access_token: &str) -> Option<String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .ok()?;
+    let resp = client
+        .get("https://api.spotify.com/v1/me")
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let body: serde_json::Value = resp.json().await.ok()?;
+    body.get("id")?
+        .as_str()
+        .map(String::from)
+        .filter(|id| !id.trim().is_empty())
 }
 
 /// Map an [`AuthError`] to the slim `{ reason, message }` shape the

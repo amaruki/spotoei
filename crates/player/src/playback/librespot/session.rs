@@ -13,6 +13,10 @@ pub struct LibrespotActive {
     pub device_id: String,
     pub active_device_mode: super::super::types::DeviceMode,
     pub active_audio_backend: super::super::types::AudioBackend,
+    /// Auth generation this session was created for. When the auth identity
+    /// changes (logout, new login, client ID reset) the cached session is
+    /// dropped instead of resuming the previous user.
+    pub created_epoch: u64,
 }
 
 pub type SinkFn = Box<dyn Fn() -> Box<dyn librespot::playback::audio_backend::Sink> + Send + 'static>;
@@ -161,9 +165,21 @@ impl super::LibrespotEngine {
     }
 
     pub(super) async fn ensure_active(&self) -> Result<LibrespotActive, String> {
-        let mut guard = self.inner.lock().await;
-        if let Some(ref act) = *guard {
-            return Ok(act.clone());
+        let wanted_epoch = self.auth.session_epoch();
+        {
+            let guard = self.inner.lock().await;
+            if let Some(ref act) = *guard {
+                if act.created_epoch == wanted_epoch && !act.session.is_invalid() {
+                    return Ok(act.clone());
+                }
+            }
+        }
+
+        // No auth session means no playback session: fail fast instead of
+        // resurrecting the previous user from the librespot disk cache.
+        if !self.auth.has_current_session().await {
+            *self.inner.lock().await = None;
+            return Err("Spotify authentication required".to_string());
         }
 
         let config_dir = std::env::var("XDG_CONFIG_HOME")
@@ -209,16 +225,16 @@ impl super::LibrespotEngine {
         )
         .map_err(|e| format!("Failed to create librespot cache: {:?}", e))?;
 
-        let credentials = if let Some(creds) = cache.credentials() {
-            creds
-        } else {
-            let (token, _) = self
-                .auth
-                .get_web_token()
-                .await
-                .map_err(|e| format!("Spotify authentication required: {:?}", e))?;
-            librespot::core::authentication::Credentials::with_access_token(token)
-        };
+        // The auth manager is authoritative for identity: always connect with
+        // a fresh web token. The librespot disk cache is still handed to the
+        // session for its internals, but never trusted to pick the user.
+        let (token, _) = self
+            .auth
+            .get_web_token()
+            .await
+            .map_err(|e| format!("Spotify authentication required: {:?}", e))?;
+        let credentials =
+            librespot::core::authentication::Credentials::with_access_token(token);
 
         let session_config = librespot::core::config::SessionConfig {
             client_id: librespot::core::config::SessionConfig::default().client_id,
@@ -367,9 +383,10 @@ impl super::LibrespotEngine {
             device_id,
             active_device_mode: active_mode,
             active_audio_backend: active_backend,
+            created_epoch: wanted_epoch,
         };
 
-        *guard = Some(active.clone());
+        *self.inner.lock().await = Some(active.clone());
         info!(
             "Spotoei Spotify Connect player initialized (mode={}, backend={})",
             active_mode, active_backend

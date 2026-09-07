@@ -129,8 +129,8 @@ async function runSession(args: string[]): Promise<number> {
       async getAccessToken(): Promise<string> {
         return auth.getWebToken();
       },
-      invalidateToken(): void {
-        auth.clearToken();
+      invalidateToken(): Promise<void> {
+        return auth.invalidateToken();
       },
     };
     const webApi = new WebApiClient({

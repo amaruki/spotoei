@@ -42,6 +42,28 @@ pub fn session_file_path() -> std::path::PathBuf {
     spotoei_dir.join("session.json")
 }
 
+/// Location of the librespot playback credentials cache. Mirrors the cache
+/// directory resolution in the playback session setup, so logout can remove
+/// exactly the file a new session would otherwise resume.
+pub fn librespot_credentials_path() -> std::path::PathBuf {
+    let cache_dir = std::env::var("XDG_CACHE_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join(".cache"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        })
+        .join("spotoei");
+    cache_dir.join("credentials.json")
+}
+
+/// Best-effort removal of the librespot credentials cache. Called on logout,
+/// client ID reset, and fresh login so the next playback session cannot
+/// silently resume the previous user's connection.
+pub fn delete_librespot_credentials_cache() {
+    let _ = std::fs::remove_file(librespot_credentials_path());
+}
+
 pub async fn load_session() -> Result<Option<AccessToken>, AuthError> {
     if memory_only() {
         return Err(AuthError::KeyringUnavailable("memory-only authentication".into()));

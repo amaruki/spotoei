@@ -25,22 +25,17 @@ impl AuthManager {
             return Err(AuthError::MissingClientId);
         }
         self.cancel_in_flight().await;
-        let (cancel_tx, cancel_rx) = oneshot::channel();
-        *self.cancel.lock().await = Some(cancel_tx);
 
-        let mut s = self.state.lock().await;
         let verifier = generate_verifier();
         let challenge = s256_challenge(&verifier);
         let csrf = generate_state();
-        s.pkce = Some(PkceTx {
-            verifier: verifier.clone(),
-            state: csrf.clone(),
-        });
-        s.last_auth_url = None;
-        s.state = AuthState::Authenticating;
 
         let is_login_flow = client_id == KEYMASTER_CLIENT_ID || client_id == NCSPOT_CLIENT_ID;
-        let default_port = if client_id == KEYMASTER_CLIENT_ID { KEYMASTER_PORT } else { 8989 };
+        let default_port = if client_id == KEYMASTER_CLIENT_ID {
+            KEYMASTER_PORT
+        } else {
+            8989
+        };
         let port: u16 = std::env::var("SPOTOEI_REDIRECT_PORT")
             .ok()
             .and_then(|p| p.parse().ok())
@@ -49,14 +44,15 @@ impl AuthManager {
         let listener = match tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await {
             Ok(l) => l,
             Err(e) => {
-                s.pkce = None;
-                s.state = AuthState::Unauthenticated;
-                let snap = self.snapshot_locked(&s, None);
-                drop(s);
+                let snap = {
+                    let mut s = self.state.lock().await;
+                    s.pkce = None;
+                    s.state = AuthState::Unauthenticated;
+                    self.snapshot_locked(&s, None)
+                };
                 if let Ok(value) = serde_json::to_value(&snap) {
                     self.emit("auth.changed", value).await;
                 }
-                let _ = self.cancel.lock().await.take();
                 return Err(AuthError::Http(format!("bind 127.0.0.1:{port}: {e}")));
             }
         };
@@ -80,13 +76,23 @@ impl AuthManager {
             st = urlencoding::encode(&csrf),
             sc = urlencoding::encode(&scope_str),
         );
-        s.last_auth_url = Some(url.clone());
+        let snap = {
+            let mut s = self.state.lock().await;
+            s.pkce = Some(PkceTx {
+                verifier: verifier.clone(),
+                state: csrf.clone(),
+            });
+            s.last_auth_url = Some(url.clone());
+            s.state = AuthState::Authenticating;
+            self.snapshot_locked(&s, Some(url))
+        };
 
-        let snap = self.snapshot_locked(&s, Some(url));
         if let Ok(value) = serde_json::to_value(&snap) {
             self.emit("auth.changed", value).await;
         }
 
+        let (cancel_tx, cancel_rx) = oneshot::channel();
+        *self.cancel.lock().await = Some(cancel_tx);
         let this = Arc::clone(self);
         let handle = tokio::spawn(async move {
             if let Err(e) = this.serve_callback(listener, bound_port, cancel_rx).await {
@@ -132,6 +138,8 @@ impl AuthManager {
                 (snap, saved_account_id, saved_scopes)
             }
         };
+        storage::delete_librespot_credentials_cache();
+        self.bump_epoch();
         self.emit(
             "auth.changed",
             serde_json::to_value(&snap)
@@ -150,17 +158,24 @@ impl AuthManager {
     }
 
     pub async fn logout(&self) -> Result<AuthStatus, AuthError> {
-        let mut s = self.state.lock().await;
-        if let Some(at) = s.current.as_ref() {
-            if let Err(e) = storage::delete_session(&at.account_id).await {
+        let (snap, account_id) = {
+            let mut s = self.state.lock().await;
+            let account_id = s.current.as_ref().map(|at| at.account_id.clone());
+            s.current = None;
+            s.pkce = None;
+            s.last_auth_url = None;
+            s.state = AuthState::Unauthenticated;
+            (self.snapshot_locked(&s, None), account_id)
+        };
+        if let Some(account_id) = account_id {
+            if let Err(e) = storage::delete_session(&account_id).await {
                 warn!(error = %e, "session delete failed");
             }
         }
-        s.current = None;
-        s.pkce = None;
-        s.last_auth_url = None;
-        s.state = AuthState::Unauthenticated;
-        let snap = self.snapshot_locked(&s, None);
+        // Drop the playback credentials too: otherwise the next session setup
+        // silently resumes the previous user's connection.
+        storage::delete_librespot_credentials_cache();
+        self.bump_epoch();
         if let Ok(value) = serde_json::to_value(&snap) {
             self.emit("auth.changed", value).await;
         }
@@ -186,28 +201,43 @@ impl AuthManager {
             .await?;
         let account_id = at.account_id.clone();
         let scopes = at.scopes.clone();
+        let token_for_store = at.clone();
         let snap = {
             let mut s = self.state.lock().await;
             s.current = Some(at);
             s.state = AuthState::Authenticated;
             s.pkce = None;
             s.last_auth_url = None;
-            match storage::save_session(s.current.as_ref().expect("just set")).await {
-                Ok(()) => s.storage = Storage::Keyring,
-                Err(AuthError::KeyringUnavailable(_)) => s.storage = Storage::Memory,
-                Err(e) => {
-                    warn!(error = %e, "session save on complete failed");
-                    s.storage = Storage::Memory;
-                }
-            }
+            s.storage = Storage::Memory;
             self.snapshot_locked(&s, None)
         };
-        self.emit(
-            "auth.changed",
-            serde_json::to_value(&snap)
-                .map_err(|e| AuthError::OAuth(format!("snapshot encode: {e}")))?,
-        )
-        .await;
+        match storage::save_session(&token_for_store).await {
+            Ok(()) => {
+                let snap = {
+                    let mut s = self.state.lock().await;
+                    s.storage = Storage::Keyring;
+                    self.snapshot_locked(&s, None)
+                };
+                if let Ok(value) = serde_json::to_value(&snap) {
+                    self.emit("auth.changed", value).await;
+                }
+            }
+            Err(AuthError::KeyringUnavailable(_)) => {
+                if let Ok(value) = serde_json::to_value(&snap) {
+                    self.emit("auth.changed", value).await;
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "session save on complete failed");
+                if let Ok(value) = serde_json::to_value(&snap) {
+                    self.emit("auth.changed", value).await;
+                }
+            }
+        }
+        // A fresh login belongs to a (possibly different) user: drop the old
+        // playback credentials and force the engine to reconnect.
+        storage::delete_librespot_credentials_cache();
+        self.bump_epoch();
         self.emit(
             "auth.completed",
             json!({

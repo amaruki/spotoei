@@ -11,7 +11,9 @@ mod callback_server;
 mod constants;
 mod manager;
 mod oauth_flow;
-mod storage;
+#[cfg(test)]
+mod auth_session;
+pub(crate) mod storage;
 mod token;
 mod types;
 

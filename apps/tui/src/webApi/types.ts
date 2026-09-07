@@ -18,7 +18,7 @@ export interface TokenPayload {
 
 export interface TokenProvider {
   getAccessToken(): Promise<string>;
-  invalidateToken?(): void;
+  invalidateToken?(): void | Promise<void>;
   getRefreshToken?(): string | undefined;
   setRefreshToken?(token?: string | null): void;
 }

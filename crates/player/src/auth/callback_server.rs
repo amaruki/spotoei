@@ -36,14 +36,21 @@ impl AuthManager {
                     self.emit(
                         "auth.failed",
                         serde_json::json!({
-                            "error": "OAuth authorization timed out after 3 minutes",
-                            "recoverable": true,
+                            "reason": "other",
+                            "message": "OAuth authorization timed out after 3 minutes",
                         }),
                     )
                     .await;
-                    let mut s = self.state.lock().await;
-                    s.state = AuthState::Unauthenticated;
-                    s.pkce = None;
+                    let snap = {
+                        let mut s = self.state.lock().await;
+                        s.state = AuthState::Unauthenticated;
+                        s.pkce = None;
+                        s.last_auth_url = None;
+                        self.snapshot_locked(&s, None)
+                    };
+                    if let Ok(value) = serde_json::to_value(&snap) {
+                        self.emit("auth.changed", value).await;
+                    }
                     return Ok(());
                 }
                 msg = rx.recv() => break msg,
@@ -140,9 +147,15 @@ impl AuthManager {
             }
             Some(Err(e)) => {
                 warn!(error = %e, "auth callback received error");
-                {
+                let snap = {
                     let mut s = self.state.lock().await;
                     s.state = AuthState::Unauthenticated;
+                    s.pkce = None;
+                    s.last_auth_url = None;
+                    self.snapshot_locked(&s, None)
+                };
+                if let Ok(value) = serde_json::to_value(&snap) {
+                    self.emit("auth.changed", value).await;
                 }
                 self.emit(
                     "auth.failed",
