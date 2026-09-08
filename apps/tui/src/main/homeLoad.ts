@@ -155,7 +155,7 @@ export function ensureHomeTab(deps: HomeLoaderDeps, tab: string, force = false):
   if (!ui || (tab !== 'for_you' && tab !== 'recently_played')) return Promise.resolve();
   const curRoute = ui.getRoute?.();
   if (curRoute && curRoute.kind === 'onboarding') return Promise.resolve();
-  if (state.currentInfo && state.currentInfo.auth?.state !== 'authenticated') return Promise.resolve();
+  if (state.currentInfo && state.currentInfo.auth?.state === 'unauthenticated') return Promise.resolve();
   state.homeTabs ??= initialHomeTabs();
   const range = state.homeTabs.range;
   const key = tab + ':' + range;

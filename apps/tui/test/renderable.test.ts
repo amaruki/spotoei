@@ -285,11 +285,11 @@ describe('OpenTUI renderables integration', () => {
   });
 
   it('enforces onboarding setup and authentication gate for unauthenticated users', async () => {
+    process.env.SPOTOEI_CLIENT_ID = 'test-client-id';
     const { renderer, renderOnce } = await createTestRenderer({
       width: 120,
       height: 40,
     });
-
     let authTriggered = false;
     const unauthState: UiViewState = {
       ...dummyState,
@@ -347,6 +347,7 @@ describe('OpenTUI renderables integration', () => {
     ui.setRoute({ kind: 'library', section: 'saved_tracks' });
     expect(kindOf(ui.getRoute())).toBe('library');
     await ui.shutdown();
+    delete process.env.SPOTOEI_CLIENT_ID;
   });
 
   it('navigation only activates on Enter, search submits strictly on Enter, and focus toggles correctly', async () => {

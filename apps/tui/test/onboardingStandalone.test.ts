@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import type { UiViewState } from '../src/ui/types';
 import { getSettingsContent } from '../src/ui/views/settings';
 import { getNavOptions } from '../src/ui/views/nav';
-import { shouldShowClientIdBox } from '../src/ui/views/onboarding';
+import { getOnboardingContent, shouldShowClientIdBox } from '../src/ui/views/onboarding';
 import { buildPaletteCommands } from '../src/main/paletteCommands';
 import type { AppContext } from '../src/main/types';
 
@@ -90,5 +90,24 @@ describe('standalone onboarding page', () => {
     expect(loginPage).toBeDefined();
     loginPage!.action();
     expect(route).toEqual('onboarding');
+  });
+
+  it('omits onboarding from unauthenticated nav and includes Account when authenticated', () => {
+    const loggedOutNav = getNavOptions(false);
+    const loginEntry = loggedOutNav.find((o) => o.value === 'onboarding');
+    expect(loginEntry).toBeUndefined();
+
+    const loggedInNav = getNavOptions(true);
+    const accountEntry = loggedInNav.find((o) => o.value === 'onboarding');
+    expect(accountEntry).toBeDefined();
+    expect(accountEntry?.name).toBe('Account');
+  });
+
+  it('displays full account connection status when authenticated', () => {
+    const text = viewText(getOnboardingContent(authedState()));
+    expect(text).toContain('Account: test-user');
+    expect(text).toContain('Web API');
+    expect(text).toContain('Audio Streaming');
+    expect(text).toContain('Log out of Spotify');
   });
 });

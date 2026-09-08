@@ -283,7 +283,7 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   // Mount initial state. Unauthenticated boots straight into the
   // onboarding flow without pushing a spurious home entry onto the stack.
   ctx.helpers.showRoute(initial.auth.state === 'authenticated' ? 'home' : 'onboarding', true, true);
-  ctx.helpers.setFocusArea('sidebar');
+  ctx.helpers.setFocusArea(initial.auth.state === 'authenticated' && built.sidebar.visible ? 'sidebar' : 'main');
   ctx.helpers.refreshNav();
   applyStateToTree(ctx);
   ctx.helpers.renderPlaybackBar();

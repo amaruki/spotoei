@@ -54,12 +54,16 @@ describe('auth changed subscription', () => {
     expect(routeKind(ui.getRoute())).toBe('onboarding');
 
     let authListener: ((next: AuthStatusDataT) => void) | null = null;
+    let authCompletedListener: ((c: { streaming?: boolean }) => void) | null = null;
     const ctx = {
       clients: {
         visualizer: { subscribe: () => {} },
         auth: {
           onStatusChange: (l: (next: AuthStatusDataT) => void) => {
             authListener = l;
+          },
+          onAuthCompleted: (l: (c: { streaming?: boolean }) => void) => {
+            authCompletedListener = l;
           },
         },
         playback: { onChange: () => {}, onPosition: () => {} },
@@ -84,8 +88,12 @@ describe('auth changed subscription', () => {
     );
 
     const listener: (next: AuthStatusDataT) => void = authListener ?? (() => {});
+    const completedListener: ((c: { streaming?: boolean }) => void) =
+      authCompletedListener ?? (() => {});
     expect(authListener).not.toBeNull();
     listener(authedStatus());
+    expect(currentInfo.streamingPending).toBe(true);
+    completedListener({ streaming: true });
     expect(routeKind(ui.getRoute())).toBe('home');
     expect(currentInfo.auth.state).toBe('authenticated');
     await ui.shutdown();

@@ -48,41 +48,81 @@ export function wireSubscriptions(
   });
 
   clients.auth.onAuthCompleted?.((completed: AuthCompletedEventDataT) => {
-    if (!completed.streaming) return;
     const ui = getUi();
-    state.currentInfo.streamingPending = false;
-    if (ui) {
-      ui.setStreamingPending(false);
-      ui.setStatus('Audio streaming connected — press play', true);
+    if (completed.streaming) {
+      state.hasStreaming = true;
+      if (ui) {
+        ui.setStreamingPending(false);
+        ui.setStatus(
+          '🎉 Setup complete! Web API and Audio Streaming connected. Welcome to Spotoei.',
+          true,
+        );
+        if (routeKind(ui.getRoute()) === 'onboarding') {
+          ui.setRoute('home');
+        }
+      }
+    } else {
+      // Web API login finished
+      void (async () => {
+        const hasStreaming =
+          typeof clients.auth?.streamingStatus === 'function'
+            ? await clients.auth.streamingStatus().catch(() => false)
+            : false;
+        state.hasStreaming = hasStreaming;
+        if (hasStreaming) {
+          if (ui) {
+            ui.setStreamingPending(false);
+            if (routeKind(ui.getRoute()) === 'onboarding') {
+              ui.setRoute('home');
+            }
+          }
+        }
+      })();
     }
   });
 
   clients.auth.onStatusChange((next: AuthStatusDataT) => {
     const wasAuthed = state.currentInfo.auth?.state === 'authenticated';
     const ui = getUi();
+    if (wasAuthed && next.state === 'unauthenticated') {
+      void clients.playback.pause().catch(() => {});
+      state.hasStreaming = false;
+      state.currentInfo.playback = null;
+      if (ui) {
+        ui.setPlayback(null);
+      }
+    } else if (next.state === 'refresh-failed') {
+      if (ui) ui.setStatus('Session refresh failed; will retry', true);
+    }
+    if (!wasAuthed && next.state === 'authenticated') {
+      state.currentInfo.streamingPending = true;
+      if (ui) ui.setStreamingPending(true);
+      void (async () => {
+        const hasStreaming =
+          typeof clients.auth?.streamingStatus === 'function'
+            ? await clients.auth.streamingStatus().catch(() => false)
+            : false;
+        if (hasStreaming) {
+          state.currentInfo.streamingPending = false;
+          if (ui) {
+            ui.setStreamingPending(false);
+            if (routeKind(ui.getRoute()) === 'onboarding') {
+              ui.setRoute('home');
+            }
+          }
+        }
+      })();
+    }
     // ui.setAuth owns the state mutation (same object by reference) so its
     // transition check sees the real before/after; pre-mutating here would
     // make every transition look like a no-op and skip routing home.
     if (ui) ui.setAuth(next);
     else state.currentInfo.auth = next;
     if (!wasAuthed && next.state === 'authenticated') {
-      state.currentInfo.streamingPending = true;
-      if (ui) ui.setStreamingPending(true);
       // Top up the streaming login through the single trigger: it re-opens
       // a pending flow instead of minting a second one that would orphan the
       // first tab into a state mismatch.
       void actions.triggerAuth({ streamingOnly: true });
-      void (async () => {
-        try {
-          const devices = await clients.webApi?.getDevices?.();
-          const spotoei = devices?.find((d) => d.name.toLowerCase().includes('spotoei'));
-          if (spotoei && !spotoei.is_active) {
-            void clients.webApi?.transferPlayback?.(spotoei.id, false).catch(() => {});
-          }
-        } catch {
-          // ignore device probe
-        }
-      })();
     }
   });
 

@@ -4,7 +4,6 @@ import { COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
 import { getOnboardingContent, onboardingStep, shouldShowClientIdBox } from '../views/onboarding';
 import { getSettingsContent } from '../views/settings';
 import { buildPlaybackBarContent } from '../playbackBarView';
-import { QUOTA_BANNER } from '../../webApi/transport';
 import { routeKind } from './navigationStack';
 import type { UiCoreContext } from './types';
 import { optimisticPlayback } from '../../playback/validator';
@@ -17,9 +16,9 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     const curKind = routeKind(route.current);
     if (state.auth.state !== 'authenticated') {
       if (built.clientIdInput.focused) {
-        return 'Enter: save Client ID  Esc/Tab: exit input  ?: palette';
+        return 'Enter: save Client ID  Ctrl+D: default  Esc/Tab: exit input  ?: palette';
       }
-      return 'A/Enter: authenticate  c: edit Client ID  q: quit  ?: palette';
+      return 'A/Enter: authenticate  c: edit Client ID  d: use default  q: quit  ?: palette';
     }
     if (focus.current === 'sidebar') {
       return '↑/↓: navigate  Enter: select view  Tab/→: enter view  q: quit  ?: palette';
@@ -181,7 +180,6 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
 
   const setStatus = (msg: string, persist = false): void => {
     state.statusMessage = msg;
-    const isQuota = msg.includes(QUOTA_BANNER) || /QUOTA_EXCEEDED/i.test(msg) || /quota/i.test(msg);
     try {
       built.statusLayerText.content = t`${fg(COLOR_WARN)(bold(msg))}`;
       built.statusLayer.visible = true;

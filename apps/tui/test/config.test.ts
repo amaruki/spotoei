@@ -12,10 +12,7 @@ import {
   saveRedirectPort,
   DEFAULT_REDIRECT_PORT,
   DEFAULT_CLIENT_ID,
-  KEYMASTER_CLIENT_ID,
-  KEYMASTER_REDIRECT_PORT,
   rotateLogIfNeeded,
-  logToFile,
 } from '../src/config';
 
 describe('configuration and client ID resolution', () => {
@@ -97,12 +94,12 @@ describe('configuration and client ID resolution', () => {
     expect(resolved.clientId).toBe(validId);
   });
 
-  it('resolves default redirect port 8989 and callback redirect URI', () => {
+  it('resolves default redirect port 8989 and login redirect URI for default Keymaster', () => {
     delete process.env.SPOTOEI_REDIRECT_PORT;
     delete process.env.SPOTOEI_CLIENT_ID;
     expect(resolveRedirectPort()).toBe(DEFAULT_REDIRECT_PORT);
     expect(DEFAULT_REDIRECT_PORT).toBe(8989);
-    expect(getRedirectUri()).toBe('http://127.0.0.1:8989/callback');
+    expect(getRedirectUri()).toBe('http://127.0.0.1:8989/login');
   });
 
   it('resolves redirect port from environment variable', () => {

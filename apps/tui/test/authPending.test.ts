@@ -6,6 +6,7 @@ import {
   type AuthFailedEventDataT,
   type AuthStatusDataT,
 } from 'spotoei-protocol';
+import { routeKind } from '../src/ui/core/navigationStack';
 
 import { createAuthActions } from '../src/main/auth';
 import { wireSubscriptions } from '../src/main/listeners';
@@ -239,5 +240,46 @@ describe('pending login flow', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(triggers).toBe(1);
     expect(directStreamingBegins).toBe(0);
+  });
+
+  test('setAuth keeps user on onboarding while streamingPending is true, and onAuthCompleted routes home', async () => {
+    const { renderer, renderOnce } = await createTestRenderer({ width: 120, height: 40 });
+    const currentInfo = view('unauthenticated');
+    const ui = createUiCore(renderer, currentInfo, {
+      onKey: () => {},
+      onSearchSubmit: () => {},
+      onSelectLibrary: () => {},
+      onSelectQueue: () => {},
+    });
+    await renderOnce();
+    expect(routeKind(ui.getRoute())).toBe('onboarding');
+
+    ui.setStreamingPending(true);
+    ui.setAuth({
+      v: PROTOCOL_VERSION,
+      state: 'authenticated',
+      accountId: 'tester',
+      storage: 'keyring',
+      scopes: [],
+      accessTokenExpiresAt: null,
+      authUrl: null,
+    });
+    expect(routeKind(ui.getRoute())).toBe('onboarding');
+
+    let completeCb: ((c: AuthCompletedEventDataT) => void) | null = null;
+    const ctx = {
+      clients: authClients({
+        onAuthCompleted: (l: (c: AuthCompletedEventDataT) => void) => {
+          completeCb = l;
+        },
+      }),
+      state: { currentInfo, lastPlaybackState: 'idle' },
+      getUi: (): Ui | null => ui,
+    } as unknown as AppContext;
+    wireSubscriptions(ctx, baseActions, { enrichPlaybackTrack: (x: never) => x } as never);
+
+    completeCb!({ accountId: 'tester', scopes: [], streaming: true });
+    expect(routeKind(ui.getRoute())).toBe('home');
+    await ui.shutdown();
   });
 });

@@ -179,8 +179,12 @@ export function createKeyHandler(
       return;
     }
 
-    // Toggle Autoplay with 'A' (Shift+A)
+    // Toggle Autoplay with 'A' (Shift+A), or re-auth if streaming is pending
     if (isUpperKey(key, 'a')) {
+      if (state.currentInfo.streamingPending) {
+        void actions.triggerAuth();
+        return;
+      }
       void actions.toggleAutoplay();
       return;
     }

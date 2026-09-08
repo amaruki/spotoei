@@ -47,8 +47,8 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
   const showRoute = (nextInput: Route | string, force = false, replace = false): void => {
     let next = routeFromLegacy(nextInput);
     const kind = routeKind(next);
-    if (!force && state.auth.state !== 'authenticated' && kind !== 'onboarding') {
-      const clientRes = resolveClientId();
+    if (!force && state.auth.state === 'unauthenticated' && kind !== 'onboarding') {
+      const clientRes = resolveClientId(false);
       if (!clientRes.clientId) {
         ctx.helpers.setStatus('Welcome! Set your Spotify Client ID to begin onboarding');
       } else {
@@ -85,16 +85,14 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     built.browse.visible = finalKind === 'browse';
     built.visualizerFull.visible = finalKind === 'visualizer';
     const isVizFull = finalKind === 'visualizer';
-    // Login-only mode: unauthenticated users see the settings login page
-    // with no sidebar, side panel, or playback bar — like a logged-out web route.
+    // Login-only mode: unauthenticated users see the login page with playback bar and sidebar hidden.
     const loginMode = state.auth.state !== 'authenticated';
     // Responsive tiers: >=120 sidebar visible, 80–119 collapsible via
     // Toggle Sidebar (default visible), <80 drawer (hidden, palette nav).
     const w = ctx.termWidth.value;
     const sidebarByWidth = w >= 120 ? true : w >= 80 ? ctx.sidebarPinned.value : false;
     built.sidebar.visible = !loginMode && !isVizFull && sidebarByWidth;
-    built.playbackBar.visible = !loginMode;
-
+    built.playbackBar.visible = !loginMode && !isVizFull;
     if (manualLyricsScroll.value) { manualLyricsScroll.value = false; if (ctx.lyricsResumeTimer.value) clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout); ctx.lyricsResumeTimer.value = null; built.lyricsResumeHint.visible = false; }
     ctx.helpers.setNavSelected(next);
     if (finalKind === 'lyrics') {
@@ -132,7 +130,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       }
       if (finalKind === 'onboarding') {
         ctx.helpers.refreshOnboarding();
-        const clientRes = resolveClientId();
+        const clientRes = resolveClientId(false);
         if (!clientRes.clientId) {
           built.clientIdInput.focus();
         } else {
@@ -240,7 +238,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
         built.clientIdInput.blur();
       } else if (curKind === 'onboarding') {
         ctx.helpers.refreshOnboarding();
-        const clientRes = resolveClientId();
+        const clientRes = resolveClientId(false);
         if (!clientRes.clientId) {
           built.clientIdInput.focus();
         } else {

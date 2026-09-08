@@ -32,5 +32,6 @@ export function getNavOptions(isAuthenticated: boolean, isPrivateSession: boolea
       description: isPrivateSession ? 'Private Session active' : 'App info',
       value: 'settings',
     },
+    { name: 'Account', description: 'Login & auth status', value: 'onboarding' },
   ];
 }

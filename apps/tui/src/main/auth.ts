@@ -1,4 +1,4 @@
-import { resolveClientId, saveClientId } from '../config';
+import { KEYMASTER_CLIENT_ID, resolveClientId, saveClientId } from '../config';
 import { copyToClipboard, openBrowser } from '../system';
 import type { Ui } from '../ui/types';
 import type { AppContext } from './types';
@@ -17,7 +17,7 @@ function openAuthUrl(ui: AuthUi | null, url: string, waitingFor: string, reopene
 }
 
 export function createAuthActions(ctx: AppContext) {
-  const { clients, getUi } = ctx;
+  const { clients, getUi, state } = ctx;
   // Guards concurrent triggers (manual keypress racing the automatic
   // post-login trigger): the first call decides, the second returns. Without
   // this, two flows are minted, two tabs open, and completing either but the
@@ -48,14 +48,15 @@ export function createAuthActions(ctx: AppContext) {
     // Minting a new flow here would orphan the open tab, and completing the
     // orphaned tab is rejected as a state mismatch.
     const pending = await clients.auth.status().catch(() => null);
-    if (pending?.state === 'authenticating' && pending.authUrl) {
+    if (pending?.authUrl && (pending.state === 'authenticating' || ctx.state.currentInfo?.streamingPending)) {
       openAuthUrl(ui, pending.authUrl, 'the pending login', true);
       return;
     }
+    const isKeymaster = res.clientId === KEYMASTER_CLIENT_ID;
     const isWebAuthed = ctx.state.currentInfo?.auth?.state === 'authenticated';
-    const hasStreaming = await clients.auth.streamingStatus().catch(() => false);
-    // Automatic post-login trigger: only ever top up a missing streaming
-    // login, never start a Web flow on its own.
+    const hasStreaming =
+      ctx.state.hasStreaming ?? (await clients.auth.streamingStatus().catch(() => false));
+    ctx.state.hasStreaming = hasStreaming;
     if (opts?.streamingOnly && (!isWebAuthed || hasStreaming)) return;
 
     if (isWebAuthed && !hasStreaming) {
@@ -76,14 +77,15 @@ export function createAuthActions(ctx: AppContext) {
       return;
     }
 
-    if (ui) ui.setStatus('Opening browser for Web API permission (Step 1/2)...', true);
+    const stepLabel = isKeymaster ? 'Spotify login' : 'Web API permission (Step 1/2)';
+    if (ui) ui.setStatus(`Opening browser for ${stepLabel}...`, true);
     try {
       const result = await clients.auth.begin();
       if (result.authUrl) {
         const opened = openBrowser(result.authUrl);
         const copied = copyToClipboard(result.authUrl);
         let msg = opened
-          ? 'Browser opened for Web API permission (Step 1/2)!'
+          ? `Browser opened for ${stepLabel}!`
           : 'Please complete login in your browser';
         if (copied) {
           msg += ' (URL copied to clipboard)';
@@ -99,8 +101,16 @@ export function createAuthActions(ctx: AppContext) {
     const ui = getUi();
     if (ui) ui.setStatus('Logging out and clearing session...', true);
     try {
+      try {
+        await clients.playback.pause();
+      } catch {
+        void clients.webApi?.pause?.().catch(() => {});
+      }
       await clients.auth.logout();
+      state.currentInfo.playback = null;
+      state.lastPlaybackState = 'idle';
       if (ui) {
+        ui.setPlayback(null);
         ui.setRoute('onboarding');
         ui.setStatus('Logged out successfully. Press [A] or [Enter] to login again.', true);
       }

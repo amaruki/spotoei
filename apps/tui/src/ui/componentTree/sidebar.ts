@@ -1,5 +1,5 @@
 import { BoxRenderable, type CliRenderer, SelectRenderable } from '@opentui/core';
-import { COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
+import { COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_PANEL_BG } from '../theme';
 import { getNavOptions } from '../views/nav';
 import type { UiViewState } from '../types';
 

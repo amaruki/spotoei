@@ -1,5 +1,5 @@
 import { resolveBackAction } from '../../navigation/backBehavior';
-import { resolveClientId } from '../../config';
+import { DEFAULT_CLIENT_ID, resolveClientId } from '../../config';
 import { HOME_PANELS, cycleHomePanel, focusedHomeList, focusHomePanel } from './categoryPanels';
 import { handleEntityBrowseKeys } from './keyboardEntity';
 import { handleLibraryQueueKeys } from './keyboardLists';
@@ -129,9 +129,18 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         opts.onKey(key);
         return;
       }
+      if (e.ctrl && (e.name === 'd' || e.name === 'D')) {
+        built.clientIdInput.value = '';
+        built.clientIdInput.blur();
+        if (opts.onSaveClientId) {
+          void opts.onSaveClientId(DEFAULT_CLIENT_ID);
+        }
+        ctx.helpers.refreshOnboarding();
+        return;
+      }
       if (e.name === 'escape' || e.name === 'tab') {
         built.clientIdInput.blur();
-        ctx.helpers.setFocusArea('sidebar');
+        ctx.helpers.setFocusArea('main');
         return;
       }
       // Characters/spaces typed into clientIdInput must NOT trigger global hotkeys!
@@ -143,31 +152,70 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
       focus.current === 'main' &&
       !built.clientIdInput.focused
     ) {
-      if (e.name === 'escape' || e.name === 'tab' || e.name === 'left') {
-        ctx.helpers.setFocusArea('sidebar');
-        return;
-      }
-      if (!e.shift && (e.name === 'a' || e.sequence === 'a')) {
-        if (opts.onAuthenticate) {
-          void opts.onAuthenticate();
-        }
-        return;
-      }
-      if (e.ctrl && (e.name === 'l' || e.name === 'L')) {
-        if (opts.onLogout) {
-          void opts.onLogout();
-          return;
-        }
-      }
-      if (e.name === 'return') {
-        const clientRes = resolveClientId();
-        if (clientRes.clientId && state.auth.state !== 'authenticated') {
+      if (state.streamingPending) {
+        if (
+          e.name === 'return' ||
+          e.name === 'a' ||
+          e.name === 'A' ||
+          e.sequence === 'a' ||
+          e.sequence === 'A'
+        ) {
           if (opts.onAuthenticate) {
             void opts.onAuthenticate();
           }
           return;
         }
-        built.clientIdInput.focus();
+      } else if (state.auth.state === 'authenticated') {
+        if (
+          !e.ctrl &&
+          (e.name === 'l' || e.name === 'L') ||
+          (e.ctrl && (e.name === 'l' || e.name === 'L'))
+        ) {
+          if (opts.onLogout) {
+            void opts.onLogout();
+            return;
+          }
+        }
+        if (e.name === 'escape') {
+          ctx.helpers.showRoute('home');
+          return;
+        }
+        if (e.name === 'a' || e.name === 'A' || e.sequence === 'a' || e.sequence === 'A') {
+          if (opts.onAuthenticate) {
+            void opts.onAuthenticate();
+          }
+          return;
+        }
+      } else {
+        if (e.name === 'd' || e.name === 'D') {
+          if (opts.onSaveClientId) {
+            void opts.onSaveClientId(DEFAULT_CLIENT_ID);
+          }
+          ctx.helpers.refreshOnboarding();
+          return;
+        }
+        if (e.name === 'a' || e.name === 'A' || e.sequence === 'a' || e.sequence === 'A') {
+          if (opts.onAuthenticate) {
+            void opts.onAuthenticate();
+          }
+          return;
+        }
+        if (e.name === 'return') {
+          const clientRes = resolveClientId(false);
+          if (clientRes.clientId) {
+            if (opts.onAuthenticate) {
+              void opts.onAuthenticate();
+            }
+            return;
+          }
+          built.clientIdInput.focus();
+          return;
+        }
+      }
+      if (e.name === 'escape' || e.name === 'tab' || e.name === 'left') {
+        if (built.sidebar.visible) {
+          ctx.helpers.setFocusArea('sidebar');
+        }
         return;
       }
       if (e.name === 'c' || e.name === 'i') {
