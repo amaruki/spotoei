@@ -78,6 +78,15 @@ export function createPlaybackActions(ctx: AppContext) {
       ...(meta?.durationMs && meta.durationMs > 0 ? { durationMs: meta.durationMs } : {}),
       ...(meta?.album ? { album: meta.album } : {}),
     };
+    const hasStreaming =
+      typeof clients?.auth?.streamingStatus === 'function'
+        ? await clients.auth.streamingStatus().catch(() => false)
+        : true;
+    if (!hasStreaming) {
+      ui?.setStatus('Audio not authorized — press a to complete Step 2/2', true);
+      return;
+    }
+
     let nativeSuccess = false;
     try {
       await clients.playback.load({
@@ -92,7 +101,6 @@ export function createPlaybackActions(ctx: AppContext) {
     } catch (err) {
       logToFile(`[Native Play Error] ${err instanceof Error ? err.message : String(err)}`);
     }
-
     if (!nativeSuccess) {
       try {
         if (opts.trackUri) {
