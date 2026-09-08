@@ -125,6 +125,7 @@ async function runSession(args: string[]): Promise<number> {
 
     const cache = new Cache();
     cleanup.push(() => cache.close());
+    let activeAccountId = initialAuth.accountId ?? 'anonymous';
     const tokenProvider = {
       async getAccessToken(): Promise<string> {
         return auth.getWebToken();
@@ -143,7 +144,7 @@ async function runSession(args: string[]): Promise<number> {
         getRestriction: (endpoint: string): number | undefined => {
           try {
             const cached = cache.getQuery<number>(
-              initialAuth.accountId ?? 'anonymous',
+              activeAccountId,
               `restriction:v1:${endpoint}`,
             );
             if (!cached || cached.expiresAt === null || Date.now() >= cached.expiresAt) {
@@ -157,7 +158,7 @@ async function runSession(args: string[]): Promise<number> {
         setRestriction: (endpoint: string, until: number): void => {
           try {
             cache.putQuery(
-              initialAuth.accountId ?? 'anonymous',
+              activeAccountId,
               `restriction:v1:${endpoint}`,
               1,
               until - Date.now(),
@@ -249,6 +250,9 @@ async function runSession(args: string[]): Promise<number> {
 
     ctx.clients = clients;
     ctx.state = state;
+    ctx.setActiveAccountId = (accountId: string) => {
+      activeAccountId = accountId;
+    };
 
     const authActions = createAuthActions(ctx);
     const libraryActions = createLibraryActions(ctx);

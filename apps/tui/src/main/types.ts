@@ -67,5 +67,6 @@ export interface AppContext {
   state: AppState;
   child: ChildProcess;
   getUi: () => Ui | null;
+  setActiveAccountId?: (accountId: string) => void;
   quit: () => Promise<void>;
 }

@@ -26,6 +26,10 @@ export class EntityManager {
     private accountId: string = 'default',
   ) {}
 
+  setAccountId(accountId: string): void {
+    this.accountId = accountId;
+  }
+
   // --- Artist ---
 
   async loadArtist(id: string, forceRefresh = false): Promise<EntityViewResponseT> {

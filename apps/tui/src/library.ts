@@ -38,6 +38,12 @@ export class LibraryManager {
     return m ? { ...m } : { offset: 0, total: 0, hasMore: true };
   }
 
+  setAccountId(accountId: string): void {
+    if (this.accountId === accountId) return;
+    this.accountId = accountId;
+    this.collectionMeta.clear();
+  }
+
   getOffset(collection: LibraryCollectionT): number {
     return this.getCollectionMeta(collection).offset;
   }

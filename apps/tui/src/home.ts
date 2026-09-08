@@ -17,6 +17,10 @@ export class HomeManager {
     private accountId: string = 'default',
   ) {}
 
+  setAccountId(accountId: string): void {
+    this.accountId = accountId;
+  }
+
   async loadForYou(
     timeRange: TimeRangeT = 'medium_term',
     forceRefresh = false,

@@ -36,6 +36,7 @@ export interface SearchClient {
     collections?: string[] | string,
   ): T[] & SearchResponseT;
   close(): void;
+  setAccountId(accountId: string): void;
 }
 
 function makeKey(query: string, types: readonly string[]): string {
@@ -180,6 +181,7 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending: PendingQuery | null = null;
   let abortCtrl: AbortController | null = null;
+  let accountId = opts.accountId;
 
   const flush = async (pq: PendingQuery): Promise<void> => {
     if (pq.id < activeQueryId) {
@@ -189,7 +191,7 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
 
     const cacheKey = makeKey(pq.query, pq.types);
 
-    const cached = opts.cache.getQuery<SearchResponseT>(opts.accountId, cacheKey);
+    const cached = opts.cache.getQuery<SearchResponseT>(accountId, cacheKey);
     if (cached) {
       const expired = cached.expiresAt !== null && cached.expiresAt < Date.now();
       if (!expired) {
@@ -214,7 +216,7 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
       }
       if (pq.id === activeQueryId) {
         if (!fresh.error) {
-          opts.cache.putQuery(opts.accountId, cacheKey, fresh, cacheTtlMs);
+          opts.cache.putQuery(accountId, cacheKey, fresh, cacheTtlMs);
         }
         pq.resolve(fresh);
       } else {
@@ -304,7 +306,23 @@ export function createSearchClient(opts: SearchClientOptions): SearchClient {
       abortCtrl = null;
     },
     filterLibraryLocal<T = unknown>(query: string, collections?: string[] | string) {
-      return filterLibraryLocal<T>(query, opts.cache, opts.accountId, collections);
+      return filterLibraryLocal<T>(query, opts.cache, accountId, collections);
+    },
+    setAccountId(nextAccountId: string): void {
+      if (accountId === nextAccountId) return;
+      accountId = nextAccountId;
+      defaultClientState = { cache: opts.cache, accountId };
+      querySequence++;
+      activeQueryId = querySequence;
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (pending !== null) {
+        pending.resolve({ query: pending.query, hits: [] });
+        pending = null;
+      }
+      abortCtrl?.abort();
     },
   };
 }

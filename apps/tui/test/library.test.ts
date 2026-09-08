@@ -66,6 +66,34 @@ describe('LibraryManager', () => {
     expect(callCount).toBe(2);
   });
 
+  test('uses a new cache namespace after an account switch', async () => {
+    let callCount = 0;
+    const fakeWebApiClient = {
+      async getLibraryPage(
+        collection: 'saved_tracks' | 'saved_albums' | 'followed_artists' | 'playlists',
+        offset = 0,
+        limit = 20,
+      ): Promise<LibraryPageResponseT> {
+        callCount++;
+        return {
+          collection,
+          items: [],
+          total: 0,
+          offset,
+          limit,
+          hasMore: false,
+        };
+      },
+    } as unknown as WebApiClient;
+    const manager = new LibraryManager({ webApi: fakeWebApiClient, cache, accountId: 'account-a' });
+
+    await manager.getPage('saved_tracks');
+    manager.setAccountId('account-b');
+    await manager.getPage('saved_tracks');
+
+    expect(callCount).toBe(2);
+  });
+
   test('does not cache error responses', async () => {
     let callCount = 0;
     const fakeWebApiClient = {

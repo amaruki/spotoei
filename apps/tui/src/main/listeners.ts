@@ -83,7 +83,27 @@ export function wireSubscriptions(
 
   clients.auth.onStatusChange((next: AuthStatusDataT) => {
     const wasAuthed = state.currentInfo.auth?.state === 'authenticated';
+    const previousAccountId = state.currentInfo.auth?.accountId;
+    const changedAccount =
+      next.state === 'authenticated' &&
+      (previousAccountId ?? 'anonymous') !== (next.accountId ?? 'anonymous');
     const ui = getUi();
+    if (changedAccount) {
+      const accountId = next.accountId ?? 'anonymous';
+      ctx.setActiveAccountId?.(accountId);
+      clients.searchClient?.setAccountId(accountId);
+      clients.libraryManager?.setAccountId(accountId);
+      clients.entityManager?.setAccountId(accountId);
+      clients.homeManager?.setAccountId(accountId);
+      state.libraryItems = [];
+      state.entityPages = {};
+      state.activePlaylistTracks = [];
+      state.currentSearchHits = [];
+      state.artistGenreCache?.clear();
+      state.homeTabs = { activeTab: 'for_you', range: 'medium_term' };
+      state.currentInfo.playback = null;
+      if (ui) ui.setPlayback(null);
+    }
     if (wasAuthed && next.state === 'unauthenticated') {
       void clients.playback.pause().catch(() => {});
       state.hasStreaming = false;
