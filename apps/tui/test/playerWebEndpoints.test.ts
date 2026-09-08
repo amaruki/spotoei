@@ -121,4 +121,25 @@ describe('Player Web API endpoints (seekRelative & toggleMute)', () => {
       body: { device_ids: ['d1'], play: false },
     });
   });
+
+  it('caches devices for 30 seconds', async () => {
+    let callCount = 0;
+    const fakeTransport = {
+      async request(path: string) {
+        if (path === '/me/player/devices') {
+          callCount++;
+          return {
+            devices: [{ id: 'd1', name: 'Cached Speaker', is_active: true, type: 'Speaker' }],
+          };
+        }
+        return null;
+      },
+    } as unknown as Transport;
+
+    const dev1 = await getDevices(fakeTransport, true);
+    const dev2 = await getDevices(fakeTransport);
+    expect(dev1.length).toBe(1);
+    expect(dev2.length).toBe(1);
+    expect(callCount).toBe(1);
+  });
 });

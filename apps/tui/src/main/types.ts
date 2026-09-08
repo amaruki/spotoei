@@ -59,6 +59,7 @@ export interface AppState {
   isAdvancingAutoplay: boolean;
   lastPlaybackState: PlaybackChangedDataT['state'];
   isPrivateSession?: boolean;
+  hasStreaming?: boolean;
 }
 
 export interface AppContext {

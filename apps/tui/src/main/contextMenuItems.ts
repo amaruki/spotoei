@@ -4,8 +4,8 @@ import type { ContextMenuItem, ContextTarget, Ui } from '../ui/types';
 import { handleAddToPlaylist, handleRemoveFromPlaylist } from './contextPlaylistActions';
 export type { ContextTarget };
 import type { AppContext } from './types';
+import type { CatalogTrackT } from 'spotoei-protocol';
 import type { PlayTrackOpts } from './playback';
-
 export interface ContextDeps {
   playTrackOrContext: (opts: PlayTrackOpts) => Promise<void>;
   updateQueueView: () => Promise<void>;
@@ -101,6 +101,30 @@ export async function runContextAction(
     case 'queue': {
       if (!target.uri) {
         ui?.setStatus(`Cannot queue ${target.name}: missing Spotify URI`, true);
+        return;
+      }
+      const isLocal = state.currentInfo.audioConfig?.deviceMode !== 'connect_only';
+      if (isLocal) {
+        const pool = state.activePlaylistTracks.length > 0 ? state.activePlaylistTracks : state.libraryItems;
+        const trackObj = pool.find(
+          (t: unknown): t is CatalogTrackT =>
+            typeof t === 'object' &&
+            t !== null &&
+            ('uri' in t ? (t as { uri?: string }).uri === target.uri : false),
+        );
+        const trackToAdd: CatalogTrackT = trackObj ?? {
+          id: target.uri.replace('spotify:track:', ''),
+          uri: target.uri,
+          name: target.name,
+          artists: target.artistName
+            ? [{ id: 'unknown', name: target.artistName, uri: target.artistUri ?? 'spotify:artist:unknown' }]
+            : [],
+          albumName: '',
+          durationMs: 0,
+        };
+        state.activePlaylistTracks.push(trackToAdd);
+        ui?.setStatus(`Queued ${target.name}`, true);
+        await updateQueueView();
         return;
       }
       const ok = await clients.queueManager.add(target.uri);

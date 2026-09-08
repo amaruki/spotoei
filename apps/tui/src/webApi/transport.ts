@@ -141,10 +141,8 @@ export class Transport {
   // (pathname -> timestamp when the restriction entry expires).
   private restrictedUntil = new Map<string, number>();
   private restrictionStore?: RestrictionStore;
-  // Endpoints currently serving a Spotify 429 ban (pathname -> timestamp
-  // when the ban entry expires). Repeat calls fail fast without touching
-  // the network, so a hot loop cannot extend Spotify's ban.
   private rateLimitedUntil = new Map<string, number>();
+  private responseCache = new Map<string, unknown>();
   private currentRefreshToken?: string;
   constructor(
     tokenProvider: TokenProvider,
@@ -215,8 +213,8 @@ export class Transport {
   }
 
   private markRateLimited(endpoint: string, retryAfterMs: number): void {
-    const waitMs = Math.min(Math.max(0, retryAfterMs), RATE_LIMIT_TTL_MS);
-    if (waitMs > 0) this.rateLimitedUntil.set(endpoint, Date.now() + waitMs);
+    const waitMs = Math.min(Math.max(1000, retryAfterMs), RATE_LIMIT_TTL_MS);
+    this.rateLimitedUntil.set(endpoint, Date.now() + waitMs);
   }
 
   async request(
@@ -326,19 +324,29 @@ export class Transport {
           );
         }
 
-        if (res.status === 429 && retryCount === 0) {
-          const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10);
-          const waitMs = Math.max(1, isNaN(retryAfterSec) ? 1 : retryAfterSec) * 1000;
-          // Long backoffs return to the UI without retrying too early.
-          if (waitMs <= 1000) {
-            diagnostic('api', 'retry', { endpoint: new URL(urlStr).pathname, status: 429, waitMs });
-            await new Promise((resolve) => setTimeout(resolve, waitMs));
-            return doFetch(retryCount + 1);
-          }
-        }
         if (res.status === 429) {
           const retryAfter = res.headers.get('Retry-After');
-          this.markRateLimited(new URL(urlStr).pathname, parseRetryAfterMs(retryAfter));
+          const retryAfterMs = parseRetryAfterMs(retryAfter);
+          const waitMs = Math.max(1000, retryAfterMs);
+          const endpoint = new URL(urlStr).pathname;
+          this.markRateLimited(endpoint, waitMs);
+
+          // Retry rate-limited GET requests up to two times if wait <= 2s.
+          // Mutation requests (POST, PUT, DELETE) are never delayed or retried.
+          if (isGet && retryCount < 2 && waitMs <= 2000) {
+            diagnostic('api', 'retry', { endpoint, status: 429, waitMs, retryCount: retryCount + 1 });
+            const { promise, resolve } = Promise.withResolvers<void>();
+            setTimeout(resolve, waitMs);
+            await promise;
+            return doFetch(retryCount + 1);
+          }
+
+          // If retry not allowed or exhausted, fall back to cached data if available for GET
+          if (isGet && this.responseCache.has(urlStr)) {
+            diagnostic('api', 'cached_fallback', { endpoint, status: 429 });
+            return this.responseCache.get(urlStr);
+          }
+
           throw new ApiError(
             'API_RATE_LIMITED',
             `RATE_LIMITED: 429 Too Many Requests (retry after ${retryAfter ?? 'unknown'}s)`,
@@ -365,7 +373,11 @@ export class Transport {
       if (!text.trim()) {
         return null;
       }
-      return JSON.parse(text);
+      const parsed = JSON.parse(text);
+      if (isGet) {
+        this.responseCache.set(urlStr, parsed);
+      }
+      return parsed;
     };
 
     const p = (async () => {
@@ -386,6 +398,10 @@ export class Transport {
       // fetch, no error report): the first refusal was already recorded with
       // full details, and repeat calls must not extend Spotify's ban.
       if (this.isRateLimited(endpoint)) {
+        if (isGet && this.responseCache.has(urlStr)) {
+          diagnostic('api', 'cached_fallback', { endpoint, status: 429 });
+          return this.responseCache.get(urlStr);
+        }
         throw new ApiError(
           'API_RATE_LIMITED',
           `RATE_LIMITED: 429 endpoint cooling down (${endpoint})`,
@@ -399,6 +415,10 @@ export class Transport {
         diagnostic('api', 'response', { method, endpoint, durationMs: Date.now() - started });
         return result;
       } catch (error) {
+        if (error instanceof ApiError && error.code === 'API_RATE_LIMITED') {
+          diagnostic('api', 'rate_limited', { method, endpoint, status: 429 });
+          throw error;
+        }
         if (
           error instanceof ApiError &&
           error.code !== 'API_QUOTA_EXCEEDED' &&

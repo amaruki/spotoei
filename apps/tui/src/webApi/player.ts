@@ -60,8 +60,18 @@ export interface DeviceInfo {
   is_active: boolean;
   type: string;
 }
+let cachedDevices: { data: DeviceInfo[]; expiresAt: number } | null = null;
+export const DEVICES_CACHE_TTL_MS = 30_000;
 
-export async function getDevices(transport: Transport): Promise<DeviceInfo[]> {
+export function clearDevicesCache(): void {
+  cachedDevices = null;
+}
+
+export async function getDevices(transport: Transport, bypassCache = false): Promise<DeviceInfo[]> {
+  const now = Date.now();
+  if (!bypassCache && cachedDevices && now < cachedDevices.expiresAt) {
+    return cachedDevices.data;
+  }
   try {
     const json = await transport.request('/me/player/devices');
     if (
@@ -70,16 +80,18 @@ export async function getDevices(transport: Transport): Promise<DeviceInfo[]> {
       'devices' in json &&
       Array.isArray((json as Record<string, unknown>).devices)
     ) {
-      return (
+      const devices = (
         json as {
           devices: DeviceInfo[];
         }
       ).devices;
+      cachedDevices = { data: devices, expiresAt: now + DEVICES_CACHE_TTL_MS };
+      return devices;
     }
   } catch {
     // ignore
   }
-  return [];
+  return cachedDevices?.data ?? [];
 }
 
 export async function transferPlayback(
@@ -87,6 +99,7 @@ export async function transferPlayback(
   deviceId: string,
   play = true,
 ): Promise<void> {
+  clearDevicesCache();
   await transport.request('/me/player', { device_ids: [deviceId], play }, 'PUT');
 }
 
@@ -170,8 +183,8 @@ export class PlayerEndpoints {
     }
   }
 
-  async getDevices(): Promise<DeviceInfo[]> {
-    return getDevices(this.transport);
+  async getDevices(bypassCache = false): Promise<DeviceInfo[]> {
+    return getDevices(this.transport, bypassCache);
   }
 
   async transferPlayback(deviceId: string, play = true): Promise<void> {

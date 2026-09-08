@@ -9,8 +9,10 @@ export function createQueueActions(ctx: AppContext) {
 
   const updateQueueView = async (): Promise<void> => {
     const ui = getUi();
-    // Always forward the canonical player queue — do not synthesize.
-    await clients.queueManager.refresh().catch(() => {});
+    const isLocalPlayback = state.currentInfo.audioConfig?.deviceMode !== 'connect_only';
+    if (!isLocalPlayback) {
+      await clients.queueManager.refresh().catch(() => {});
+    }
     const qSnap = clients.queueManager.getSnapshot();
     // Render the real upcoming tracks: cloud queue when Connect playback
     // makes it authoritative, otherwise the local pool.

@@ -79,9 +79,11 @@ export function createPlaybackActions(ctx: AppContext) {
       ...(meta?.album ? { album: meta.album } : {}),
     };
     const hasStreaming =
-      typeof clients?.auth?.streamingStatus === 'function'
+      state.hasStreaming ??
+      (typeof clients?.auth?.streamingStatus === 'function'
         ? await clients.auth.streamingStatus().catch(() => false)
-        : true;
+        : true);
+    state.hasStreaming = hasStreaming;
     if (!hasStreaming) {
       ui?.setStatus('Audio not authorized — press a to complete Step 2/2', true);
       return;

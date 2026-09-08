@@ -3,6 +3,7 @@ import { QueueManager } from '../src/queue';
 import { WebApiClient } from '../src/webApi';
 import { ApiError, Transport } from '../src/webApi/transport';
 import { createEnrichment } from '../src/main/enrich';
+import { createQueueActions } from '../src/main/queue';
 import type { AppContext } from '../src/main/types';
 import type { QueueSnapshotT } from 'spotoei-protocol';
 
@@ -80,5 +81,73 @@ describe('rate-limit backoff', () => {
     await enrichment.resolveTrackGenre('a1');
     await enrichment.resolveTrackGenre('a1');
     expect(calls).toBe(1);
+  });
+
+  test('rate-limited GET requests retry up to two times if wait <= 2s', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      if (calls === 1) return rateLimited('1');
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const transport = new Transport({ getAccessToken: async () => 'fake' });
+    const res = await transport.request('/me/tracks');
+    expect(res).toEqual({ ok: true });
+    expect(calls).toBe(2);
+  });
+
+  test('mutation requests are never delayed or retried on 429', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return rateLimited('1');
+    }) as unknown as typeof fetch;
+    const transport = new Transport({ getAccessToken: async () => 'fake' });
+    const err = await transport.request('/me/player/pause', {}, 'PUT').catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).code).toBe('API_RATE_LIMITED');
+    expect(calls).toBe(1);
+  });
+
+  test('rate-limited GET falls back to cached response gracefully', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      if (calls === 1) return new Response(JSON.stringify({ cached: true }), { status: 200 });
+      return rateLimited('30');
+    }) as unknown as typeof fetch;
+    const transport = new Transport({ getAccessToken: async () => 'fake' });
+    const first = await transport.request('/me/player/queue');
+    expect(first).toEqual({ cached: true });
+
+    // Second call hits 429 and returns cached data instead of throwing
+    const second = await transport.request('/me/player/queue');
+    expect(second).toEqual({ cached: true });
+  });
+
+  test('local playback mode does not poll queue endpoint', async () => {
+    let refreshCalls = 0;
+    const ctx = {
+      clients: {
+        queueManager: {
+          refresh: async () => {
+            refreshCalls++;
+            return { current: null, upcoming: [], revision: 0 };
+          },
+          getSnapshot: () => ({ current: null, upcoming: [], revision: 0 }),
+        },
+      },
+      state: {
+        currentInfo: {
+          audioConfig: { deviceMode: 'integrated' },
+          playback: null,
+        },
+        activePlaylistTracks: [],
+      },
+      getUi: () => null,
+    } as unknown as AppContext;
+    const actions = createQueueActions(ctx);
+    await actions.updateQueueView();
+    expect(refreshCalls).toBe(0);
   });
 });

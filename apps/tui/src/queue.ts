@@ -14,7 +14,7 @@ export interface QueueManagerOptions {
 // (every playback transition fans out to the queue view); without a floor,
 // each burst becomes a network call and feeds Spotify rate limiting while
 // the rendered view would not change anyway.
-export const QUEUE_REFRESH_MIN_INTERVAL_MS = 5_000;
+export const QUEUE_REFRESH_MIN_INTERVAL_MS = 30_000;
 
 export class QueueManager {
   private webApi: WebApiClient;
@@ -39,8 +39,8 @@ export class QueueManager {
     };
   }
 
-  async refresh(): Promise<QueueSnapshotT> {
-    if (Date.now() - this.lastRefreshAt < QUEUE_REFRESH_MIN_INTERVAL_MS) {
+  async refresh(force = false): Promise<QueueSnapshotT> {
+    if (!force && Date.now() - this.lastRefreshAt < QUEUE_REFRESH_MIN_INTERVAL_MS) {
       return this.snapshot;
     }
     this.lastRefreshAt = Date.now();

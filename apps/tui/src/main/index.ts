@@ -300,23 +300,26 @@ async function runSession(args: string[]): Promise<number> {
         .catch(() => {});
 
       if (initialAuth.state !== 'authenticated') {
-        const initClientRes = resolveClientId();
+        const initClientRes = resolveClientId(false);
         if (!initClientRes.clientId) {
-          ui.setStatus('Welcome! Please enter your Spotify Client ID below to begin', true);
+          ui.setStatus('Welcome! Please enter your Spotify Client ID below to begin (or [d] for default)', true);
           ui.focusClientIdInput();
         } else {
           ui.setStatus('Welcome! Press [a] or [Enter] to authenticate with Spotify', true);
         }
       } else {
-        void clients.webApi
-          ?.getDevices?.()
-          .then((devices) => {
-            const spotoei = devices?.find((d) => d.name.toLowerCase().includes('spotoei'));
-            if (spotoei && !spotoei.is_active) {
-              void clients.webApi?.transferPlayback?.(spotoei.id, false).catch(() => {});
+        void (async () => {
+          const hasStreaming = await clients.auth.streamingStatus().catch(() => false);
+          state.hasStreaming = hasStreaming;
+          if (!hasStreaming) {
+            state.currentInfo.streamingPending = true;
+            if (ui) {
+              ui.setStreamingPending(true);
+              ui.setRoute('onboarding');
+              ui.setStatus('Web API connected. Press [A] or [Enter] for Audio Streaming permission (Step 2/2)', true);
             }
-          })
-          .catch(() => {});
+          }
+        })();
       }
 
       wireSubscriptions(
