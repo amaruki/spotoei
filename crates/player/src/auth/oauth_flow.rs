@@ -34,7 +34,7 @@ impl AuthManager {
         scopes: Option<Vec<String>>,
     ) -> Result<AuthStatus, AuthError> {
         if std::env::var("SPOTOEI_MOCK_AUTH").is_ok() {
-            return self.begin_mock().await;
+            return self.begin_mock(false).await;
         }
         let client_id = self.client_id.read().await.clone();
         if client_id.is_empty() {
@@ -137,7 +137,7 @@ impl AuthManager {
 
     pub async fn begin_streaming(self: &Arc<Self>) -> Result<AuthStatus, AuthError> {
         if std::env::var("SPOTOEI_MOCK_AUTH").is_ok() {
-            return self.begin_mock().await;
+            return self.begin_mock(true).await;
         }
         self.cancel_in_flight().await;
 
@@ -204,7 +204,7 @@ impl AuthManager {
         *self.join_handle.lock().await = Some(handle);
         Ok(snap)
     }
-    async fn begin_mock(self: &Arc<Self>) -> Result<AuthStatus, AuthError> {
+    async fn begin_mock(self: &Arc<Self>, streaming: bool) -> Result<AuthStatus, AuthError> {
         let refresh = std::env::var("SPOTOEI_MOCK_REFRESH_TOKEN")
             .unwrap_or_else(|_| format!("mock-refresh-{}", now_ms()));
         let access = format!("mock-access-{}", now_ms());
@@ -216,15 +216,28 @@ impl AuthManager {
             expires_at: now_ms() + 3600_000,
             account_id: account,
             scopes: self.scopes.clone(),
-            client_id: self.client_id.read().await.clone(),
+            client_id: if streaming {
+                KEYMASTER_CLIENT_ID.to_string()
+            } else {
+                self.client_id.read().await.clone()
+            },
         };
         let saved_account_id = at.account_id.clone();
         let saved_scopes = at.scopes.clone();
-        let (snap, account_id, scopes) = match storage::save_session(&at).await {
+        let save = if streaming {
+            storage::save_streaming_session(&at).await
+        } else {
+            storage::save_session(&at).await
+        };
+        let (snap, account_id, scopes) = match save {
             Ok(()) => {
                 let mut s = self.state.lock().await;
                 s.storage = Storage::Keyring;
-                s.current = Some(at);
+                if streaming {
+                    s.streaming = Some(at);
+                } else {
+                    s.current = Some(at);
+                }
                 s.state = AuthState::Authenticated;
                 let snap = self.snapshot_locked(&s, None);
                 (snap, saved_account_id, saved_scopes)
@@ -233,7 +246,11 @@ impl AuthManager {
                 warn!(error = %e, "mock auth: session save failed; staying in-memory");
                 let mut s = self.state.lock().await;
                 s.storage = Storage::Memory;
-                s.current = Some(at);
+                if streaming {
+                    s.streaming = Some(at);
+                } else {
+                    s.current = Some(at);
+                }
                 s.state = AuthState::Authenticated;
                 let snap = self.snapshot_locked(&s, None);
                 (snap, saved_account_id, saved_scopes)
@@ -252,6 +269,7 @@ impl AuthManager {
             json!({
                 "accountId": account_id,
                 "scopes": scopes,
+                "streaming": streaming,
             }),
         )
         .await;

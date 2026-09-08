@@ -38,6 +38,7 @@ import type { AppClients, AppContext, AppState } from './types';
 import { initUi } from './ui';
 import { recoverSessions, RESTART_SESSION } from './recovery';
 import { cancelHomeLoad } from './homeLoad';
+import { runAuthenticate } from './authenticate';
 
 export async function main(args: string[] = process.argv.slice(2)): Promise<number> {
   return recoverSessions(() => runSession(args));
@@ -54,6 +55,9 @@ async function runSession(args: string[]): Promise<number> {
   }
   if (args[0] === 'doctor') {
     return runDoctor(args.slice(1));
+  }
+  if (args[0] === 'authenticate') {
+    return runAuthenticate();
   }
   const configExit = handleConfigSubcommand(args);
   if (configExit !== null) {

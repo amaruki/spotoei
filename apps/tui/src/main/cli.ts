@@ -14,6 +14,7 @@ USAGE:
 COMMANDS:
   (none)                         Launch the full interactive TUI
   search <query>                 Run a non-interactive search and print results
+  authenticate                   Force fresh Spotify Web API and streaming logins
   doctor [check]                 Verify binary, audio output, auth, and database health
   config set-client-id <id>      Save Spotify Client ID to config file
   config set-redirect-port <port> Set Spotify OAuth redirect port (default: 8989)
