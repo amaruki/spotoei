@@ -141,7 +141,7 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     built.playbackTrackText.content = t`${fg(COLOR_TEXT)(content.line1)}`;
     const barMatch = content.line2.match(/^(\S+\s+)([━]*)([─]*)(\s+\S+\s+\(\d+%\))$/);
     if (barMatch) {
-      const [, prefix, filled, empty, suffix] = barMatch;
+      const [, prefix = '', filled = '', empty = '', suffix = ''] = barMatch;
       built.playbackProgressText.content = t`${fg(COLOR_TEXT)(prefix)}${fg(COLOR_SUCCESS)(filled)}${fg(COLOR_DIM)(empty)}${fg(COLOR_DIM)(suffix)}`;
     } else {
       built.playbackProgressText.content = t`${fg(COLOR_DIM)(content.line2)}`;

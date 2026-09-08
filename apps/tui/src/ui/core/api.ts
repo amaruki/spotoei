@@ -8,11 +8,7 @@ import { resolveContextTarget } from './contextMenu';
 import { browseCategoryOptions, browseEntryOptions } from '../views/browseView';
 import { createEntitySetters } from './entitySetters';
 import { libraryItemOptions } from '../views/library';
-import {
-  binarySearchLastLE,
-  calculateLyricsScrollOffset,
-  renderLyricsContent,
-} from '../views/lyrics';
+import { renderLyricsStyled } from '../views/lyrics';
 import { createPanelSetters, restoreListPosition } from './panelSetters';
 import { routeFromLegacy, routeKind } from './navigationStack';
 import type { ContextTarget, UiAudioConfig } from '../types';
@@ -243,7 +239,9 @@ export function createUiApi(ctx: UiCoreContext): Ui {
     },
     setLyrics(doc: LyricsDocumentT | null): void {
       state.lyrics = doc ?? undefined;
-      built.lyricsText.content = renderLyricsContent(state);
+      const availWidth = Math.max(20, (ctx.termWidth.value ?? 80) - (built.sidebar.visible ? 32 : 8));
+      const availHeight = ctx.renderer.height ?? 24;
+      built.lyricsText.content = renderLyricsStyled(state, { width: availWidth, height: availHeight });
       const isSynced = doc?.kind === 'synced';
       built.lyricsResumeHint.visible = manualLyricsScroll.value && isSynced;
       if (!isSynced) {
@@ -318,11 +316,10 @@ export function createUiApi(ctx: UiCoreContext): Ui {
         !manualLyricsScroll.value &&
         state.lyrics?.kind === 'synced'
       ) {
-        built.lyricsText.content = renderLyricsContent(state);
-        const activeIdx = binarySearchLastLE(state.lyrics.lines, pos.positionMs);
-        if (activeIdx >= 0) {
-          built.lyricsScroll.scrollTo(calculateLyricsScrollOffset(activeIdx));
-        }
+        const availWidth = Math.max(20, (ctx.termWidth.value ?? 80) - (built.sidebar.visible ? 32 : 8));
+        const availHeight = ctx.renderer.height ?? 24;
+        built.lyricsText.content = renderLyricsStyled(state, { width: availWidth, height: availHeight });
+        built.lyricsScroll.scrollTo(0);
       }
     },
     setAuth(auth: AuthStatusDataT): void {

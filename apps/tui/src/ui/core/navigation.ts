@@ -13,6 +13,7 @@ import {
 } from './categoryPanels';
 import { defaultRoute, popRoute, pushRoute, routeFromLegacy, routeKind } from './navigationStack';
 import type { AnySelect, FocusArea, Route, UiCoreContext } from './types';
+import { renderLyricsStyled } from '../views/lyrics';
 
 export function createNavigationHelpers(ctx: UiCoreContext) {
   const { built, focus, manualLyricsScroll, opts, route, state } = ctx;
@@ -96,6 +97,14 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
 
     if (manualLyricsScroll.value) { manualLyricsScroll.value = false; if (ctx.lyricsResumeTimer.value) clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout); ctx.lyricsResumeTimer.value = null; built.lyricsResumeHint.visible = false; }
     ctx.helpers.setNavSelected(next);
+    if (finalKind === 'lyrics') {
+      const availWidth = Math.max(20, (ctx.termWidth.value ?? 80) - (built.sidebar.visible ? 32 : 8));
+      const availHeight = ctx.renderer.height ?? 24;
+      built.lyricsText.content = renderLyricsStyled(state, { width: availWidth, height: availHeight });
+      if (state.lyrics?.kind === 'synced') {
+        built.lyricsScroll.scrollTo(0);
+      }
+    }
 
     // Narrow terminals stack the 2x2 grids vertically.
     const narrow = ctx.termWidth.value < 80;
