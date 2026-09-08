@@ -54,9 +54,11 @@ export const AuthTokenData = z.object({
 export type AuthTokenDataT = z.infer<typeof AuthTokenData>;
 
 // `auth.completed` event payload (player -> TUI, on successful callback).
+// `streaming` marks the dedicated audio login; absent/false means Web login.
 export const AuthCompletedEventData = z.object({
   accountId: z.string().min(1),
   scopes: z.array(z.string()),
+  streaming: z.boolean().optional(),
 });
 export type AuthCompletedEventDataT = z.infer<typeof AuthCompletedEventData>;
 

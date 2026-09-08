@@ -43,6 +43,8 @@ export const COMMAND_NAMES = [
   'auth.logout',
   'auth.get_web_token',
   'auth.invalidate_token',
+  'auth.begin_streaming',
+  'auth.streaming_status',
   'auth.set_client_id',
   'playback.load',
   'playback.play',
