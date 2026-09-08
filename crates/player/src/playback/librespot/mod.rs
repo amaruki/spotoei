@@ -23,6 +23,7 @@ pub struct LibrespotEngine {
     pub(super) last_audio_error: Arc<Mutex<Option<String>>>,
     pub(super) state_listener: Arc<std::sync::Mutex<Option<Arc<dyn super::engine::PlaybackStateListener>>>>,
     pub(super) unavailable: Arc<std::sync::Mutex<reauth::UnavailableTracker>>,
+    pub(super) is_stopped: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl LibrespotEngine {
@@ -50,6 +51,7 @@ impl LibrespotEngine {
             last_audio_error: Arc::new(Mutex::new(None)),
             state_listener: Arc::new(std::sync::Mutex::new(None)),
             unavailable: Arc::new(std::sync::Mutex::new(reauth::UnavailableTracker::default())),
+            is_stopped: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         }
     }
 
@@ -139,6 +141,7 @@ impl LibrespotEngine {
     /// Web API still accepts it; without this the player would skip every
     /// track forever on a token only the audio path dislikes.
     pub async fn reconnect_with_fresh_token(&self) {
+        crate::auth::storage::delete_librespot_credentials_cache();
         self.auth.invalidate_token().await;
         *self.inner.lock().await = None;
         if let Err(e) = self.ensure_active().await {

@@ -63,6 +63,7 @@ impl PlaybackEngine for super::LibrespotEngine {
                         // it. activate() is a no-op when already active, and
                         // both commands run in send order.
                         let _ = spirc.activate();
+                        self_clone.is_stopped.store(false, std::sync::atomic::Ordering::SeqCst);
                         match super::connect_load::build_connect_load(
                             &uri_str,
                             context_str.as_deref(),
@@ -71,7 +72,6 @@ impl PlaybackEngine for super::LibrespotEngine {
                             position_ms,
                         ) {
                             Ok(load) => {
-                                info!("Spotoei playing track via Connect: {}", uri_str);
                                 let _ = spirc.load(load.into_spirc_request());
                             }
                             Err(e) => {
@@ -82,6 +82,7 @@ impl PlaybackEngine for super::LibrespotEngine {
                                 if let Ok(sp_uri) =
                                     librespot::core::spotify_uri::SpotifyUri::from_uri(&uri_str)
                                 {
+                                    self_clone.is_stopped.store(false, std::sync::atomic::Ordering::SeqCst);
                                     act.player.load(sp_uri, autoplay, position_ms);
                                 }
                             }
@@ -89,18 +90,33 @@ impl PlaybackEngine for super::LibrespotEngine {
                     } else if let Ok(sp_uri) =
                         librespot::core::spotify_uri::SpotifyUri::from_uri(&uri_str)
                     {
+                        self_clone.is_stopped.store(false, std::sync::atomic::Ordering::SeqCst);
                         info!("Spotoei playing track: {}", uri_str);
                         act.player.load(sp_uri, autoplay, position_ms);
                     }
                 }
                 Err(e) => {
                     warn!("Librespot playback unavailable: {}", e);
+                    self_clone.is_stopped.store(true, std::sync::atomic::Ordering::SeqCst);
+                    if let Ok(guard) = self_clone.state_listener.lock() {
+                        if let Some(listener) = &*guard {
+                            listener.on_player_event(&librespot::playback::player::PlayerEvent::Stopped {
+                                play_request_id: 0,
+                                track_id: librespot::core::spotify_uri::SpotifyUri::from_uri(&uri_str)
+                                    .unwrap_or_else(|_| librespot::core::spotify_uri::SpotifyUri::from_uri("spotify:track:0000000000000000000000").unwrap()),
+                            });
+                        }
+                    }
                 }
             }
         });
     }
 
     fn resume(&self) {
+        if self.is_stopped.load(std::sync::atomic::Ordering::SeqCst) {
+            tracing::debug!("ignoring resume(): player is in stopped state");
+            return;
+        }
         let inner = self.inner.clone();
         tokio::spawn(async move {
             let guard = inner.lock().await;
@@ -121,6 +137,7 @@ impl PlaybackEngine for super::LibrespotEngine {
     }
 
     fn stop(&self) {
+        self.is_stopped.store(true, std::sync::atomic::Ordering::SeqCst);
         let inner = self.inner.clone();
         tokio::spawn(async move {
             let guard = inner.lock().await;
@@ -132,7 +149,6 @@ impl PlaybackEngine for super::LibrespotEngine {
             }
         });
     }
-
     fn seek(&self, position_ms: u32) {
         let inner = self.inner.clone();
         tokio::spawn(async move {
@@ -331,10 +347,16 @@ impl PlaybackEngine for super::LibrespotEngine {
     fn reconcile_player_event(&self, event: &librespot::playback::player::PlayerEvent) {
         use librespot::playback::player::PlayerEvent;
         match event {
-            PlayerEvent::Playing { .. } => {
-                if let Ok(mut tracker) = self.unavailable.lock() {
-                    tracker.note_playing();
+            PlayerEvent::Playing { .. } | PlayerEvent::Paused { .. } | PlayerEvent::Loading { .. } => {
+                self.is_stopped.store(false, std::sync::atomic::Ordering::SeqCst);
+                if matches!(event, PlayerEvent::Playing { .. }) {
+                    if let Ok(mut tracker) = self.unavailable.lock() {
+                        tracker.note_playing();
+                    }
                 }
+            }
+            PlayerEvent::Stopped { .. } => {
+                self.is_stopped.store(true, std::sync::atomic::Ordering::SeqCst);
             }
             PlayerEvent::Unavailable { .. } => {
                 let reconnect = self

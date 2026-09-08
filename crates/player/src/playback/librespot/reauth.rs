@@ -26,7 +26,8 @@ pub fn is_credentials_error(err: &librespot::core::Error) -> bool {
     if err.kind == ErrorKind::Unauthenticated {
         return true;
     }
-    format!("{err:?}").contains("INVALID_CREDENTIALS")
+    let s = format!("{err:?}");
+    s.contains("INVALID_CREDENTIALS") || s.contains("BAD_REQUEST") || s.contains("BadCredentials")
 }
 
 /// Tracks consecutive unloadable tracks and decides when to reconnect.
@@ -105,12 +106,18 @@ mod tests {
     }
 
     #[test]
-    fn other_precondition_failures_are_not() {
-        let err = core_error(
+    fn bad_request_and_bad_credentials_are_credentials_errors() {
+        let err_bad_req = core_error(
             librespot::core::error::ErrorKind::FailedPrecondition,
             "FaultyRequest(BAD_REQUEST)",
         );
-        assert!(!is_credentials_error(&err));
+        assert!(is_credentials_error(&err_bad_req));
+
+        let err_bad_creds = core_error(
+            librespot::core::error::ErrorKind::FailedPrecondition,
+            "BadCredentials",
+        );
+        assert!(is_credentials_error(&err_bad_creds));
     }
 
     #[test]

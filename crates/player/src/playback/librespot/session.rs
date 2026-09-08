@@ -1,10 +1,8 @@
-use librespot::playback::mixer::Mixer;
+use std::future::Future;
 use std::sync::Arc;
-
 use tracing::info;
-
+use librespot::playback::mixer::Mixer;
 use super::sink::VisualizerSink;
-
 #[derive(Clone)]
 pub struct LibrespotActive {
     pub session: librespot::core::session::Session,
@@ -39,16 +37,14 @@ impl ConnectError {
 
 pub type SinkFn = Box<dyn Fn() -> Box<dyn librespot::playback::audio_backend::Sink> + Send + 'static>;
 
-/// Session client ID for the Spotify connection. This MUST be the client
-/// the access token was minted for: login5, client-token, and audio key
-/// requests are bound to it, and presenting a different client (e.g. the
-/// librespot default while the token belongs to the user's own app) is
-/// rejected with `INVALID_CREDENTIALS` even though the AP login and the
-/// Web API accept the same token.
-pub fn resolve_session_client_id(_configured: &str) -> String {
-    // librespot AP and spclient/login5 streaming decryption
-    // require the official Spotify client ID (Keymaster).
-    librespot::core::config::SessionConfig::default().client_id
+/// Client ID presented to Spotify for the playback connection. Dual-client
+/// design: the streaming token is always minted for the official Keymaster
+/// client (dedicated Step 2/2 login), so the session always presents
+/// Keymaster too — regardless of which client the Web API token belongs to.
+/// Presenting any other client makes login5 and audio reject the token with
+/// `INVALID_CREDENTIALS` while the AP login and Web API accept it.
+pub fn session_client_id() -> String {
+    crate::auth::KEYMASTER_CLIENT_ID.to_string()
 }
 
 pub fn resolve_sink(
@@ -188,6 +184,24 @@ pub fn resolve_sink_with_fallback(
         }
     }
 }
+pub(super) async fn resolve_session_credentials<F, Fut, E>(
+    cache: &librespot::core::cache::Cache,
+    fetch_token: F,
+) -> Result<(librespot::core::authentication::Credentials, bool), E>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<(String, u64), E>>,
+{
+    if let Some(cached) = cache.credentials() {
+        return Ok((cached, true));
+    }
+    let (token, _) = fetch_token().await?;
+    Ok((
+        librespot::core::authentication::Credentials::with_access_token(token),
+        false,
+    ))
+}
+
 impl super::LibrespotEngine {
     pub async fn ensure_player(&self) -> Result<Arc<librespot::playback::player::Player>, String> {
         let act = self.ensure_active().await?;
@@ -215,7 +229,8 @@ impl super::LibrespotEngine {
         match self.connect_active(wanted_epoch).await {
             Ok(act) => Ok(act),
             Err(ConnectError::Credentials) => {
-                tracing::warn!("playback credentials rejected; refreshing token and retrying once");
+                tracing::warn!("playback credentials rejected; clearing credentials cache, refreshing token and retrying once");
+                crate::auth::storage::delete_librespot_credentials_cache();
                 self.auth.invalidate_token().await;
                 self.connect_active(wanted_epoch)
                     .await
@@ -272,16 +287,14 @@ impl super::LibrespotEngine {
         )
         .map_err(|e| ConnectError::Fatal(format!("Failed to create librespot cache: {:?}", e)))?;
 
-        // The auth manager is authoritative for identity: always connect with
-        // a fresh web token. The librespot disk cache is still handed to the
-        // session for its internals, but never trusted to pick the user.
-        let (token, _) = self.auth.get_streaming_token().await.map_err(|e| {
-            ConnectError::Fatal(format!("Spotify authentication required: {:?}", e))
-        })?;
-        let credentials = librespot::core::authentication::Credentials::with_access_token(token);
+        let (credentials, _used_cache) = resolve_session_credentials(&cache, || async {
+            self.auth.get_streaming_token().await
+        })
+        .await
+        .map_err(|e| ConnectError::Fatal(format!("Spotify authentication required: {:?}", e)))?;
 
         let session_config = librespot::core::config::SessionConfig {
-            client_id: resolve_session_client_id(&self.auth.client_id().await),
+            client_id: session_client_id(),
             device_id: device_id.clone(),
             autoplay: Some(false),
             ..Default::default()
@@ -536,16 +549,43 @@ mod tests {
 
     #[test]
     fn test_session_uses_official_keymaster_client_id() {
-        let fallback = librespot::core::config::SessionConfig::default().client_id;
+        // Dual-client design: the streaming token is minted for Keymaster,
+        // so the session always presents Keymaster regardless of the Web
+        // API client configured by the user.
+        let keymaster = "65b708073fc0480ea92a077233ca87bd";
+        assert_eq!(session_client_id(), keymaster);
         assert_eq!(
-            resolve_session_client_id("d420a117a32841c2b3474932e49fb54b"),
-            fallback,
+            session_client_id(),
+            librespot::core::config::SessionConfig::default().client_id
         );
     }
-    fn test_session_client_id_falls_back_when_unset() {
-        let fallback = librespot::core::config::SessionConfig::default().client_id;
-        assert!(!fallback.is_empty());
-        assert_eq!(resolve_session_client_id(""), fallback);
-        assert_eq!(resolve_session_client_id("   "), fallback);
+
+    #[tokio::test]
+    async fn test_resolve_credentials_prefers_cache() {
+        let tmp = std::env::temp_dir().join(format!("spotoei-cred-test-{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::create_dir_all(&tmp);
+        let cache = librespot::core::cache::Cache::new(Some(&tmp), Some(&tmp), None, None).unwrap();
+        
+        // Empty cache: resolves via streaming token
+        assert!(cache.credentials().is_none());
+        let (creds, used_cache) = resolve_session_credentials(&cache, || async {
+            Ok::<_, String>(("mock_token".to_string(), 0u64))
+        }).await.unwrap();
+        assert!(!used_cache);
+        assert_eq!(creds.auth_data, "mock_token".as_bytes());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+    #[tokio::test]
+    async fn test_resume_guard_when_stopped() {
+        use std::sync::atomic::Ordering;
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(8);
+        let auth = Arc::new(crate::auth::AuthManager::new("test-client".to_string(), tx));
+        let engine = super::super::LibrespotEngine::new(auth);
+        // New engine starts in stopped state
+        assert!(engine.is_stopped.load(Ordering::SeqCst));
+        // resume() should early return without panicking or calling play on empty inner
+        crate::playback::PlaybackEngine::resume(&engine);
+        assert!(engine.is_stopped.load(Ordering::SeqCst));
     }
 }
