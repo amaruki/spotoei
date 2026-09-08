@@ -48,12 +48,14 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         .position(|window| window == needle)
 }
 
-fn expired_token() -> AccessToken {    AccessToken {
+fn expired_token() -> AccessToken {
+    AccessToken {
         access_token: "expired-access".to_string(),
         refresh_token: "invalid-refresh-token".to_string(),
         expires_at: 1,
         account_id: "default".to_string(),
         scopes: vec![],
+        client_id: "regression-client".to_string(),
     }
 }
 
@@ -385,53 +387,40 @@ async fn bogus_callback_keeps_the_pending_login_intact() {
 }
 
 #[tokio::test]
-async fn file_fallback_persists_and_loads_sessions() {
-    let _guard = TEST_ENV_LOCK.lock().await;
-    let tmp_dir = std::env::temp_dir().join(format!("spotoei-test-{}", super::constants::now_ms()));
-    let _ = std::fs::create_dir_all(&tmp_dir);
-    let old_xdg = std::env::var("XDG_CONFIG_HOME").ok();
-    let old_storage = std::env::var("SPOTOEI_AUTH_STORAGE").ok();
-    std::env::set_var("XDG_CONFIG_HOME", &tmp_dir);
-    std::env::remove_var("SPOTOEI_AUTH_STORAGE");
-
+async fn memory_storage_never_persists_credentials() {
     let token = AccessToken {
         access_token: "test-access".to_string(),
         refresh_token: "test-refresh".to_string(),
         expires_at: 9_999_999_999_999,
         account_id: "test-user".to_string(),
         scopes: vec!["streaming".to_string()],
+        client_id: "test-client".to_string(),
     };
 
-    // Test web session file fallback
-    let _ = super::storage::save_session(&token).await;
-    let loaded = super::storage::load_session().await.expect("load_session");
-    assert!(loaded.is_some(), "session should be loaded from file fallback");
-    let loaded = loaded.unwrap();
-    assert_eq!(loaded.access_token, "test-access");
-    assert_eq!(loaded.refresh_token, "test-refresh");
+    with_memory_storage(|| async {
+        assert!(super::storage::save_session(&token).await.is_err());
+        assert!(super::storage::save_streaming_session(&token).await.is_err());
+        assert!(super::storage::load_session("test-client").await.is_err());
+        assert!(super::storage::load_streaming_session_for("test-user")
+            .await
+            .expect("memory storage read")
+            .is_none());
+    })
+    .await;
+}
 
-    // Test streaming session file fallback
-    let _ = super::storage::save_streaming_session(&token).await;
-    let loaded_streaming = super::storage::load_streaming_session().await.expect("load_streaming_session");
-    assert!(loaded_streaming.is_some(), "streaming session should be loaded from file fallback");
-    assert_eq!(loaded_streaming.unwrap().access_token, "test-access");
-
-    // Test deletion
-    super::storage::delete_session("test-user").await.expect("delete_session");
-    super::storage::delete_streaming_session().await;
-
-    assert!(!super::storage::session_file_path().exists());
-    assert!(!super::storage::streaming_session_file_path().exists());
-
-    match old_xdg {
-        Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),
-        None => std::env::remove_var("XDG_CONFIG_HOME"),
-    }
-    match old_storage {
-        Some(v) => std::env::set_var("SPOTOEI_AUTH_STORAGE", v),
-        None => std::env::remove_var("SPOTOEI_AUTH_STORAGE"),
-    }
-    let _ = std::fs::remove_dir_all(&tmp_dir);
+#[test]
+fn credential_is_bound_to_the_issuing_client() {
+    let token = AccessToken {
+        access_token: "test-access".to_string(),
+        refresh_token: "test-refresh".to_string(),
+        expires_at: 9_999_999_999_999,
+        account_id: "test-user".to_string(),
+        scopes: vec![],
+        client_id: "issuer-client".to_string(),
+    };
+    assert!(super::storage::credential_matches_client(&token, "issuer-client"));
+    assert!(!super::storage::credential_matches_client(&token, "other-client"));
 }
 
 #[tokio::test]
@@ -447,6 +436,7 @@ async fn streaming_token_never_borrows_web_token_with_streaming_scope() {
                 expires_at: super::constants::now_ms() + 3600_000,
                 account_id: "test-user".to_string(),
                 scopes: vec!["streaming".to_string(), "user-read-playback-state".to_string()],
+                client_id: super::constants::NCSPOT_CLIENT_ID.to_string(),
             });
             s.state = AuthState::Authenticated;
         }

@@ -77,12 +77,20 @@ pub struct AccessToken {
     pub expires_at: u64,
     pub account_id: String,
     pub scopes: Vec<String>,
+    /// Spotify client ID that issued this credential. A refresh token is
+    /// client-bound and must never be reused after the configured client
+    /// changes.
+    #[serde(default)]
+    pub client_id: String,
 }
 
 pub struct InnerState {
     pub state: AuthState,
     pub storage: Storage,
     pub current: Option<AccessToken>,
+    /// Streaming credentials remain in memory for this process even when
+    /// the system keyring is unavailable.
+    pub streaming: Option<AccessToken>,
     pub pkce: Option<PkceTx>,
     pub last_auth_url: Option<String>,
 }

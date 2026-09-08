@@ -118,11 +118,21 @@ impl AuthManager {
     }
 
     pub async fn has_streaming_session(&self) -> bool {
-        if let Ok(Some(st)) = storage::load_streaming_session().await {
-            !st.access_token.is_empty() || !st.refresh_token.is_empty()
-        } else {
-            false
+        let s = self.state.lock().await;
+        let account_id = s.current.as_ref().map(|token| token.account_id.clone());
+        let in_memory = s.streaming.clone();
+        drop(s);
+        let Some(account_id) = account_id else {
+            return false;
+        };
+        if let Some(token) = in_memory {
+            return token.account_id == account_id
+                && (!token.access_token.is_empty() || !token.refresh_token.is_empty());
         }
+        storage::load_streaming_session_for(&account_id)
+            .await
+            .map(|token| token.is_some_and(|token| token.account_id == account_id))
+            .unwrap_or(false)
     }
 
     pub async fn begin_streaming(self: &Arc<Self>) -> Result<AuthStatus, AuthError> {
@@ -206,6 +216,7 @@ impl AuthManager {
             expires_at: now_ms() + 3600_000,
             account_id: account,
             scopes: self.scopes.clone(),
+            client_id: self.client_id.read().await.clone(),
         };
         let saved_account_id = at.account_id.clone();
         let saved_scopes = at.scopes.clone();
@@ -248,23 +259,25 @@ impl AuthManager {
     }
 
     pub async fn logout(&self) -> Result<AuthStatus, AuthError> {
+        storage::purge_legacy_file_credentials();
         let (snap, account_id) = {
             let mut s = self.state.lock().await;
             let account_id = s.current.as_ref().map(|at| at.account_id.clone());
             s.current = None;
+            s.streaming = None;
             s.pkce = None;
             s.last_auth_url = None;
             s.state = AuthState::Unauthenticated;
             (self.snapshot_locked(&s, None), account_id)
         };
-        if let Some(account_id) = account_id {
-            if let Err(e) = storage::delete_session(&account_id).await {
+        if let Some(account_id) = account_id.as_deref() {
+            if let Err(e) = storage::delete_session(account_id).await {
                 warn!(error = %e, "session delete failed");
             }
         }
         // Drop the playback credentials too: otherwise the next session setup
         // silently resumes the previous user's connection.
-        storage::delete_streaming_session().await;
+        storage::delete_streaming_session(account_id.as_deref()).await;
         storage::delete_librespot_credentials_cache();
         self.bump_epoch();
         if let Ok(value) = serde_json::to_value(&snap) {
@@ -325,11 +338,25 @@ impl AuthManager {
 
 
         if is_streaming_auth {
-            let _ = storage::save_streaming_session(&token_for_store).await;
+            let web_account = self
+                .state
+                .lock()
+                .await
+                .current
+                .as_ref()
+                .map(|token| token.account_id.clone());
+            if web_account.as_deref() != Some(account_id.as_str()) {
+                return Err(AuthError::OAuth(
+                    "streaming authorization belongs to a different Spotify account".into(),
+                ));
+            }
+            let persisted = storage::save_streaming_session(&token_for_store).await.is_ok();
             storage::delete_librespot_credentials_cache();
             self.bump_epoch();
             let snap = {
                 let mut s = self.state.lock().await;
+                s.streaming = Some(token_for_store);
+                s.storage = if persisted { Storage::Keyring } else { Storage::Memory };
                 s.pkce = None;
                 s.last_auth_url = None;
                 s.state = AuthState::Authenticated;
@@ -385,6 +412,8 @@ impl AuthManager {
         }
         // A fresh login belongs to a (possibly different) user: drop the old
         // playback credentials and force the engine to reconnect.
+        let previous_streaming = self.state.lock().await.streaming.take();
+        storage::delete_streaming_session(previous_streaming.as_ref().map(|token| token.account_id.as_str())).await;
         storage::delete_librespot_credentials_cache();
         self.bump_epoch();
         tracing::info!("web login completed for account {account_id}");

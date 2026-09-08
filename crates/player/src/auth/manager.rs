@@ -46,6 +46,7 @@ impl AuthManager {
                 state: AuthState::Unauthenticated,
                 storage: Storage::Unavailable,
                 current: None,
+                streaming: None,
                 pkce: None,
                 last_auth_url: None,
             }),
@@ -63,14 +64,20 @@ impl AuthManager {
     /// existing session is dropped and playback is told to reconnect.
     pub async fn set_client_id(&self, client_id: String) {
         *self.client_id.write().await = client_id;
-        let snap = {
+        let (snap, account_id) = {
             let mut s = self.state.lock().await;
+            let account_id = s.current.as_ref().map(|token| token.account_id.clone());
             s.current = None;
+            s.streaming = None;
             s.pkce = None;
             s.last_auth_url = None;
             s.state = AuthState::Unauthenticated;
-            self.snapshot_locked(&s, None)
+            (self.snapshot_locked(&s, None), account_id)
         };
+        if let Some(account_id) = account_id.as_deref() {
+            let _ = storage::delete_session(account_id).await;
+        }
+        storage::delete_streaming_session(account_id.as_deref()).await;
         self.bump_epoch();
         storage::delete_librespot_credentials_cache();
         if let Ok(value) = serde_json::to_value(&snap) {
@@ -145,13 +152,22 @@ impl AuthManager {
     /// Determine storage tier and load any persisted refresh material.
     /// Returns the active status snapshot after hydration.
     pub async fn hydrate(&self) -> AuthStatus {
-        let (storage, current) = match storage::load_session().await {
+        storage::purge_legacy_file_credentials();
+        let client_id = self.client_id.read().await.clone();
+        let (storage, current) = match storage::load_session(&client_id).await {
             Ok(Some(at)) => (Storage::Keyring, Some(at)),
             Ok(None) => (Storage::Keyring, None),
             Err(e) => {
                 warn!(error = %e, "storage unavailable; auth will be in-memory only");
                 (Storage::Memory, None)
             }
+        };
+        let streaming = match current.as_ref() {
+            Some(token) => storage::load_streaming_session_for(&token.account_id)
+                .await
+                .ok()
+                .flatten(),
+            None => None,
         };
         let snap = {
             let mut s = self.state.lock().await;
@@ -162,6 +178,7 @@ impl AuthManager {
             } else {
                 s.state = AuthState::Unauthenticated;
             }
+            s.streaming = streaming;
             self.snapshot_locked(&s, None)
         };
         if let Ok(value) = serde_json::to_value(&snap) {

@@ -43,7 +43,11 @@ impl AuthManager {
                     .await;
                     let snap = {
                         let mut s = self.state.lock().await;
-                        s.state = AuthState::Unauthenticated;
+                        s.state = if s.current.is_some() {
+                            AuthState::Authenticated
+                        } else {
+                            AuthState::Unauthenticated
+                        };
                         s.pkce = None;
                         s.last_auth_url = None;
                         self.snapshot_locked(&s, None)
@@ -150,7 +154,11 @@ impl AuthManager {
                 warn!(error = %e, "auth callback received error");
                 let snap = {
                     let mut s = self.state.lock().await;
-                    s.state = AuthState::Unauthenticated;
+                    s.state = if s.current.is_some() {
+                        AuthState::Authenticated
+                    } else {
+                        AuthState::Unauthenticated
+                    };
                     s.pkce = None;
                     s.last_auth_url = None;
                     self.snapshot_locked(&s, None)

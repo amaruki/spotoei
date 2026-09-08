@@ -73,7 +73,22 @@ impl AuthManager {
         let force_refresh = self
             .streaming_force_refresh
             .swap(false, std::sync::atomic::Ordering::SeqCst);
-        match storage::load_streaming_session().await? {
+        let current_streaming = { self.state.lock().await.streaming.clone() };
+        let stored = match current_streaming {
+            Some(token) => Some(token),
+            None => {
+                let account_id = self
+                    .state
+                    .lock()
+                    .await
+                    .current
+                    .as_ref()
+                    .map(|token| token.account_id.clone())
+                    .ok_or(AuthError::StreamingLoginRequired)?;
+                storage::load_streaming_session_for(&account_id).await?
+            }
+        };
+        match stored {
             Some(st) if !force_refresh && st.expires_at > now_ms() + 30_000 => {
                 return Ok((st.access_token, st.expires_at));
             }
@@ -101,8 +116,12 @@ impl AuthManager {
                             expires_at: now_ms() + parsed.expires_in * 1000,
                             account_id: st.account_id,
                             scopes: st.scopes,
+                            client_id: KEYMASTER_CLIENT_ID.to_string(),
                         };
-                        let _ = storage::save_streaming_session(&new_at).await;
+                        let persisted = storage::save_streaming_session(&new_at).await.is_ok();
+                        let mut state = self.state.lock().await;
+                        state.streaming = Some(new_at.clone());
+                        state.storage = if persisted { super::types::Storage::Keyring } else { super::types::Storage::Memory };
                         return Ok((new_at.access_token, new_at.expires_at));
                     }
                 }
@@ -174,6 +193,7 @@ impl AuthManager {
                 .scope
                 .map(|s| s.split(' ').map(String::from).collect())
                 .unwrap_or_default(),
+            client_id: client_id.to_string(),
         };
         Ok((at, account_id))
     }
