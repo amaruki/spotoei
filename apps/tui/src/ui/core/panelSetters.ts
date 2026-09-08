@@ -141,7 +141,8 @@ export function createPanelSetters(ctx: UiCoreContext) {
           }
         }
         const hasContent = rawRows.some((r) => r.kind !== 'header');
-        const effectiveRows = hasContent ? rawRows.filter((r) => r.kind !== 'header') : rawRows;
+        const effectiveRows = hasContent ? rawRows.filter((r) => r.kind !== 'header') : [];
+        ctx.currentHomePanelRows.value[panel.key] = effectiveRows;
         const options = homeRowOptions(effectiveRows as never, panel.empty);
         if (meta?.error && panel.key === 'tracks') {
           options.push({

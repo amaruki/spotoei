@@ -38,7 +38,7 @@ const artist = (id: string): CatalogArtistT => ({
   name: id,
 });
 
-function makeUi() {
+function makeUi(opts?: Partial<Parameters<typeof createUiCore>[2]>) {
   return createTestRenderer({ width: 120, height: 40 }).then(
     ({ renderer, renderOnce, captureCharFrame }) => {
       const ui = createUiCore(renderer, baseState, {
@@ -46,6 +46,7 @@ function makeUi() {
         onSearchSubmit: () => {},
         onSelectLibrary: () => {},
         onSelectQueue: () => {},
+        ...opts,
       });
       const sendKey = (name: string, sequence: string) => {
         renderer.keyInput.emit('keypress', {
@@ -198,6 +199,100 @@ describe('category panels', () => {
     resize(70, 30);
     await renderOnce();
     expect(ui.getContextTarget()).toMatchObject({ kind: 'track', id: 't1' });
+    await ui.shutdown();
+  });
+
+  it('selects correct 1:1 entity row when panels contain headers (no off-by-one)', async () => {
+    const selected: unknown[] = [];
+    const { ui, renderOnce, sendKey } = await makeUi({
+      onSelectHomeRow: (row) => selected.push(row),
+    });
+    await renderOnce();
+    ui.setRoute({ kind: 'home', tab: 'for_you' });
+    ui.setHomeItems([
+      { kind: 'header', text: 'Top Tracks' },
+      { kind: 'track', track: track('t1') },
+      { kind: 'track', track: track('t2') },
+      { kind: 'header', text: 'Top Artists' },
+      { kind: 'artist', artist: artist('a1') },
+      { kind: 'artist', artist: artist('a2') },
+      { kind: 'header', text: 'Recently Played' },
+      { kind: 'track', track: track('r1'), playedAt: '2026-09-01T10:00:00.000Z' },
+      { kind: 'header', text: 'Discover · New Releases' },
+      { kind: 'discover', id: 'd1', label: 'Disc 1', description: 'desc 1' },
+      { kind: 'discover', id: 'd2', label: 'Disc 2', description: 'desc 2' },
+    ]);
+    await renderOnce();
+
+    // 1. Top tracks panel (focused by default) - select index 0
+    sendKey('return', '\r');
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toMatchObject({ kind: 'track', track: { id: 't1' } });
+    expect(ui.getContextTarget()).toMatchObject({ kind: 'track', id: 't1' });
+
+    // Move down to index 1 in tracks
+    sendKey('down', '\u001b[B');
+    sendKey('return', '\r');
+    expect(selected).toHaveLength(2);
+    expect(selected[1]).toMatchObject({ kind: 'track', track: { id: 't2' } });
+    expect(ui.getContextTarget()).toMatchObject({ kind: 'track', id: 't2' });
+
+    // 2. Tab to artists panel - index 0
+    sendKey('tab', '\t');
+    sendKey('return', '\r');
+    expect(selected).toHaveLength(3);
+    expect(selected[2]).toMatchObject({ kind: 'artist', artist: { id: 'a1' } });
+    expect(ui.getContextTarget()).toMatchObject({ kind: 'artist', id: 'a1' });
+
+    // 3. Tab to recent panel - index 0
+    sendKey('tab', '\t');
+    sendKey('return', '\r');
+    expect(selected).toHaveLength(4);
+    expect(selected[3]).toMatchObject({ kind: 'track', track: { id: 'r1' } });
+    expect(ui.getContextTarget()).toMatchObject({ kind: 'track', id: 'r1' });
+
+    // 4. Tab to discover panel - index 0
+    sendKey('tab', '\t');
+    expect(ui.getContextTarget()).toMatchObject({ kind: 'browse-entry', id: 'd1' });
+    sendKey('return', '\r');
+    expect(selected).toHaveLength(5);
+    expect(selected[4]).toMatchObject({ kind: 'discover', id: 'd1' });
+
+    // Move down to index 1 in discover
+    sendKey('down', '\u001b[B');
+    expect(ui.getContextTarget()).toMatchObject({ kind: 'browse-entry', id: 'd2' });
+    sendKey('return', '\r');
+    expect(selected).toHaveLength(6);
+    expect(selected[5]).toMatchObject({ kind: 'discover', id: 'd2' });
+
+    await ui.shutdown();
+  });
+
+  it('does not select or resolve context target on empty panel', async () => {
+    const selected: unknown[] = [];
+    const { ui, renderOnce, sendKey } = await makeUi({
+      onSelectHomeRow: (row) => selected.push(row),
+    });
+    await renderOnce();
+    ui.setRoute({ kind: 'home', tab: 'for_you' });
+    ui.setHomeItems([
+      { kind: 'header', text: 'Top Tracks' },
+      { kind: 'header', text: 'Discover · Empty' },
+    ]);
+    await renderOnce();
+
+    expect(ui.getContextTarget()).toBeNull();
+    sendKey('return', '\r');
+    expect(selected).toHaveLength(0);
+
+    // Tab to discover (tab 1: artists, tab 2: recent, tab 3: discover)
+    sendKey('tab', '\t');
+    sendKey('tab', '\t');
+    sendKey('tab', '\t');
+    expect(ui.getContextTarget()).toBeNull();
+    sendKey('return', '\r');
+    expect(selected).toHaveLength(0);
+
     await ui.shutdown();
   });
 });

@@ -12,7 +12,6 @@ import type {
   UiViewState,
   VisualizerFrame,
 } from '../types';
-import { partitionHomeRows } from '../views/homeRows';
 import { isLibraryFooterIndex } from '../views/library';
 import { createUiApi } from './api';
 import { createContextMenuHelpers } from './contextMenu';
@@ -51,6 +50,9 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
   const currentLibraryItems = { value: [] as never };
   const currentRouteItems: { value: unknown[] } = { value: [] };
   const currentHomeItems: UiCoreContext['currentHomeItems'] = { value: [] };
+  const currentHomePanelRows: UiCoreContext['currentHomePanelRows'] = {
+    value: { tracks: [], artists: [], recent: [], discover: [] },
+  };
   const homeRange: UiCoreContext['homeRange'] = { current: 'medium_term' };
   const homePanel = { value: 0 };
   const searchPanel = { value: 0 };
@@ -92,6 +94,7 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
     currentLibraryItems: currentLibraryItems as unknown as UiCoreContext['currentLibraryItems'],
     currentRouteItems,
     currentHomeItems,
+    currentHomePanelRows,
     homeRange,
     homePanel,
     searchPanel,
@@ -175,9 +178,12 @@ export function createUiCore(renderer: CliRenderer, initial: UiViewState, opts: 
       built.homeRecentList,
       built.homeDiscoverList,
     ];
-    const parts = partitionHomeRows(ctx.currentHomeItems.value);
-    const groups = [parts.tracks, parts.artists, parts.recent, parts.discover];
-    const row = groups[panel]?.[lists[panel]?.getSelectedIndex() ?? 0];
+    const keys = ['tracks', 'artists', 'recent', 'discover'] as const;
+    const key = keys[panel];
+    if (!key) return;
+    const idx = lists[panel]?.getSelectedIndex() ?? 0;
+    const row = ctx.currentHomePanelRows.value[key]?.[idx];
+    if (!row || row.kind === 'header' || row.kind === 'context') return;
     if (row && opts.onSelectHomeRow) {
       opts.onSelectHomeRow(row);
     }

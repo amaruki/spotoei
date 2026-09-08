@@ -45,6 +45,14 @@ export interface UiCoreContext {
   searchFilter: { current: import('../views/search').SearchFilter };
   currentRouteItems: { value: unknown[] };
   currentHomeItems: { value: HomeRow[] };
+  currentHomePanelRows: {
+    value: {
+      tracks: HomeRow[];
+      artists: HomeRow[];
+      recent: HomeRow[];
+      discover: HomeRow[];
+    };
+  };
   homeRange: { current: TimeRangeT };
   homePanel: { value: number };
   searchPanel: { value: number };

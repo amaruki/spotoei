@@ -1,7 +1,6 @@
 import { fg, t } from '@opentui/core';
 import { COLOR_TEXT } from '../theme';
 import type { ContextMenuItem, ContextTarget, FocusArea, LibraryItemT } from '../types';
-import { partitionHomeRows } from '../views/homeRows';
 import { routeKind } from './navigationStack';
 import type { UiCoreContext } from './types';
 
@@ -109,19 +108,20 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
     };
   }
   if (kind === 'home') {
-    const parts = partitionHomeRows(ctx.currentHomeItems.value as never) as unknown as Record<
-      string,
-      Array<{ kind: string; track?: EntityLike; artist?: EntityLike; id?: string; label?: string }>
-    >;
-    const groups = [parts.tracks, parts.artists, parts.recent, parts.discover];
     const lists = [
       built.homeTracksList,
       built.homeArtistsList,
       built.homeRecentList,
       built.homeDiscoverList,
     ];
+    const keys = ['tracks', 'artists', 'recent', 'discover'] as const;
     const panel = Math.max(0, Math.min(3, ctx.homePanel.value));
-    const row = groups[panel]?.[lists[panel]?.getSelectedIndex() ?? 0];
+    const key = keys[panel];
+    const row = key
+      ? (ctx.currentHomePanelRows.value[key]?.[lists[panel]?.getSelectedIndex() ?? 0] as
+          | { kind: string; track?: EntityLike; artist?: EntityLike; id?: string; label?: string }
+          | undefined)
+      : undefined;
     if (row?.kind === 'discover' && row.id) {
       return { kind: 'browse-entry', id: row.id, name: row.label ?? row.id };
     }
