@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
@@ -22,6 +22,10 @@ pub struct AuthManager {
     /// (logout, new login, client ID reset) so the playback engine drops a
     /// session that belongs to the previous user instead of resuming it.
     session_epoch: AtomicU64,
+    /// Forces the next streaming-token read to skip its cache and refresh.
+    /// The streaming tier lives in the keyring (no in-memory copy to expire),
+    /// so invalidation is a flag consumed once by `get_streaming_token`.
+    pub(super) streaming_force_refresh: AtomicBool,
     /// Sink for outgoing protocol events.
     pub(super) events: mpsc::Sender<String>,
     /// Cancellation for the in-flight loopback callback server, if any.
@@ -47,6 +51,7 @@ impl AuthManager {
             }),
             refresh_lock: Mutex::new(()),
             session_epoch: AtomicU64::new(0),
+            streaming_force_refresh: AtomicBool::new(false),
             events,
             cancel: Mutex::new(None),
             join_handle: Mutex::new(None),
@@ -93,6 +98,9 @@ impl AuthManager {
     /// HTTP 401: the token is invalid even though its expiry is in the
     /// future, so the player cache must not serve it again.
     pub async fn invalidate_token(&self) {
+        // The streaming tier has no in-memory copy; flag it so its next
+        // read skips the cached token and refreshes instead.
+        self.streaming_force_refresh.store(true, Ordering::SeqCst);
         if std::env::var("SPOTOEI_MOCK_AUTH").is_ok() {
             let mut s = self.state.lock().await;
             if let Some(at) = s.current.as_mut() {

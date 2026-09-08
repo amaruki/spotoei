@@ -59,16 +59,25 @@ impl AuthManager {
 
     /// Return a usable access token minted specifically for the Keymaster client ID,
     /// used exclusively by Librespot AP & login5 streaming audio decryption.
+    /// Never falls back to the Web token: the two tiers belong to different
+    /// clients, and Spotify rejects a Web token on the playback services
+    /// with `INVALID_CREDENTIALS`. Callers translate the missing-login error
+    /// into a prompt to complete the streaming login (Step 2/2).
     pub async fn get_streaming_token(&self) -> Result<(String, u64), AuthError> {
         if std::env::var("SPOTOEI_MOCK_AUTH").is_ok() {
             return self.get_web_token_mock().await;
         }
         let _guard = self.refresh_lock.lock().await;
-        if let Ok(Some(st)) = storage::load_streaming_session().await {
-            if st.expires_at > now_ms() + 30_000 {
+        // An invalidation (e.g. playback rejected the token) forces a refresh
+        // instead of serving the cached streaming token again.
+        let force_refresh = self
+            .streaming_force_refresh
+            .swap(false, std::sync::atomic::Ordering::SeqCst);
+        match storage::load_streaming_session().await? {
+            Some(st) if !force_refresh && st.expires_at > now_ms() + 30_000 => {
                 return Ok((st.access_token, st.expires_at));
             }
-            if !st.refresh_token.trim().is_empty() {
+            Some(st) if !st.refresh_token.trim().is_empty() => {
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(10))
                     .build()
@@ -97,11 +106,13 @@ impl AuthManager {
                         return Ok((new_at.access_token, new_at.expires_at));
                     }
                 }
+                return Err(AuthError::Http(
+                    "streaming token refresh failed".to_string(),
+                ));
             }
+            _ => {}
         }
-        // Fall back to the primary token if no separate streaming token exists yet
-        drop(_guard);
-        self.get_web_token().await
+        Err(AuthError::StreamingLoginRequired)
     }
 
     async fn get_web_token_mock(&self) -> Result<(String, u64), AuthError> {

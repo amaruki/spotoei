@@ -6,6 +6,8 @@ pub enum AuthError {
     MissingClientId,
     #[error("not authenticated")]
     NotAuthenticated,
+    #[error("streaming login required — complete Step 2/2 in the app")]
+    StreamingLoginRequired,
     #[error("OAuth error: {0}")]
     OAuth(String),
     #[error("HTTP error: {0}")]
@@ -47,11 +49,23 @@ pub struct AuthStatus {
     pub auth_url: Option<String>,
 }
 
+/// Which of the two independent logins a PKCE transaction belongs to.
+/// The Web login authorizes API access under the configured client; the
+/// streaming login authorizes audio under the official Keymaster client.
+/// They must never be confused: completing one as the other either drops
+/// the login or stores a token the other side cannot use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthFlow {
+    Web,
+    Streaming,
+}
+
 /// PKCE transaction state held only in memory for the duration of a flow.
 #[derive(Clone)]
 pub struct PkceTx {
     pub verifier: String,
     pub state: String,
+    pub flow: AuthFlow,
 }
 
 /// In-memory access-token cache. Refresh material lives in keyring (or here

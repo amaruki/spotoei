@@ -93,7 +93,7 @@ impl AuthManager {
                             if Some(&state) != expected_state.as_ref() {
                                 warn!("OAuth callback state mismatch, ignoring bogus request");
                                 let html =
-                                    html_error("State Mismatch", "Invalid OAuth state parameter. Please retry from Spotoei.");
+                                    html_error("State Mismatch", "Invalid OAuth state parameter. This browser tab is stale — complete the login in the newest tab Spotoei opened.");
                                 let resp = Response::builder()
                                     .status(400)
                                     .header(CONTENT_TYPE, "text/html; charset=utf-8")

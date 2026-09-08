@@ -10,7 +10,23 @@ use super::constants::{
 };
 use super::manager::AuthManager;
 use super::storage;
-use super::types::{AccessToken, AuthError, AuthState, AuthStatus, PkceTx, Storage};
+use super::types::{AccessToken, AuthError, AuthFlow, AuthState, AuthStatus, PkceTx, Storage};
+
+/// Decide how a completed PKCE callback is stored: which client the code
+/// is exchanged for, and whether the token lands in the streaming store.
+/// The flow recorded at `begin` time wins — never sniff URLs, so a Web
+/// login stays a Web login even when the configured client is Keymaster.
+pub const STREAMING_SCOPES: &str = "streaming user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative user-library-read user-read-playback-position user-top-read user-read-recently-played";
+
+pub(super) fn resolve_exchange_target(
+    flow: AuthFlow,
+    configured_client_id: &str,
+) -> (String, bool) {
+    match flow {
+        AuthFlow::Streaming => (KEYMASTER_CLIENT_ID.to_string(), true),
+        AuthFlow::Web => (configured_client_id.to_string(), false),
+    }
+}
 
 impl AuthManager {
     pub async fn begin(
@@ -77,6 +93,7 @@ impl AuthManager {
             s.pkce = Some(PkceTx {
                 verifier: verifier.clone(),
                 state: csrf.clone(),
+                flow: AuthFlow::Web,
             });
             s.last_auth_url = Some(url.clone());
             s.state = AuthState::Authenticating;
@@ -138,8 +155,7 @@ impl AuthManager {
             .map_err(|e| AuthError::Http(format!("local_addr: {e}")))?
             .port();
         let redirect_uri = format!("http://127.0.0.1:{bound_port}/login");
-
-        let scope_str = "streaming user-read-playback-state user-modify-playback-state";
+        let scope_str = STREAMING_SCOPES;
         let url = format!(
             "{SPOTIFY_ACCOUNTS}/authorize?client_id={cid}&response_type=code&redirect_uri={ru}&code_challenge_method=S256&code_challenge={cc}&state={st}&scope={sc}",
             cid = urlencoding::encode(KEYMASTER_CLIENT_ID),
@@ -153,6 +169,7 @@ impl AuthManager {
             s.pkce = Some(PkceTx {
                 verifier: verifier.clone(),
                 state: csrf.clone(),
+                flow: AuthFlow::Streaming,
             });
             s.last_auth_url = Some(url.clone());
             s.state = AuthState::Authenticating;
@@ -266,24 +283,38 @@ impl AuthManager {
         if pkce.state != state {
             return Err(AuthError::OAuth("state mismatch".into()));
         }
-        let auth_url = {
-            let s = self.state.lock().await;
-            s.last_auth_url.clone()
-        };
-        let is_streaming_auth = auth_url
-            .as_deref()
-            .map(|u| u.contains(KEYMASTER_CLIENT_ID))
-            .unwrap_or(false);
+        let (exchange_cid, is_streaming_auth) =
+            resolve_exchange_target(pkce.flow, &self.client_id.read().await.clone());
 
-        let exchange_cid = if is_streaming_auth {
-            KEYMASTER_CLIENT_ID.to_string()
-        } else {
-            self.client_id.read().await.clone()
-        };
-
-        let (at, _account_id) = self
+        let (at, _account_id) = match self
             .exchange_code_with_client(&exchange_cid, code, &pkce.verifier, "127.0.0.1", port)
-            .await?;
+            .await
+        {
+            Ok(ok) => ok,
+            Err(e) => {
+                warn!(error = %e, "auth code exchange failed; restoring previous session");
+                let snap = {
+                    let mut s = self.state.lock().await;
+                    s.pkce = None;
+                    s.last_auth_url = None;
+                    // A streaming top-up over a Web login falls back to the
+                    // surviving Authenticated session; a cold login with no
+                    // session returns to Unauthenticated. Either way the dead
+                    // transaction is gone, so the next press starts fresh
+                    // instead of stranding the UI on "authenticating".
+                    s.state = if s.current.is_some() {
+                        AuthState::Authenticated
+                    } else {
+                        AuthState::Unauthenticated
+                    };
+                    self.snapshot_locked(&s, None)
+                };
+                if let Ok(value) = serde_json::to_value(&snap) {
+                    self.emit("auth.changed", value).await;
+                }
+                return Err(e);
+            }
+        };
         let account_id = at.account_id.clone();
         let scopes = at.scopes.clone();
         let token_for_store = at.clone();
@@ -301,6 +332,7 @@ impl AuthManager {
             if let Ok(value) = serde_json::to_value(&snap) {
                 self.emit("auth.changed", value).await;
             }
+            tracing::info!("streaming login completed for account {account_id}");
             self.emit(
                 "auth.completed",
                 json!({
@@ -349,6 +381,7 @@ impl AuthManager {
         // playback credentials and force the engine to reconnect.
         storage::delete_librespot_credentials_cache();
         self.bump_epoch();
+        tracing::info!("web login completed for account {account_id}");
         self.emit(
             "auth.completed",
             json!({
