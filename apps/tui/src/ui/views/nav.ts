@@ -16,7 +16,7 @@ export function getNavOptions(isAuthenticated: boolean, isPrivateSession: boolea
       { name: '🔒 Queue', description: 'Requires login', value: 'queue' },
       {
         name: `⚙ Settings${privateSuffix}`,
-        description: isPrivateSession ? 'Private Session active' : 'Setup & Auth',
+        description: isPrivateSession ? 'Private Session active' : 'Setup',
         value: 'settings',
       },
     ];
@@ -29,7 +29,7 @@ export function getNavOptions(isAuthenticated: boolean, isPrivateSession: boolea
     { name: 'Queue', description: 'Upcoming', value: 'queue' },
     {
       name: `Settings${privateSuffix}`,
-      description: isPrivateSession ? 'Private Session active' : 'Auth & info',
+      description: isPrivateSession ? 'Private Session active' : 'App info',
       value: 'settings',
     },
   ];

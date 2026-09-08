@@ -25,6 +25,7 @@ export async function initUi(
   ctx: AppContext,
   actions: {
     triggerAuth: () => Promise<void>;
+    triggerLogout: () => Promise<void>;
     handleSaveClientId: (id: string) => Promise<void>;
     loadLibrary: (force?: boolean, collection?: LibraryCollectionT) => Promise<void>;
     loadMoreLibrary?: () => Promise<void>;
@@ -186,7 +187,10 @@ export async function initUi(
       void opened;
     },
     onSelectLibraryItem: (item) => {
-      if ('children' in item && typeof (item as { isExpanded?: boolean }).isExpanded === 'boolean') {
+      if (
+        'children' in item &&
+        typeof (item as { isExpanded?: boolean }).isExpanded === 'boolean'
+      ) {
         actions.togglePlaylistFolder?.(item.id);
         return;
       }
@@ -355,7 +359,6 @@ export async function initUi(
       }
     },
     onSaveClientId: actions.handleSaveClientId,
-    onAuthenticate: actions.triggerAuth,
     onCycleVisualizerMode: cycleVisualizerMode,
   });
 

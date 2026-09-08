@@ -1,15 +1,12 @@
 import { bold, fg, t } from '@opentui/core';
-import { getCacheDir, getRedirectUri, resolveClientId } from '../../config';
+import { getCacheDir } from '../../config';
 import { authSummary } from '../formatters';
 import { COLOR_ACCENT, COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
 import type { UiViewState } from '../types';
 
-// Settings is account management only. Authentication lives in the
-// onboarding flow; unauthenticated users never land here (nav gate).
+// Settings is device and account info only. Authentication lives on its own
+// onboarding page; unauthenticated users never land here (nav gate).
 export function getSettingsContent(state: UiViewState) {
-  const clientRes = resolveClientId();
-  const redirectUri = getRedirectUri();
-
   if (state.auth.state !== 'authenticated') {
     return t`${bold('Account')}
 ${fg(COLOR_WARN)('Not logged in — authenticate through the onboarding flow.')}
@@ -38,10 +35,6 @@ ${fg(COLOR_DIM)('Press [Q] to quit')}`;
   return t`${bold('Account')}
 ${fg(COLOR_TEXT)(authSummary(state.auth))}
 
-${bold('Spotify Client ID')}
-${fg(COLOR_SUCCESS)(`Configured (${clientRes.source})`)}
-${fg(COLOR_DIM)(`Redirect URI: ${redirectUri}`)}
-
 ${bold('Audio Engine & Librespot')}
 ${fg(COLOR_TEXT)('Device Mode:')} ${fg(COLOR_SUCCESS)(deviceMode)}
 ${fg(COLOR_TEXT)('Audio Backend:')} ${fg(COLOR_TEXT)(backend)}
@@ -52,9 +45,5 @@ ${fg(COLOR_DIM)(`Cache: ${cachePath}`)}
 
 ${bold('Storage & Capabilities')}
 ${fg(COLOR_TEXT)(String(state.auth.storage ?? 'in-memory'))} • ${fg(COLOR_DIM)(state.capabilities.join(', ') || '(none)')}
-
-${bold('Actions')}
-${fg(COLOR_WARN)(bold('Press [Ctrl+L] to Log Out'))} ${fg(COLOR_DIM)('— clears sessions, keyring tokens, and cache')}
-${fg(COLOR_ACCENT)('Press [Ctrl+A] to Re-authenticate')} ${fg(COLOR_DIM)('— refresh Spotify permissions')}
 `;
 }

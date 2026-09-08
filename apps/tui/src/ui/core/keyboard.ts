@@ -12,8 +12,31 @@ import type { Route, UiCoreContext } from './types';
 // do not trigger global hotkeys (like Space to pause or 'q' to quit).
 export function createKeyDispatcher(ctx: UiCoreContext) {
   const { built, focus, manualLyricsScroll, opts, palette, route, state } = ctx;
-  const sched = (): void => { if (!state.lyrics || state.lyrics.kind !== 'synced') return; built.lyricsResumeHint.visible = manualLyricsScroll.value; if (ctx.lyricsResumeTimer.value) clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout); if (manualLyricsScroll.value) ctx.lyricsResumeTimer.value = setTimeout(() => { manualLyricsScroll.value = false; built.lyricsResumeHint.visible = false; ctx.helpers.setStatus('Resumed lyric sync'); }, 5000); else if (ctx.lyricsResumeTimer.value) { clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout); ctx.lyricsResumeTimer.value = null; } };
-  const resume = (): void => { if (!manualLyricsScroll.value) return; if (ctx.lyricsResumeTimer.value) clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout); ctx.lyricsResumeTimer.value = null; manualLyricsScroll.value = false; built.lyricsResumeHint.visible = false; ctx.helpers.setStatus('Resumed lyric sync'); };
+  const sched = (): void => {
+    if (!state.lyrics || state.lyrics.kind !== 'synced') return;
+    built.lyricsResumeHint.visible = manualLyricsScroll.value;
+    if (ctx.lyricsResumeTimer.value)
+      clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout);
+    if (manualLyricsScroll.value)
+      ctx.lyricsResumeTimer.value = setTimeout(() => {
+        manualLyricsScroll.value = false;
+        built.lyricsResumeHint.visible = false;
+        ctx.helpers.setStatus('Resumed lyric sync');
+      }, 5000);
+    else if (ctx.lyricsResumeTimer.value) {
+      clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout);
+      ctx.lyricsResumeTimer.value = null;
+    }
+  };
+  const resume = (): void => {
+    if (!manualLyricsScroll.value) return;
+    if (ctx.lyricsResumeTimer.value)
+      clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout);
+    ctx.lyricsResumeTimer.value = null;
+    manualLyricsScroll.value = false;
+    built.lyricsResumeHint.visible = false;
+    ctx.helpers.setStatus('Resumed lyric sync');
+  };
   const motionAcc = createMotionAccumulator();
   return (e: {
     name: string;
@@ -130,6 +153,12 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         }
         return;
       }
+      if (e.ctrl && (e.name === 'l' || e.name === 'L')) {
+        if (opts.onLogout) {
+          void opts.onLogout();
+          return;
+        }
+      }
       if (e.name === 'return') {
         const clientRes = resolveClientId();
         if (clientRes.clientId && state.auth.state !== 'authenticated') {
@@ -150,7 +179,6 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
     if (handleVimMotion(ctx, e, motionAcc, sched)) {
       return;
     }
-
 
     // 4. Sidebar navigation focus handling
     if (focus.current === 'sidebar') {
@@ -176,7 +204,13 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         ctx.helpers.setFocusArea('main');
         return;
       }
-      if (e.name === 'up' || e.name === 'k' || e.name === 'down' || e.name === 'j' || e.name === 'return') {
+      if (
+        e.name === 'up' ||
+        e.name === 'k' ||
+        e.name === 'down' ||
+        e.name === 'j' ||
+        e.name === 'return'
+      ) {
         // SelectRenderable handles up/down navigation and return selection
         return;
       }
@@ -205,7 +239,9 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         return;
       }
       const homeList = focusedHomeList(ctx);
-      if (['up', 'down', 'j', 'k', 'return', 'pageup', 'pagedown', 'home', 'end'].includes(e.name)) {
+      if (
+        ['up', 'down', 'j', 'k', 'return', 'pageup', 'pagedown', 'home', 'end'].includes(e.name)
+      ) {
         void homeList;
         return;
       }
@@ -239,7 +275,7 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
       }
       if (e.name === 'tab') {
         const order = ['sidebar', 'main'] as const;
-        const idx = order.indexOf(focus.current as typeof order[number]);
+        const idx = order.indexOf(focus.current as (typeof order)[number]);
         if (e.shift) {
           const prev = (idx - 1 + order.length) % order.length;
           ctx.helpers.setFocusArea(order[prev] as typeof focus.current);
@@ -249,23 +285,12 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         }
         return;
       }
-      if (routeKind(route.current) === 'settings') {
-        if (e.ctrl && (e.name === 'l' || e.name === 'L')) {
-          if (opts.onLogout) {
-            void opts.onLogout();
-            return;
-          }
-        }
-        if (e.ctrl && (e.name === 'a' || e.name === 'A')) {
-          if (opts.onAuthenticate) {
-            void opts.onAuthenticate();
-            return;
-          }
-        }
-      }
     }
     if (routeKind(route.current) === 'lyrics' && focus.current === 'main') {
-      if (e.name === 'r' || e.name === 'R' || e.name === 'return') { if (manualLyricsScroll.value) resume(); return; }
+      if (e.name === 'r' || e.name === 'R' || e.name === 'return') {
+        if (manualLyricsScroll.value) resume();
+        return;
+      }
     }
 
     if (opts.onKey) {

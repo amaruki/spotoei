@@ -1,4 +1,6 @@
 import type {
+  AuthCompletedEventDataT,
+  AuthFailedEventDataT,
   AuthStatusDataT,
   CatalogTrackT,
   PlaybackChangedDataT,
@@ -12,6 +14,7 @@ import type { AppContext, AppState } from './types';
 export function wireSubscriptions(
   ctx: AppContext,
   actions: {
+    triggerAuth: (opts?: { streamingOnly?: boolean }) => Promise<void>;
     loadLibrary: (
       force?: boolean,
       collection?: import('spotoei-protocol').LibraryCollectionT,
@@ -33,6 +36,27 @@ export function wireSubscriptions(
     }
   });
 
+  // A backend login failure used to die silently (only the token cache was
+  // cleared). Surface it so a stuck "Waiting…" always ends with a reason.
+  clients.auth.onAuthFailure?.((failure: AuthFailedEventDataT) => {
+    const ui = getUi();
+    state.currentInfo.streamingPending = false;
+    if (ui) {
+      ui.setStreamingPending(false);
+      ui.setStatus(`Login failed (${failure.reason}): ${failure.message}`, true);
+    }
+  });
+
+  clients.auth.onAuthCompleted?.((completed: AuthCompletedEventDataT) => {
+    if (!completed.streaming) return;
+    const ui = getUi();
+    state.currentInfo.streamingPending = false;
+    if (ui) {
+      ui.setStreamingPending(false);
+      ui.setStatus('Audio streaming connected — press play', true);
+    }
+  });
+
   clients.auth.onStatusChange((next: AuthStatusDataT) => {
     const wasAuthed = state.currentInfo.auth?.state === 'authenticated';
     const ui = getUi();
@@ -42,22 +66,13 @@ export function wireSubscriptions(
     if (ui) ui.setAuth(next);
     else state.currentInfo.auth = next;
     if (!wasAuthed && next.state === 'authenticated') {
+      state.currentInfo.streamingPending = true;
+      if (ui) ui.setStreamingPending(true);
+      // Top up the streaming login through the single trigger: it re-opens
+      // a pending flow instead of minting a second one that would orphan the
+      // first tab into a state mismatch.
+      void actions.triggerAuth({ streamingOnly: true });
       void (async () => {
-        const hasStreaming = await clients.auth?.streamingStatus?.().catch(() => false);
-        if (!hasStreaming) {
-          const ui = getUi();
-          if (ui) ui.setStatus('Authenticating Audio Streaming (Step 2/2)...', true);
-          try {
-            const res = await clients.auth.beginStreaming();
-            if (res.authUrl) {
-              const { openBrowser, copyToClipboard } = await import('../system');
-              openBrowser(res.authUrl);
-              copyToClipboard(res.authUrl);
-            }
-          } catch {
-            // Fall back to manual retry
-          }
-        }
         try {
           const devices = await clients.webApi?.getDevices?.();
           const spotoei = devices?.find((d) => d.name.toLowerCase().includes('spotoei'));

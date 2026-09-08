@@ -2,6 +2,8 @@ import type { ChildProcess } from 'node:child_process';
 import {
   makeAuthStatus,
   makeAuthBegin,
+  makeAuthBeginStreaming,
+  makeAuthStreamingStatus,
   makeAuthLogout,
   makeAuthGetWebToken,
   makeAuthInvalidateToken,
@@ -9,8 +11,12 @@ import {
   newRequestId,
   AuthStatusData,
   AuthTokenData,
+  AuthCompletedEventData,
+  AuthFailedEventData,
   type AuthStatusDataT,
   type AuthTokenDataT,
+  type AuthCompletedEventDataT,
+  type AuthFailedEventDataT,
   type CommandT,
   type InboundT,
   parseInbound,
@@ -34,6 +40,7 @@ export interface AuthClient {
   begin(scopes?: string[]): Promise<AuthStatusDataT>;
   beginStreaming(): Promise<AuthStatusDataT>;
   streamingStatus(): Promise<boolean>;
+  logout(): Promise<AuthStatusDataT>;
   setClientId(clientId: string): Promise<void>;
   getWebToken(): Promise<string>;
   clearToken(): void;
@@ -42,6 +49,8 @@ export interface AuthClient {
   // Spotify API just rejected with HTTP 401.
   invalidateToken(): Promise<void>;
   onStatusChange(listener: (status: AuthStatusDataT) => void): () => void;
+  onAuthFailure(listener: (failure: AuthFailedEventDataT) => void): () => void;
+  onAuthCompleted(listener: (completed: AuthCompletedEventDataT) => void): () => void;
   close(): void;
 }
 
@@ -61,6 +70,8 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
   const { child, timeoutMs = 5_000 } = options;
   const pending = new Map<string, PendingRequest>();
   const statusListeners = new Set<(status: AuthStatusDataT) => void>();
+  const failureListeners = new Set<(failure: AuthFailedEventDataT) => void>();
+  const completedListeners = new Set<(completed: AuthCompletedEventDataT) => void>();
 
   // Cached in-memory token state.
   let cachedToken: AuthTokenDataT | null = null;
@@ -114,6 +125,27 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
         }
       } else if (msg.event === 'auth.failed') {
         cachedToken = null;
+        const res = AuthFailedEventData.safeParse(msg.data);
+        if (res.success) {
+          for (const l of failureListeners) {
+            try {
+              l(res.data);
+            } catch {
+              // Ignore subscriber errors.
+            }
+          }
+        }
+      } else if (msg.event === 'auth.completed') {
+        const res = AuthCompletedEventData.safeParse(msg.data);
+        if (res.success) {
+          for (const l of completedListeners) {
+            try {
+              l(res.data);
+            } catch {
+              // Ignore subscriber errors.
+            }
+          }
+        }
       }
     }
   };
@@ -257,6 +289,20 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
       };
     },
 
+    onAuthFailure(listener: (failure: AuthFailedEventDataT) => void): () => void {
+      failureListeners.add(listener);
+      return () => {
+        failureListeners.delete(listener);
+      };
+    },
+
+    onAuthCompleted(listener: (completed: AuthCompletedEventDataT) => void): () => void {
+      completedListeners.add(listener);
+      return () => {
+        completedListeners.delete(listener);
+      };
+    },
+
     close(): void {
       rl.off('line', lineListener);
       for (const p of pending.values()) {
@@ -265,6 +311,8 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
       }
       pending.clear();
       statusListeners.clear();
+      failureListeners.clear();
+      completedListeners.clear();
     },
   };
 }

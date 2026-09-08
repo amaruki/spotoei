@@ -52,6 +52,10 @@ export interface UiViewState {
     mode: 'off' | VisualizerModeT;
     fps: number;
   };
+  // True while an audio-streaming login (Step 2/2) waits in the browser.
+  // Pure display state: set after beginStreaming, cleared on completion,
+  // failure, or logout.
+  streamingPending?: boolean;
   lyrics?: LyricsDocumentT;
   statusMessage?: string;
   isPrivateSession?: boolean;
@@ -119,11 +123,18 @@ export interface Ui {
   setVisualizerFrame(frame: VisualizerFrame | null): void;
   setSearchResults(query: string, results: SearchResponseT): void;
   setSearchFilter(filter: SearchFilter): void;
-  setLibraryItems(items: LibraryItemT[], error?: { code: string; message: string }, opts?: { append?: boolean; isStale?: boolean; hasMore?: boolean }): void;
+  setLibraryItems(
+    items: LibraryItemT[],
+    error?: { code: string; message: string },
+    opts?: { append?: boolean; isStale?: boolean; hasMore?: boolean },
+  ): void;
   setLibraryLoading(loading: boolean): void;
   setLibraryLines(lines: string[], empty: boolean): void;
   setQueueSnapshot(snap: QueueSnapshotT, opts?: { isStale?: boolean }): void;
-  setHomeItems(rows: HomeRow[], meta?: { error?: string; rangeLabel?: string; isStale?: boolean }): void;
+  setHomeItems(
+    rows: HomeRow[],
+    meta?: { error?: string; rangeLabel?: string; isStale?: boolean },
+  ): void;
   setArtistAlbums(
     items: Array<{
       id: string;
@@ -166,11 +177,26 @@ export interface Ui {
       source: unknown;
     }>,
   ): void;
-  setBrowseTracks(tracks: Array<{ id: string; uri: string; name: string; artists: Array<{ name: string }>; durationMs?: number }>): void;
+  setBrowseTracks(
+    tracks: Array<{
+      id: string;
+      uri: string;
+      name: string;
+      artists: Array<{ name: string }>;
+      durationMs?: number;
+    }>,
+  ): void;
   setBrowseBanner(banner: string | null): void;
   setLyrics(doc: LyricsDocumentT | null): void;
   setSearchLoading(loading: boolean): void;
-  setPaletteCommands(cmds: Array<{ name: string; description: string; action: () => void; isAvailable?: () => boolean }>): void;
+  setPaletteCommands(
+    cmds: Array<{
+      name: string;
+      description: string;
+      action: () => void;
+      isAvailable?: () => boolean;
+    }>,
+  ): void;
   openPalette(): void;
   closePalette(): void;
   isPaletteOpen(): boolean;
@@ -181,6 +207,7 @@ export interface Ui {
   setPlayback(playback: PlaybackChangedDataT | null): void;
   setPlaybackPosition(pos: PlaybackPositionDataT): void;
   setAuth(auth: AuthStatusDataT): void;
+  setStreamingPending(pending: boolean): void;
   focusClientIdInput(): void;
   isAnyInputFocused(): boolean;
   setAudioConfig(config: Partial<UiAudioConfig>): void;

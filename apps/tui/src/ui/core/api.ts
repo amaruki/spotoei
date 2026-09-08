@@ -8,7 +8,11 @@ import { resolveContextTarget } from './contextMenu';
 import { browseCategoryOptions, browseEntryOptions } from '../views/browseView';
 import { createEntitySetters } from './entitySetters';
 import { libraryItemOptions } from '../views/library';
-import { binarySearchLastLE, calculateLyricsScrollOffset, renderLyricsContent } from '../views/lyrics';
+import {
+  binarySearchLastLE,
+  calculateLyricsScrollOffset,
+  renderLyricsContent,
+} from '../views/lyrics';
 import { createPanelSetters, restoreListPosition } from './panelSetters';
 import { routeFromLegacy, routeKind } from './navigationStack';
 import type { ContextTarget, UiAudioConfig } from '../types';
@@ -295,7 +299,12 @@ export function createUiApi(ctx: UiCoreContext): Ui {
     },
     setPlaybackPosition(pos: PlaybackPositionDataT): void {
       if (!state.playback) return;
-      if (state.playback.state !== 'playing' && state.playback.state !== 'loading' && pos.revision !== state.playback.revision) return;
+      if (
+        state.playback.state !== 'playing' &&
+        state.playback.state !== 'loading' &&
+        pos.revision !== state.playback.revision
+      )
+        return;
       state.playback.positionMs = pos.positionMs;
       // Store wall-clock observedAt for interpolation; playbackBar computes
       // displayPos as positionMs + elapsed since observedAt when playing.
@@ -331,6 +340,10 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       if (wasAuth && auth.state !== 'authenticated') {
         helpers.showRoute('onboarding', true, true);
       }
+    },
+    setStreamingPending(pending: boolean): void {
+      state.streamingPending = pending;
+      helpers.refreshOnboarding();
     },
     focusClientIdInput(): void {
       helpers.showRoute('onboarding', true, true);

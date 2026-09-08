@@ -15,6 +15,7 @@ import { getStatusBadge } from '../ui/views/nav';
 
 export interface PaletteActionDeps {
   triggerAuth: () => Promise<void>;
+  triggerLogout: () => Promise<void>;
   loadCurrentLyrics: (force?: boolean) => Promise<void>;
   nextTrack: () => Promise<void>;
   previousTrack: () => Promise<void>;
@@ -277,12 +278,17 @@ export function buildPaletteCommands(
     },
     {
       name: 'Authenticate with Spotify',
-      description: 'OAuth (press A in onboarding or Ctrl+A in settings)',
+      description: 'OAuth (press A on the login page)',
       action: actions.triggerAuth,
     },
     {
+      name: 'Open Login Page',
+      description: 'Standalone onboarding (login, permissions, Client ID)',
+      action: () => getUi()?.setRoute('onboarding'),
+    },
+    {
       name: 'Log Out of Spotify',
-      description: 'Clear keyring tokens, session, and cache (Ctrl+L in settings)',
+      description: 'Clear keyring tokens, session, and cache (Ctrl+L on the login page)',
       action: actions.triggerLogout,
     },
     {

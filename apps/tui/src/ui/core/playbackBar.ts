@@ -1,15 +1,14 @@
 import { bold, fg, t } from '@opentui/core';
 import { formatArtists } from '../formatters';
 import { COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
-import { getOnboardingContent } from '../views/onboarding';
+import { getOnboardingContent, onboardingStep, shouldShowClientIdBox } from '../views/onboarding';
 import { getSettingsContent } from '../views/settings';
 import { buildPlaybackBarContent } from '../playbackBarView';
 import { QUOTA_BANNER } from '../../webApi/transport';
 import { routeKind } from './navigationStack';
 import type { UiCoreContext } from './types';
 import { optimisticPlayback } from '../../playback/validator';
-function refreshHomePanels(): void {
-}
+function refreshHomePanels(): void {}
 
 export function createPlaybackBarHelpers(ctx: UiCoreContext) {
   const { built, focus, route, state, statusTimer } = ctx;
@@ -62,6 +61,7 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
 
   const refreshOnboarding = (): void => {
     built.onboardingText.content = getOnboardingContent(state);
+    built.clientIdBox.visible = shouldShowClientIdBox(onboardingStep(state));
   };
 
   const renderPlaybackBar = (): void => {
@@ -70,10 +70,12 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     const pbState =
       pb?.state === 'playing' ? 'playing' : pb?.state === 'paused' ? 'paused' : 'idle';
 
-    const stateLabel = pbState === 'playing' ? '▶ Now Playing' : pbState === 'paused' ? '⏸ Paused' : 'Now Playing';
+    const stateLabel =
+      pbState === 'playing' ? '▶ Now Playing' : pbState === 'paused' ? '⏸ Paused' : 'Now Playing';
     const privateBadge = state.isPrivateSession ? ' • 🕶 Private' : '';
     built.playbackBar.title = ` ${stateLabel}${privateBadge} `;
-    built.playbackBar.titleColor = pbState === 'playing' ? COLOR_SUCCESS : pbState === 'paused' ? COLOR_WARN : COLOR_TEXT;
+    built.playbackBar.titleColor =
+      pbState === 'playing' ? COLOR_SUCCESS : pbState === 'paused' ? COLOR_WARN : COLOR_TEXT;
     if (!track) {
       const stateIcon =
         pbState === 'playing'
@@ -103,7 +105,9 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
       const elapsed = Date.now() - observedAt;
       posMs = durMs > 0 ? Math.min(durMs, posMs + elapsed) : posMs + elapsed;
     }
-    const rawImage = (track as { imageUrl?: string }).imageUrl || (track as { image?: { url?: string } }).image?.url;
+    const rawImage =
+      (track as { imageUrl?: string }).imageUrl ||
+      (track as { image?: { url?: string } }).image?.url;
     if (rawImage) {
       built.playbackCoverBox.visible = true;
       if (built.playbackCoverImage.source !== rawImage) {

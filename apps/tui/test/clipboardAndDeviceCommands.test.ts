@@ -73,7 +73,6 @@ describe('Clipboard Spotify URI/Link Parser', () => {
     expect(parseSpotifyUriOrUrl('just some random text')).toBeNull();
     expect(parseSpotifyUriOrUrl('spotify:track:' + 'a'.repeat(1025))).toBeNull();
   });
-
 });
 
 describe('handleOpenFromClipboard', () => {
@@ -263,7 +262,9 @@ describe('Private Session Status Badge & Nav Options', () => {
 
     expect(normal.find((o) => o.value === 'settings')?.name).toBe('Settings');
     expect(privateNav.find((o) => o.value === 'settings')?.name).toContain('🕶');
-    expect(privateNav.find((o) => o.value === 'settings')?.description).toContain('Private Session active');
+    expect(privateNav.find((o) => o.value === 'settings')?.description).toContain(
+      'Private Session active',
+    );
   });
 });
 
@@ -293,6 +294,7 @@ describe('Palette Commands and Key Handlers', () => {
 
     const actions = {
       triggerAuth: async () => {},
+      triggerLogout: async () => {},
       loadCurrentLyrics: async () => {},
       nextTrack: async () => {},
       previousTrack: async () => {},

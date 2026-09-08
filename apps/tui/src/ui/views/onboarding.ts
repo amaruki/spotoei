@@ -11,12 +11,20 @@ export function onboardingStep(state: UiViewState): OnboardingStep {
   return 'authenticate';
 }
 
+/// The Client ID editor lives on the onboarding page, but only on its own
+/// step — later steps must not mix account setup into the login flow.
+export function shouldShowClientIdBox(step: OnboardingStep): boolean {
+  return step === 'client-id';
+}
+
 export function getOnboardingContent(state: UiViewState) {
   const clientRes = resolveClientId();
   const redirectUri = getRedirectUri();
   const step = onboardingStep(state);
   const keyringWarning =
-    state.auth.storage !== 'keyring' && state.auth.storage !== null && state.auth.storage !== undefined
+    state.auth.storage !== 'keyring' &&
+    state.auth.storage !== null &&
+    state.auth.storage !== undefined
       ? `\n${fg(COLOR_WARN)('⚠ OS keyring unavailable — login will not persist after quit')}`
       : '';
 
@@ -40,6 +48,15 @@ ${fg(COLOR_SUCCESS)(redirectUri)} ${fg(COLOR_DIM)('(127.0.0.1 — ensure Dashboa
 
 ${fg(COLOR_DIM)('Waiting for Spotify login callback…')}
 ${fg(COLOR_DIM)('Press [A] to re-open browser  •  Press [C] to edit Client ID')}`;
+  }
+  if (state.auth.state === 'authenticated' && state.streamingPending) {
+    return t`${bold('== Step 2 of 2: Audio Streaming ==')}${keyringWarning}
+${fg(COLOR_TEXT)('Web API is connected. One more permission plays audio on this device.')}
+
+${bold('Press [A]')} to open the Audio Streaming login (or re-open it)!
+${fg(COLOR_TEXT)('Complete the login in the newest browser tab.')}
+
+${fg(COLOR_DIM)('Press [C] to edit Client ID  •  Press [Q] to quit  •  ?: palette')}`;
   }
   return t`${bold('== Welcome to Spotoei — Spotify Setup ==')}${keyringWarning}
 ${fg(COLOR_SUCCESS)('✔ Client IDs configured')} (${fg(COLOR_DIM)('Dual client: Web API + Librespot Streaming')})

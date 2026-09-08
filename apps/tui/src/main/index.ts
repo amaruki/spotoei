@@ -322,6 +322,7 @@ async function runSession(args: string[]): Promise<number> {
       wireSubscriptions(
         ctx,
         {
+          ...authActions,
           ...libraryActions,
           ...lyricsActions,
           ...queueActions,

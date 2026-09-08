@@ -72,6 +72,7 @@ describe('auth changed subscription', () => {
     wireSubscriptions(
       ctx,
       {
+        triggerAuth: () => Promise.resolve(),
         loadLibrary: () => Promise.resolve(),
         loadCurrentLyrics: () => Promise.resolve(),
         updateQueueView: () => Promise.resolve(),
