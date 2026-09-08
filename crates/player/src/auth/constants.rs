@@ -15,7 +15,13 @@ pub const KEYMASTER_PATH: &str = "/login";
 
 pub const DEFAULT_SCOPES: &[&str] = &[
     "playlist-read-private",
+    "playlist-read-collaborative",
+    "playlist-modify-private",
+    "playlist-modify-public",
     "user-library-read",
+    "user-library-modify",
+    "user-follow-read",
+    "user-follow-modify",
     "user-read-playback-state",
     "user-modify-playback-state",
     "user-read-currently-playing",
@@ -30,6 +36,8 @@ mod tests {
     fn default_scopes_cover_home_endpoints() {
         assert!(super::DEFAULT_SCOPES.contains(&"user-top-read"));
         assert!(super::DEFAULT_SCOPES.contains(&"user-read-recently-played"));
+        assert!(super::DEFAULT_SCOPES.contains(&"user-library-modify"));
+        assert!(super::DEFAULT_SCOPES.contains(&"playlist-modify-private"));
     }
 }
 
