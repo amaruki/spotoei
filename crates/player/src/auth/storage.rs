@@ -39,30 +39,46 @@ pub async fn load_streaming_session() -> Result<Option<AccessToken>, AuthError> 
     if memory_only() {
         return Ok(None);
     }
-    let entry = streaming_keyring_entry("default")?;
-    match entry.get_password() {
-        Ok(s) => match serde_json::from_str::<AccessToken>(&s) {
-            Ok(at) => Ok(Some(at)),
-            Err(_) => Ok(None),
-        },
-        Err(_) => Ok(None),
+    let entry = streaming_keyring_entry("default");
+    if let Ok(entry) = entry {
+        if let Ok(s) = entry.get_password() {
+            if let Ok(at) = serde_json::from_str::<AccessToken>(&s) {
+                return Ok(Some(at));
+            }
+        }
     }
+    Ok(try_load_file(&streaming_session_file_path()))
 }
 
 pub async fn save_streaming_session(at: &AccessToken) -> Result<(), AuthError> {
     if memory_only() {
         return Ok(());
     }
-    let entry = streaming_keyring_entry("default")?;
     let s = serde_json::to_string(at).map_err(|e| AuthError::Config(e.to_string()))?;
-    let _ = entry.set_password(&s);
-    Ok(())
+    if let Ok(entry) = streaming_keyring_entry("default") {
+        let _ = entry.set_password(&s);
+    }
+    save_file_0600(&streaming_session_file_path(), at)
 }
 
 pub async fn delete_streaming_session() {
     if let Ok(entry) = streaming_keyring_entry("default") {
         let _ = entry.delete_credential();
     }
+    let _ = std::fs::remove_file(streaming_session_file_path());
+}
+
+pub fn streaming_session_file_path() -> std::path::PathBuf {
+    let config_dir = std::env::var("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join(".config"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
+    let spotoei_dir = config_dir.join("spotoei");
+    let _ = std::fs::create_dir_all(&spotoei_dir);
+    spotoei_dir.join("streaming.json")
 }
 
 pub fn session_file_path() -> std::path::PathBuf {
@@ -105,45 +121,42 @@ pub async fn load_session() -> Result<Option<AccessToken>, AuthError> {
         return Err(AuthError::KeyringUnavailable("memory-only authentication".into()));
     }
     match load_from_keyring("default").await {
-        Ok(Some(at)) => {
-            // Remove stale dev file if keyring now works
-            if cfg!(debug_assertions) {
-                let _ = std::fs::remove_file(session_file_path());
-            }
-            Ok(Some(at))
-        }
-        Ok(None) => {
-            if cfg!(debug_assertions) {
-                if let Some(at) = try_load_dev_file() {
-                    return Ok(Some(at));
-                }
+        Ok(Some(at)) => Ok(Some(at)),
+        _ => {
+            if let Some(at) = try_load_file(&session_file_path()) {
+                return Ok(Some(at));
             }
             Ok(None)
-        }
-        Err(e) => {
-            if cfg!(debug_assertions) {
-                if let Some(at) = try_load_dev_file() {
-                    warn!("keyring unavailable, using dev file fallback");
-                    return Ok(Some(at));
-                }
-            }
-            Err(e)
         }
     }
 }
 
-#[cfg(debug_assertions)]
-fn try_load_dev_file() -> Option<AccessToken> {
-    let path = session_file_path();
-    let content = std::fs::read_to_string(&path).ok()?;
+fn try_load_file(path: &std::path::Path) -> Option<AccessToken> {
+    let content = std::fs::read_to_string(path).ok()?;
     serde_json::from_str::<AccessToken>(&content).ok()
 }
 
-#[cfg(not(debug_assertions))]
-fn try_load_dev_file() -> Option<AccessToken> {
-    None
+fn save_file_0600(path: &std::path::Path, at: &AccessToken) -> Result<(), AuthError> {
+    let s = serde_json::to_string_pretty(at).map_err(|e| AuthError::Config(e.to_string()))?;
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true).mode(0o600);
+        let mut file = options
+            .open(path)
+            .map_err(|e| AuthError::Config(format!("open {}: {e}", path.display())))?;
+        file.write_all(s.as_bytes())
+            .map_err(|e| AuthError::Config(format!("write {}: {e}", path.display())))?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, s.as_bytes())
+            .map_err(|e| AuthError::Config(format!("write {}: {e}", path.display())))?;
+    }
+    Ok(())
 }
-
 pub async fn save_to_keyring_account(account_id: &str, at: &AccessToken) -> Result<(), AuthError> {
     let entry = keyring_entry(account_id)?;
     let s = serde_json::to_string(at).map_err(|e| AuthError::Config(e.to_string()))?;
@@ -173,52 +186,9 @@ pub async fn save_session(at: &AccessToken) -> Result<(), AuthError> {
     } else {
         at
     };
-    let account_ok = save_to_keyring_account(&token_ref.account_id, token_ref).await.is_ok();
-    let default_ok = save_to_keyring_account("default", token_ref).await.is_ok();
-    if account_ok || default_ok {
-        let path = session_file_path();
-        let _ = std::fs::remove_file(path);
-        return Ok(());
-    }
-    if cfg!(debug_assertions) && try_save_dev_file(token_ref).is_ok() {
-        warn!("keyring unavailable, persisted dev fallback to session.json");
-        return Ok(());
-    }
-    // No durable store available — keep credentials in memory only and
-    // let the caller surface Storage::Memory to the UI. Never write
-    // refresh_token to session.json in release.
-    Err(AuthError::KeyringUnavailable(
-        "keyring unavailable for all accounts; credentials will be in-memory only".into(),
-    ))
-}
-
-#[cfg(debug_assertions)]
-fn try_save_dev_file(at: &AccessToken) -> Result<(), AuthError> {
-    let path = session_file_path();
-    let s = serde_json::to_string_pretty(at).map_err(|e| AuthError::Config(e.to_string()))?;
-    #[cfg(unix)]
-    {
-        use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create(true).truncate(true).mode(0o600);
-        let mut file = options
-            .open(&path)
-            .map_err(|e| AuthError::Config(format!("open {}: {e}", path.display())))?;
-        file.write_all(s.as_bytes())
-            .map_err(|e| AuthError::Config(format!("write {}: {e}", path.display())))?;
-    }
-    #[cfg(not(unix))]
-    {
-        std::fs::write(&path, s.as_bytes())
-            .map_err(|e| AuthError::Config(format!("write {}: {e}", path.display())))?;
-    }
-    Ok(())
-}
-
-#[cfg(not(debug_assertions))]
-fn try_save_dev_file(_at: &AccessToken) -> Result<(), AuthError> {
-    Err(AuthError::KeyringUnavailable("dev fallback disabled in release".into()))
+    let _ = save_to_keyring_account(&token_ref.account_id, token_ref).await;
+    let _ = save_to_keyring_account("default", token_ref).await;
+    save_file_0600(&session_file_path(), token_ref)
 }
 
 pub async fn delete_from_keyring(account_id: &str) -> Result<(), AuthError> {

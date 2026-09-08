@@ -61,14 +61,15 @@ impl AuthManager {
                     };
                     let tx = tx.clone();
                     let io = hyper_util::rt::TokioIo::new(stream);
-                    let expected_state = {
-                        let s = self.state.lock().await;
-                        s.pkce.as_ref().map(|p| p.state.clone())
-                    };
+                    let auth_mgr = Arc::clone(&self);
                     let svc = service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
                         let tx = tx.clone();
-                        let expected_state = expected_state.clone();
+                        let auth_mgr = Arc::clone(&auth_mgr);
                         async move {
+                            let expected_state = {
+                                let s = auth_mgr.state.lock().await;
+                                s.pkce.as_ref().map(|p| p.state.clone())
+                            };
                             if req.method() != hyper::Method::GET {
                                 let html = html_error("Method Not Allowed", "Only GET is allowed for the OAuth callback");
                                 let resp = Response::builder()

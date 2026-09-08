@@ -119,7 +119,7 @@ impl AuthManager {
 
     pub async fn has_streaming_session(&self) -> bool {
         if let Ok(Some(st)) = storage::load_streaming_session().await {
-            !st.access_token.is_empty()
+            !st.access_token.is_empty() || !st.refresh_token.is_empty()
         } else {
             false
         }
@@ -172,7 +172,11 @@ impl AuthManager {
                 flow: AuthFlow::Streaming,
             });
             s.last_auth_url = Some(url.clone());
-            s.state = AuthState::Authenticating;
+            s.state = if s.current.is_some() {
+                AuthState::Authenticated
+            } else {
+                AuthState::Authenticating
+            };
             self.snapshot_locked(&s, Some(url))
         };
         if let Ok(value) = serde_json::to_value(&snap) {
@@ -319,6 +323,7 @@ impl AuthManager {
         let scopes = at.scopes.clone();
         let token_for_store = at.clone();
 
+
         if is_streaming_auth {
             let _ = storage::save_streaming_session(&token_for_store).await;
             storage::delete_librespot_credentials_cache();
@@ -327,6 +332,7 @@ impl AuthManager {
                 let mut s = self.state.lock().await;
                 s.pkce = None;
                 s.last_auth_url = None;
+                s.state = AuthState::Authenticated;
                 self.snapshot_locked(&s, None)
             };
             if let Ok(value) = serde_json::to_value(&snap) {

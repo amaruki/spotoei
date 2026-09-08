@@ -17,12 +17,15 @@ use super::manager::AuthManager;
 use super::oauth_flow::resolve_exchange_target;
 use super::types::{AccessToken, AuthError, AuthFlow, AuthState, Storage};
 
+static TEST_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// Run `f` with keyring-backed storage disabled so tests never touch the
 /// developer's real credential store.
 async fn with_memory_storage<Fut, T>(f: impl FnOnce() -> Fut) -> T
 where
     Fut: std::future::Future<Output = T>,
 {
+    let _guard = TEST_ENV_LOCK.lock().await;
     let old_storage = std::env::var("SPOTOEI_AUTH_STORAGE").ok();
     let old_mock = std::env::var("SPOTOEI_MOCK_AUTH").ok();
     std::env::set_var("SPOTOEI_AUTH_STORAGE", "memory");
@@ -123,6 +126,7 @@ async fn switching_client_id_drops_the_old_login() {
 
 #[tokio::test]
 async fn logout_deletes_the_playback_credentials_cache() {
+    let _guard = TEST_ENV_LOCK.lock().await;
     let tmp = std::env::temp_dir().join(format!(
         "spotoei-regression-{}-{}",
         std::process::id(),
@@ -375,6 +379,88 @@ async fn bogus_callback_keeps_the_pending_login_intact() {
         assert!(
             s.pkce.as_ref().map(|p| p.state.as_str()) == Some("correct-csrf"),
             "pending login must survive a bogus callback so the newest tab still works"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn file_fallback_persists_and_loads_sessions() {
+    let _guard = TEST_ENV_LOCK.lock().await;
+    let tmp_dir = std::env::temp_dir().join(format!("spotoei-test-{}", super::constants::now_ms()));
+    let _ = std::fs::create_dir_all(&tmp_dir);
+    let old_xdg = std::env::var("XDG_CONFIG_HOME").ok();
+    let old_storage = std::env::var("SPOTOEI_AUTH_STORAGE").ok();
+    std::env::set_var("XDG_CONFIG_HOME", &tmp_dir);
+    std::env::remove_var("SPOTOEI_AUTH_STORAGE");
+
+    let token = AccessToken {
+        access_token: "test-access".to_string(),
+        refresh_token: "test-refresh".to_string(),
+        expires_at: 9_999_999_999_999,
+        account_id: "test-user".to_string(),
+        scopes: vec!["streaming".to_string()],
+    };
+
+    // Test web session file fallback
+    let _ = super::storage::save_session(&token).await;
+    let loaded = super::storage::load_session().await.expect("load_session");
+    assert!(loaded.is_some(), "session should be loaded from file fallback");
+    let loaded = loaded.unwrap();
+    assert_eq!(loaded.access_token, "test-access");
+    assert_eq!(loaded.refresh_token, "test-refresh");
+
+    // Test streaming session file fallback
+    let _ = super::storage::save_streaming_session(&token).await;
+    let loaded_streaming = super::storage::load_streaming_session().await.expect("load_streaming_session");
+    assert!(loaded_streaming.is_some(), "streaming session should be loaded from file fallback");
+    assert_eq!(loaded_streaming.unwrap().access_token, "test-access");
+
+    // Test deletion
+    super::storage::delete_session("test-user").await.expect("delete_session");
+    super::storage::delete_streaming_session().await;
+
+    assert!(!super::storage::session_file_path().exists());
+    assert!(!super::storage::streaming_session_file_path().exists());
+
+    match old_xdg {
+        Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),
+        None => std::env::remove_var("XDG_CONFIG_HOME"),
+    }
+    match old_storage {
+        Some(v) => std::env::set_var("SPOTOEI_AUTH_STORAGE", v),
+        None => std::env::remove_var("SPOTOEI_AUTH_STORAGE"),
+    }
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+#[tokio::test]
+async fn streaming_token_never_borrows_web_token_with_streaming_scope() {
+    with_memory_storage(|| async {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(8);
+        let auth = AuthManager::new(super::constants::NCSPOT_CLIENT_ID.to_string(), tx);
+        {
+            let mut s = auth.state.lock().await;
+            s.current = Some(AccessToken {
+                access_token: "ncspot-web-token".to_string(),
+                refresh_token: "ncspot-web-refresh".to_string(),
+                expires_at: super::constants::now_ms() + 3600_000,
+                account_id: "test-user".to_string(),
+                scopes: vec!["streaming".to_string(), "user-read-playback-state".to_string()],
+            });
+            s.state = AuthState::Authenticated;
+        }
+        let err = auth
+            .get_streaming_token()
+            .await
+            .expect_err("streaming token must not borrow web token");
+        assert!(
+            matches!(err, AuthError::StreamingLoginRequired),
+            "expected StreamingLoginRequired, got: {err:?}"
+        );
+        assert!(
+            !auth.has_streaming_session().await,
+            "has_streaming_session must be false when only web token exists"
         );
     })
     .await;
