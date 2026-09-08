@@ -259,6 +259,7 @@ impl AuthManager {
     }
 
     pub async fn logout(&self) -> Result<AuthStatus, AuthError> {
+        self.cancel_in_flight().await;
         storage::purge_legacy_file_credentials();
         let (snap, account_id) = {
             let mut s = self.state.lock().await;

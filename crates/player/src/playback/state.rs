@@ -43,6 +43,23 @@ impl Playback {
         self.snapshot_locked(&inner)
     }
 
+    /// Release the playback backend and discard account-specific playback
+    /// state. Called before auth logout removes the credential material.
+    pub async fn release(&self) {
+        self.engine.release();
+        let snap = {
+            let mut inner = self.inner.lock().await;
+            inner.state = super::types::PlaybackState::Idle;
+            inner.track = None;
+            inner.position_ms = 0;
+            inner.duration_ms = 0;
+            inner.revision = inner.revision.wrapping_add(1);
+            inner.last_change_at = std::time::Instant::now();
+            self.snapshot_locked(&inner)
+        };
+        self.emit_changed(&snap).await;
+    }
+
     pub(super) fn snapshot_locked(&self, inner: &PlaybackInner) -> PlaybackChangedPayload {
         PlaybackChangedPayload {
             revision: inner.revision,

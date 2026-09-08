@@ -23,6 +23,9 @@ pub trait PlaybackEngine: Send + Sync {
     fn resume(&self) {}
     fn pause(&self) {}
     fn stop(&self) {}
+    /// Release a backend session when the authenticated account changes.
+    /// This is stronger than stop: it disconnects the device from Spotify.
+    fn release(&self) {}
     fn seek(&self, _position_ms: u32) {}
     fn set_volume(&self, _volume: f32) {}
     fn next(&self) {}

@@ -149,6 +149,21 @@ impl PlaybackEngine for super::LibrespotEngine {
             }
         });
     }
+
+    fn release(&self) {
+        self.is_stopped.store(true, std::sync::atomic::Ordering::SeqCst);
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            let active = inner.lock().await.take();
+            if let Some(active) = active {
+                if let Some(spirc) = active.spirc {
+                    let _ = spirc.shutdown();
+                }
+                active.player.stop();
+                active.session.shutdown();
+            }
+        });
+    }
     fn seek(&self, position_ms: u32) {
         let inner = self.inner.clone();
         tokio::spawn(async move {

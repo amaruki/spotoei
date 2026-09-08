@@ -25,7 +25,7 @@ pub async fn handle(
         "shutdown" => ok(&cmd.id, serde_json::json!({})),
         "player.status" => player_status(&cmd, playback).await,
         "auth.logout" => {
-            let _ = playback.pause().await;
+            playback.release().await;
             auth_cmd::dispatch("auth.logout", &cmd, auth).await
         }
         command if command.starts_with("auth.") => auth_cmd::dispatch(command, &cmd, auth).await,
