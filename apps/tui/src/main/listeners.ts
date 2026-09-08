@@ -40,6 +40,7 @@ export function wireSubscriptions(
   // cleared). Surface it so a stuck "Waiting…" always ends with a reason.
   clients.auth.onAuthFailure?.((failure: AuthFailedEventDataT) => {
     const ui = getUi();
+    state.hasStreaming = false;
     state.currentInfo.streamingPending = false;
     if (ui) {
       ui.setStreamingPending(false);

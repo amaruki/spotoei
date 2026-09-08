@@ -455,3 +455,32 @@ async fn streaming_token_never_borrows_web_token_with_streaming_scope() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn revoked_streaming_credentials_require_a_new_login() {
+    with_memory_storage(|| async {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(8);
+        let auth = AuthManager::new(super::constants::NCSPOT_CLIENT_ID.to_string(), tx);
+        let token = AccessToken {
+            access_token: "streaming-access".to_string(),
+            refresh_token: "streaming-refresh".to_string(),
+            expires_at: super::constants::now_ms() + 3600_000,
+            account_id: "test-user".to_string(),
+            scopes: vec!["streaming".to_string()],
+            client_id: super::constants::KEYMASTER_CLIENT_ID.to_string(),
+        };
+        {
+            let mut state = auth.state.lock().await;
+            state.current = Some(AccessToken {
+                client_id: super::constants::NCSPOT_CLIENT_ID.to_string(),
+                ..token.clone()
+            });
+            state.streaming = Some(token);
+            state.state = AuthState::Authenticated;
+        }
+        assert!(auth.has_streaming_session().await);
+        auth.clear_revoked_streaming_session().await;
+        assert!(!auth.has_streaming_session().await);
+    })
+    .await;
+}

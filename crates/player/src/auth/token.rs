@@ -108,22 +108,29 @@ impl AuthManager {
                     .send()
                     .await
                     .map_err(|e| AuthError::Http(e.to_string()))?;
-                if resp.status().is_success() {
-                    if let Ok(parsed) = resp.json::<TokenResponse>().await {
-                        let new_at = AccessToken {
-                            access_token: parsed.access_token.clone(),
-                            refresh_token: parsed.refresh_token.unwrap_or(st.refresh_token),
-                            expires_at: now_ms() + parsed.expires_in * 1000,
-                            account_id: st.account_id,
-                            scopes: st.scopes,
-                            client_id: KEYMASTER_CLIENT_ID.to_string(),
-                        };
-                        let persisted = storage::save_streaming_session(&new_at).await.is_ok();
-                        let mut state = self.state.lock().await;
-                        state.streaming = Some(new_at.clone());
-                        state.storage = if persisted { super::types::Storage::Keyring } else { super::types::Storage::Memory };
-                        return Ok((new_at.access_token, new_at.expires_at));
-                    }
+                let status = resp.status();
+                if status.is_success() {
+                    let parsed = resp
+                        .json::<TokenResponse>()
+                        .await
+                        .map_err(|error| AuthError::Http(error.to_string()))?;
+                    let new_at = AccessToken {
+                        access_token: parsed.access_token.clone(),
+                        refresh_token: parsed.refresh_token.unwrap_or(st.refresh_token),
+                        expires_at: now_ms() + parsed.expires_in * 1000,
+                        account_id: st.account_id,
+                        scopes: st.scopes,
+                        client_id: KEYMASTER_CLIENT_ID.to_string(),
+                    };
+                    let persisted = storage::save_streaming_session(&new_at).await.is_ok();
+                    let mut state = self.state.lock().await;
+                    state.streaming = Some(new_at.clone());
+                    state.storage = if persisted { super::types::Storage::Keyring } else { super::types::Storage::Memory };
+                    return Ok((new_at.access_token, new_at.expires_at));
+                }
+                if status.is_client_error() {
+                    self.clear_revoked_streaming_session().await;
+                    return Err(AuthError::StreamingLoginRequired);
                 }
                 return Err(AuthError::Http(
                     "streaming token refresh failed".to_string(),
@@ -132,6 +139,25 @@ impl AuthManager {
             _ => {}
         }
         Err(AuthError::StreamingLoginRequired)
+    }
+
+    pub(super) async fn clear_revoked_streaming_session(&self) {
+        let account_id = self
+            .state
+            .lock()
+            .await
+            .streaming
+            .take()
+            .map(|token| token.account_id);
+        storage::delete_streaming_session(account_id.as_deref()).await;
+        self.emit(
+            "auth.failed",
+            serde_json::json!({
+                "reason": "token_exchange",
+                "message": "Streaming authorization expired. Authenticate streaming again.",
+            }),
+        )
+        .await;
     }
 
     async fn get_web_token_mock(&self) -> Result<(String, u64), AuthError> {
