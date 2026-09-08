@@ -1,4 +1,4 @@
-import { PlaybackChangedData, type PlaybackChangedDataT } from 'spotoei-protocol';
+import { PlaybackChangedData, type PlaybackChangedDataT, type PlaybackPositionDataT } from 'spotoei-protocol';
 
 export const validatePlaybackChanged = (data: unknown) => {
   const result = PlaybackChangedData.safeParse(data);
@@ -368,6 +368,30 @@ export class OptimisticPlaybackStateMachine {
     this.authoritativeState = state;
     if (this.pendingChanges.length === 0) {
       this.optimisticState = state;
+    }
+  }
+
+  public updatePosition(pos: PlaybackPositionDataT, now = Date.now()): void {
+    const target = this.authoritativeState;
+    if (!target) return;
+    if (
+      target.state !== 'playing' &&
+      target.state !== 'loading' &&
+      pos.revision !== target.revision
+    ) {
+      return;
+    }
+    this.authoritativeState = {
+      ...target,
+      positionMs: pos.positionMs,
+      observedAtMonotonicMs: now,
+    };
+    if (this.optimisticState) {
+      this.optimisticState = {
+        ...this.optimisticState,
+        positionMs: pos.positionMs,
+        observedAtMonotonicMs: now,
+      };
     }
   }
 

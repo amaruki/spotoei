@@ -55,7 +55,10 @@ impl Playback {
             repeat: inner.repeat.as_str().to_string(),
             autoplay: inner.autoplay,
             device_mode: Some(inner.device_mode.as_str().to_string()),
-            observed_at_monotonic_ms: inner.last_change_at.elapsed().as_millis() as u64,
+            observed_at_monotonic_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
         }
     }
 

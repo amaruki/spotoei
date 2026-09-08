@@ -26,6 +26,7 @@ import type {
   UiCoreContext,
   VisualizerFrame,
 } from './types';
+import { optimisticPlayback } from '../../playback/validator';
 // Creates the public `Ui` API handle that consumers use to update state.
 // All setters propagate through `ctx.helpers` and trigger granular repaints.
 
@@ -298,6 +299,7 @@ export function createUiApi(ctx: UiCoreContext): Ui {
       helpers.refreshHome();
     },
     setPlaybackPosition(pos: PlaybackPositionDataT): void {
+      optimisticPlayback.updatePosition(pos);
       if (!state.playback) return;
       if (
         state.playback.state !== 'playing' &&

@@ -248,6 +248,28 @@ describe('OptimisticPlaybackStateMachine', () => {
     expect(sm.getPendingChanges(t0 + 1200).length).toBe(1);
     expect(sm.getPendingChanges(t0 + 1200)[0]?.id).toBe('cmd-new');
   });
+
+  test('updatePosition syncs authoritative and optimistic state immediately', () => {
+    const sm = new OptimisticPlaybackStateMachine();
+    const initial = createSampleState({ revision: 5, state: 'playing', positionMs: 5000 });
+    sm.setAuthoritativeState(initial);
+
+    const now = 1710000000000;
+    sm.updatePosition({ revision: 5, positionMs: 12500 }, now);
+
+    const effective = sm.getEffectiveState();
+    expect(effective?.positionMs).toBe(12500);
+    expect(effective?.observedAtMonotonicMs).toBe(now);
+  });
+
+  test('updatePosition ignores stale revision when not playing or loading', () => {
+    const sm = new OptimisticPlaybackStateMachine();
+    const initial = createSampleState({ revision: 5, state: 'idle', positionMs: 0 });
+    sm.setAuthoritativeState(initial);
+
+    sm.updatePosition({ revision: 4, positionMs: 10000 }, 1710000000000);
+    expect(sm.getEffectiveState()?.positionMs).toBe(0);
+  });
 });
 
 describe('buildCommandMethods optimistic dispatch & rollback', () => {

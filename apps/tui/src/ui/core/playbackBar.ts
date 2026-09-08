@@ -99,11 +99,17 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
 
     const width = ctx.termWidth.value;
     const durMs = pb?.durationMs && pb.durationMs > 0 ? pb.durationMs : (track.durationMs ?? 0);
-    let posMs = pb?.positionMs ?? 0;
+    let posMs = Math.max(0, pb?.positionMs ?? 0);
     const observedAt = pb?.observedAtMonotonicMs;
     if (pb?.state === 'playing' && observedAt) {
-      const elapsed = Date.now() - observedAt;
-      posMs = durMs > 0 ? Math.min(durMs, posMs + elapsed) : posMs + elapsed;
+      // Guard against abnormal or monotonic timestamps: if observedAt looks like relative elapsed
+      // or far future, clamp elapsed to reasonable bounds [0, 60_000].
+      const diff = Date.now() - observedAt;
+      const elapsed = observedAt > 1_000_000_000_000 ? Math.max(0, Math.min(60_000, diff)) : 0;
+      posMs += elapsed;
+    }
+    if (durMs > 0) {
+      posMs = Math.min(durMs, Math.max(0, posMs));
     }
     const rawImage =
       (track as { imageUrl?: string }).imageUrl ||
@@ -133,7 +139,7 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
       width,
     });
     built.playbackTrackText.content = t`${fg(COLOR_TEXT)(content.line1)}`;
-    const barMatch = content.line2.match(/^(\S+\s+)([━]*)([─]*)(\s+.*)$/);
+    const barMatch = content.line2.match(/^(\S+\s+)([━]*)([─]*)(\s+\S+\s+\(\d+%\))$/);
     if (barMatch) {
       const [, prefix, filled, empty, suffix] = barMatch;
       built.playbackProgressText.content = t`${fg(COLOR_TEXT)(prefix)}${fg(COLOR_SUCCESS)(filled)}${fg(COLOR_DIM)(empty)}${fg(COLOR_DIM)(suffix)}`;

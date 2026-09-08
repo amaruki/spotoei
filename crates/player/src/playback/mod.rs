@@ -368,4 +368,54 @@ mod tests {
         assert_eq!(pb.set_normalisation_type("invalid_type").await, "album");
         assert_eq!(pb.normalisation_type().await, "album");
     }
+
+    #[tokio::test]
+    async fn test_playback_snapshot_observed_at_monotonic_ms_is_unix_timestamp() {
+        let (tx, _rx) = mpsc::channel::<String>(16);
+        let pb = Playback::new(FakeEngine, tx);
+        let snap = pb.snapshot().await;
+        // Must be a valid unix epoch millisecond timestamp (> 1_700_000_000_000, roughly late 2023 onwards)
+        assert!(
+            snap.observed_at_monotonic_ms > 1_700_000_000_000,
+            "expected unix ms timestamp, got {}",
+            snap.observed_at_monotonic_ms
+        );
+    }
+
+    #[tokio::test]
+    async fn test_playback_settings_advance_and_preserve_position_when_playing() {
+        use ::librespot::core::spotify_uri::SpotifyUri;
+        use ::librespot::playback::player::PlayerEvent;
+
+        let (tx, _rx) = mpsc::channel::<String>(16);
+        let pb = Playback::new(FakeEngine, tx);
+        let track_uri = SpotifyUri::from_uri("spotify:track:6rqhFgbbKwnb9MLmUQDhG6").unwrap();
+
+        pb.handle_player_event(PlayerEvent::Playing {
+            play_request_id: 1,
+            track_id: track_uri,
+            position_ms: 10_000,
+        })
+        .await;
+
+        // Wait 15ms so elapsed time accumulates
+        tokio::time::sleep(tokio::time::Duration::from_millis(15)).await;
+
+        // Toggling shuffle while playing must advance position and not reset to 0 or jump to max
+        let snap_shuffle = pb.set_shuffle(true).await.expect("set_shuffle");
+        assert!(snap_shuffle.position_ms >= 10_015);
+        assert!(snap_shuffle.shuffle);
+        assert!(snap_shuffle.observed_at_monotonic_ms > 1_700_000_000_000);
+
+        // Toggling repeat while playing must also preserve/advance position
+        tokio::time::sleep(tokio::time::Duration::from_millis(15)).await;
+        let snap_repeat = pb.set_repeat("context").await.expect("set_repeat");
+        assert!(snap_repeat.position_ms >= snap_shuffle.position_ms + 15);
+        assert_eq!(snap_repeat.repeat, "context");
+
+        // Changing volume while playing must also preserve/advance position
+        tokio::time::sleep(tokio::time::Duration::from_millis(15)).await;
+        let snap_vol = pb.set_volume(0.9).await.expect("set_volume");
+        assert!(snap_vol.position_ms >= snap_repeat.position_ms + 15);
+    }
 }

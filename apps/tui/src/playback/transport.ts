@@ -73,6 +73,7 @@ export function createPlaybackTransport(child: ChildProcess, timeoutMs = 5_000):
       } else if (msg.event === 'playback.position') {
         const result = PlaybackPositionData.safeParse(msg.data);
         if (result.success) {
+          optimisticPlayback.updatePosition(result.data);
           for (const l of positionListeners) {
             try {
               l(result.data);

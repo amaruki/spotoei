@@ -13,6 +13,7 @@ impl Playback {
         let snap = {
             let mut inner = self.inner.lock().await;
             inner.revision = inner.revision.wrapping_add(1);
+            advance_position_if_playing(&mut inner);
             if inner.muted_volume.is_some() {
                 if volume > 0.0 {
                     inner.muted_volume = None;
@@ -36,6 +37,7 @@ impl Playback {
         let snap = {
             let mut inner = self.inner.lock().await;
             inner.revision = inner.revision.wrapping_add(1);
+            advance_position_if_playing(&mut inner);
             if let Some(prev) = inner.muted_volume.take() {
                 inner.volume = prev;
             } else {
@@ -61,6 +63,7 @@ impl Playback {
         let snap = {
             let mut inner = self.inner.lock().await;
             inner.revision = inner.revision.wrapping_add(1);
+            advance_position_if_playing(&mut inner);
             inner.shuffle = shuffle;
             self.snapshot_locked(&inner)
         };
@@ -77,6 +80,7 @@ impl Playback {
         let snap = {
             let mut inner = self.inner.lock().await;
             inner.revision = inner.revision.wrapping_add(1);
+            advance_position_if_playing(&mut inner);
             inner.repeat = mode;
             self.snapshot_locked(&inner)
         };
@@ -99,6 +103,7 @@ impl Playback {
                 return Ok(self.snapshot_locked(&inner));
             }
             inner.revision = inner.revision.wrapping_add(1);
+            advance_position_if_playing(&mut inner);
             inner.autoplay = autoplay;
             self.snapshot_locked(&inner)
         };
@@ -113,6 +118,7 @@ impl Playback {
                 return self.snapshot_locked(&inner);
             }
             inner.revision = inner.revision.wrapping_add(1);
+            advance_position_if_playing(&mut inner);
             inner.device_mode = mode;
             self.snapshot_locked(&inner)
         };
