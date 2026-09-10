@@ -324,8 +324,12 @@ async function runSession(args: string[]): Promise<number> {
             if (ui) {
               ui.setStreamingPending(true);
               ui.setRoute('onboarding');
-              ui.setStatus('Web API connected. Press [A] or [Enter] for Audio Streaming permission (Step 2/2)', true);
+              ui.setStatus(
+                'Web API connected. Opening Audio Streaming permission (Step 2/2)...',
+                true,
+              );
             }
+            await authActions.triggerAuth({ streamingOnly: true });
           }
         })();
       }

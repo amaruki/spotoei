@@ -28,6 +28,63 @@ export function wireSubscriptions(
   enrichment: ReturnType<typeof createEnrichment>,
 ): void {
   const { clients, state, getUi } = ctx;
+  let streamingCheckVersion = 0;
+  let streamingFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const clearStreamingFallback = (): void => {
+    if (streamingFallbackTimer) clearTimeout(streamingFallbackTimer);
+    streamingFallbackTimer = null;
+  };
+
+  const markStreamingPending = (): void => {
+    state.hasStreaming = false;
+    const ui = getUi();
+    if (ui) ui.setStreamingPending(true);
+    else state.currentInfo.streamingPending = true;
+  };
+
+  const markStreamingReady = (showWelcome: boolean): void => {
+    streamingCheckVersion++;
+    clearStreamingFallback();
+    state.hasStreaming = true;
+    const ui = getUi();
+    if (ui) {
+      ui.setStreamingPending(false);
+      if (showWelcome) {
+        ui.setStatus(
+          '🎉 Setup complete! Web API and Audio Streaming connected. Welcome to Spotoei.',
+          true,
+        );
+      }
+      if (routeKind(ui.getRoute()) === 'onboarding') ui.setRoute('home');
+    } else {
+      state.currentInfo.streamingPending = false;
+    }
+  };
+
+  const reconcileStreaming = async (startWhenMissing: boolean): Promise<void> => {
+    const version = ++streamingCheckVersion;
+    const hasStreaming =
+      typeof clients.auth?.streamingStatus === 'function'
+        ? await clients.auth.streamingStatus().catch(() => false)
+        : false;
+    if (version !== streamingCheckVersion) return;
+    if (state.currentInfo.auth?.state !== 'authenticated') return;
+    if (hasStreaming) {
+      markStreamingReady(false);
+      return;
+    }
+    markStreamingPending();
+    if (startWhenMissing) await actions.triggerAuth({ streamingOnly: true });
+  };
+
+  const scheduleStreamingFallback = (): void => {
+    clearStreamingFallback();
+    streamingFallbackTimer = setTimeout(() => {
+      streamingFallbackTimer = null;
+      void reconcileStreaming(true);
+    }, 250);
+  };
 
   clients.visualizer.subscribe((mode, data) => {
     const ui = getUi();
@@ -40,45 +97,25 @@ export function wireSubscriptions(
   // cleared). Surface it so a stuck "Waiting…" always ends with a reason.
   clients.auth.onAuthFailure?.((failure: AuthFailedEventDataT) => {
     const ui = getUi();
+    streamingCheckVersion++;
+    clearStreamingFallback();
     state.hasStreaming = false;
-    state.currentInfo.streamingPending = false;
+    const webSessionSurvived = state.currentInfo.auth?.state === 'authenticated';
     if (ui) {
-      ui.setStreamingPending(false);
+      ui.setStreamingPending(webSessionSurvived);
       ui.setStatus(`Login failed (${failure.reason}): ${failure.message}`, true);
-    }
+    } else state.currentInfo.streamingPending = webSessionSurvived;
   });
 
   clients.auth.onAuthCompleted?.((completed: AuthCompletedEventDataT) => {
-    const ui = getUi();
     if (completed.streaming) {
-      state.hasStreaming = true;
-      if (ui) {
-        ui.setStreamingPending(false);
-        ui.setStatus(
-          '🎉 Setup complete! Web API and Audio Streaming connected. Welcome to Spotoei.',
-          true,
-        );
-        if (routeKind(ui.getRoute()) === 'onboarding') {
-          ui.setRoute('home');
-        }
-      }
+      markStreamingReady(true);
     } else {
-      // Web API login finished
-      void (async () => {
-        const hasStreaming =
-          typeof clients.auth?.streamingStatus === 'function'
-            ? await clients.auth.streamingStatus().catch(() => false)
-            : false;
-        state.hasStreaming = hasStreaming;
-        if (hasStreaming) {
-          if (ui) {
-            ui.setStreamingPending(false);
-            if (routeKind(ui.getRoute()) === 'onboarding') {
-              ui.setRoute('home');
-            }
-          }
-        }
-      })();
+      // The terminal Web-completion event is the safe handoff point. Starting
+      // streaming from the earlier auth.changed event can tear down the Web
+      // callback task while it is still finalizing the first transaction.
+      clearStreamingFallback();
+      void reconcileStreaming(true);
     }
   });
 
@@ -116,34 +153,23 @@ export function wireSubscriptions(
       if (ui) ui.setStatus('Session refresh failed; will retry', true);
     }
     if (!wasAuthed && next.state === 'authenticated') {
-      state.currentInfo.streamingPending = true;
-      if (ui) ui.setStreamingPending(true);
-      void (async () => {
-        const hasStreaming =
-          typeof clients.auth?.streamingStatus === 'function'
-            ? await clients.auth.streamingStatus().catch(() => false)
-            : false;
-        if (hasStreaming) {
-          state.currentInfo.streamingPending = false;
-          if (ui) {
-            ui.setStreamingPending(false);
-            if (routeKind(ui.getRoute()) === 'onboarding') {
-              ui.setRoute('home');
-            }
-          }
-        }
-      })();
+      markStreamingPending();
     }
     // ui.setAuth owns the state mutation (same object by reference) so its
     // transition check sees the real before/after; pre-mutating here would
     // make every transition look like a no-op and skip routing home.
     if (ui) ui.setAuth(next);
     else state.currentInfo.auth = next;
-    if (!wasAuthed && next.state === 'authenticated') {
-      // Top up the streaming login through the single trigger: it re-opens
-      // a pending flow instead of minting a second one that would orphan the
-      // first tab into a state mismatch.
-      void actions.triggerAuth({ streamingOnly: true });
+    if (next.state === 'authenticated') {
+      if (wasAuthed && state.currentInfo.streamingPending) {
+        // A streaming auth.changed snapshot is authoritative recovery when
+        // auth.completed was delayed or lost.
+        void reconcileStreaming(false);
+      } else if (!wasAuthed) {
+        // auth.completed normally starts Step 2. This delayed fallback also
+        // covers a dropped terminal event without racing the callback task.
+        scheduleStreamingFallback();
+      }
     }
   });
 

@@ -5,13 +5,18 @@ import type { AppContext } from './types';
 
 type AuthUi = Pick<Ui, 'setStatus' | 'focusClientIdInput' | 'setStreamingPending'>;
 
-function openAuthUrl(ui: AuthUi | null, url: string, waitingFor: string, reopened: boolean): void {
-  const opened = openBrowser(url);
+async function openAuthUrl(
+  ui: AuthUi | null,
+  url: string,
+  waitingFor: string,
+  reopened: boolean,
+): Promise<void> {
+  const opened = await openBrowser(url);
   const copied = copyToClipboard(url);
   const action = reopened ? 're-opened' : 'opened';
   let msg = opened
     ? `Browser ${action} for ${waitingFor}! Complete it in the newest tab.`
-    : `Please complete ${waitingFor} in your browser`;
+    : `Browser could not open for ${waitingFor}. Open this URL: ${url}`;
   if (copied) msg += ' (URL copied to clipboard)';
   if (ui) ui.setStatus(msg, true);
 }
@@ -48,8 +53,11 @@ export function createAuthActions(ctx: AppContext) {
     // Minting a new flow here would orphan the open tab, and completing the
     // orphaned tab is rejected as a state mismatch.
     const pending = await clients.auth.status().catch(() => null);
-    if (pending?.authUrl && (pending.state === 'authenticating' || ctx.state.currentInfo?.streamingPending)) {
-      openAuthUrl(ui, pending.authUrl, 'the pending login', true);
+    if (
+      pending?.authUrl &&
+      (pending.state === 'authenticating' || ctx.state.currentInfo?.streamingPending)
+    ) {
+      await openAuthUrl(ui, pending.authUrl, 'the pending login', true);
       return;
     }
     const isKeymaster = res.clientId === KEYMASTER_CLIENT_ID;
@@ -65,7 +73,7 @@ export function createAuthActions(ctx: AppContext) {
         const result = await clients.auth.beginStreaming();
         if (result.authUrl) {
           ui?.setStreamingPending(true);
-          openAuthUrl(ui, result.authUrl, 'Audio Streaming permission (Step 2/2)', false);
+          await openAuthUrl(ui, result.authUrl, 'Audio Streaming permission (Step 2/2)', false);
         }
       } catch (err) {
         if (ui)
@@ -82,15 +90,7 @@ export function createAuthActions(ctx: AppContext) {
     try {
       const result = await clients.auth.begin();
       if (result.authUrl) {
-        const opened = openBrowser(result.authUrl);
-        const copied = copyToClipboard(result.authUrl);
-        let msg = opened
-          ? `Browser opened for ${stepLabel}!`
-          : 'Please complete login in your browser';
-        if (copied) {
-          msg += ' (URL copied to clipboard)';
-        }
-        if (ui) ui.setStatus(msg, true);
+        await openAuthUrl(ui, result.authUrl, stepLabel, false);
       }
     } catch (err) {
       if (ui) ui.setStatus(`Auth error: ${err instanceof Error ? err.message : String(err)}`, true);

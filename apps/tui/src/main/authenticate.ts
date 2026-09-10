@@ -3,6 +3,8 @@ import { resolveClientId } from '../config';
 import { locatePlayer, startPlayer, stopPlayer } from '../player';
 import { openBrowser } from '../system';
 
+const noop = (): void => {};
+
 async function waitForWebLogin(auth: ReturnType<typeof createAuthClient>): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const stop = auth.onStatusChange((status) => {
@@ -19,22 +21,40 @@ async function waitForWebLogin(auth: ReturnType<typeof createAuthClient>): Promi
 
 async function waitForStreamingLogin(auth: ReturnType<typeof createAuthClient>): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const stopComplete = auth.onAuthCompleted((completed) => {
+    let settled = false;
+    let stopComplete = noop;
+    let stopFailed = noop;
+    let stopStatus = noop;
+    const finish = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      stopComplete();
+      stopFailed();
+      stopStatus();
+      if (error) reject(error);
+      else resolve();
+    };
+    stopComplete = auth.onAuthCompleted((completed) => {
       if (!completed.streaming) return;
-      stopComplete();
-      stopFailed();
-      resolve();
+      finish();
     });
-    const stopFailed = auth.onAuthFailure((failure) => {
-      stopComplete();
-      stopFailed();
-      reject(new Error(`Spotify streaming authentication failed: ${failure.message}`));
+    stopFailed = auth.onAuthFailure((failure) => {
+      finish(new Error(`Spotify streaming authentication failed: ${failure.message}`));
+    });
+    stopStatus = auth.onStatusChange((status) => {
+      if (status.state !== 'authenticated') return;
+      void auth
+        .streamingStatus()
+        .then((authenticated) => {
+          if (authenticated) finish();
+        })
+        .catch(() => {});
     });
   });
 }
 
-function openAuthorization(url: string): void {
-  if (!openBrowser(url)) {
+async function openAuthorization(url: string): Promise<void> {
+  if (!(await openBrowser(url))) {
     process.stdout.write(`Open this URL in a browser:\n${url}\n`);
   }
 }
@@ -54,7 +74,7 @@ export async function runAuthenticate(): Promise<number> {
 
     const webLogin = waitForWebLogin(auth);
     const web = await auth.begin();
-    if (web.authUrl) openAuthorization(web.authUrl);
+    if (web.authUrl) await openAuthorization(web.authUrl);
     else if (web.state !== 'authenticated') {
       throw new Error('player did not provide a Web API authorization URL');
     }
@@ -62,7 +82,7 @@ export async function runAuthenticate(): Promise<number> {
 
     const streamingLogin = waitForStreamingLogin(auth);
     const streaming = await auth.beginStreaming();
-    if (streaming.authUrl) openAuthorization(streaming.authUrl);
+    if (streaming.authUrl) await openAuthorization(streaming.authUrl);
     else if (streaming.state !== 'authenticated') {
       throw new Error('player did not provide a streaming authorization URL');
     }

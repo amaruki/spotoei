@@ -1,19 +1,35 @@
 import { spawn } from 'node:child_process';
 
-export function openBrowser(url: string): boolean {
+export async function openBrowser(url: string): Promise<boolean> {
   try {
     const platform = process.platform;
+    let command: string;
+    let args: string[];
     if (platform === 'darwin') {
-      spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
-      return true;
+      command = 'open';
+      args = [url];
+    } else if (platform === 'win32') {
+      command = 'cmd.exe';
+      args = ['/c', 'start', '', url];
+    } else {
+      command = 'xdg-open';
+      args = [url];
     }
-    if (platform === 'win32') {
-      spawn('cmd.exe', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
-      return true;
-    }
-    // Linux / BSD / other Unix
-    spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
-    return true;
+    const child = spawn(command, args, { detached: true, stdio: 'ignore' });
+    return await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (opened: boolean): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        child.removeAllListeners();
+        child.unref();
+        resolve(opened);
+      };
+      const timer = setTimeout(() => finish(true), 2_000);
+      child.once('error', () => finish(false));
+      child.once('close', (code) => finish(code === 0));
+    });
   } catch {
     return false;
   }
