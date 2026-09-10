@@ -95,6 +95,27 @@ pub struct InnerState {
     pub last_auth_url: Option<String>,
 }
 
+impl InnerState {
+    pub fn find_pkce(&self, state: &str) -> Option<PkceTx> {
+        self.pkce
+            .as_ref()
+            .filter(|transaction| transaction.state == state)
+            .cloned()
+    }
+
+    pub fn remove_pkce(&mut self, state: &str) -> Option<PkceTx> {
+        if self.pkce.as_ref().map(|p| p.state.as_str()) == Some(state) {
+            self.pkce.take()
+        } else {
+            None
+        }
+    }
+
+    pub fn clear_all_pkce(&mut self) {
+        self.pkce = None;
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct TokenResponse {
     pub access_token: String,

@@ -16,7 +16,7 @@ use super::types::{AccessToken, AuthError, AuthFlow, AuthState, AuthStatus, Pkce
 /// is exchanged for, and whether the token lands in the streaming store.
 /// The flow recorded at `begin` time wins — never sniff URLs, so a Web
 /// login stays a Web login even when the configured client is Keymaster.
-pub const STREAMING_SCOPES: &str = "streaming user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative user-library-read user-read-playback-position user-top-read user-read-recently-played";
+pub const STREAMING_SCOPES: &str = "streaming user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative user-library-read user-read-playback-position user-top-read user-read-recently-played user-read-private";
 
 pub(super) fn resolve_exchange_target(
     flow: AuthFlow,
@@ -28,7 +28,59 @@ pub(super) fn resolve_exchange_target(
     }
 }
 
+/// Whether two account identities conflict. `None` means that an identity is
+/// not known. Only two different, known account IDs conflict.
+pub(super) fn account_conflict(stored: Option<&str>, fresh: &str) -> bool {
+    // "default" is a placeholder generated when /v1/me fails; it must never
+    // be treated as a conflict with a known real account.
+    matches!(stored, Some(id) if id != fresh && id != "default" && fresh != "default")
+}
+
+/// When /v1/me could not be reached (missing scope, rate-limiting, offline),
+/// the Keymaster token exchange assigns "default". If an authenticated Web
+/// session already exists, bind the streaming token to that known user instead
+/// of leaving it orphaned under the placeholder.
+pub(super) fn reconcile_streaming_account<'a>(
+    web_account: Option<&'a str>,
+    streaming_account: &'a str,
+) -> &'a str {
+    if streaming_account == "default" {
+        if let Some(web) = web_account {
+            if !web.trim().is_empty() {
+                return web;
+            }
+        }
+    }
+    streaming_account
+}
+
+pub(super) fn should_upgrade_web_account(web_account: Option<&str>, resolved: &str) -> bool {
+    web_account == Some("default") && resolved != "default"
+}
+
 impl AuthManager {
+    async fn start_callback_listener(self: &Arc<Self>, port: u16) -> Result<u16, AuthError> {
+        self.cancel_in_flight().await;
+        let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}"))
+            .await
+            .map_err(|error| AuthError::Http(format!("bind 127.0.0.1:{port}: {error}")))?;
+        let bound_port = listener
+            .local_addr()
+            .map_err(|error| AuthError::Http(format!("local_addr: {error}")))?
+            .port();
+        *self.bound_port.lock().await = Some(bound_port);
+        let (cancel_tx, cancel_rx) = oneshot::channel();
+        *self.cancel.lock().await = Some(cancel_tx);
+        let this = Arc::clone(self);
+        let handle = tokio::spawn(async move {
+            if let Err(error) = this.serve_callback(listener, bound_port, cancel_rx).await {
+                warn!(error = %error, "auth callback server failed");
+            }
+        });
+        *self.join_handle.lock().await = Some(handle);
+        Ok(bound_port)
+    }
+
     pub async fn begin(
         self: &Arc<Self>,
         scopes: Option<Vec<String>>,
@@ -40,8 +92,6 @@ impl AuthManager {
         if client_id.is_empty() {
             return Err(AuthError::MissingClientId);
         }
-        self.cancel_in_flight().await;
-
         let verifier = generate_verifier();
         let challenge = s256_challenge(&verifier);
         let csrf = generate_state();
@@ -53,25 +103,26 @@ impl AuthManager {
             .and_then(|p| p.parse().ok())
             .unwrap_or(default_port);
 
-        let listener = match tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await {
-            Ok(l) => l,
-            Err(e) => {
+        let bound_port = match self.start_callback_listener(port).await {
+            Ok(bound_port) => bound_port,
+            Err(error) => {
                 let snap = {
-                    let mut s = self.state.lock().await;
-                    s.pkce = None;
-                    s.state = AuthState::Unauthenticated;
-                    self.snapshot_locked(&s, None)
+                    let mut state = self.state.lock().await;
+                    state.clear_all_pkce();
+                    state.last_auth_url = None;
+                    state.state = if state.current.is_some() {
+                        AuthState::Authenticated
+                    } else {
+                        AuthState::Unauthenticated
+                    };
+                    self.snapshot_locked(&state, None)
                 };
                 if let Ok(value) = serde_json::to_value(&snap) {
                     self.emit("auth.changed", value).await;
                 }
-                return Err(AuthError::Http(format!("bind 127.0.0.1:{port}: {e}")));
+                return Err(error);
             }
         };
-        let bound_port = listener
-            .local_addr()
-            .map_err(|e| AuthError::Http(format!("local_addr: {e}")))?
-            .port();
         let redirect_path = if is_login_flow {
             "/login"
         } else {
@@ -90,6 +141,7 @@ impl AuthManager {
         );
         let snap = {
             let mut s = self.state.lock().await;
+            s.clear_all_pkce();
             s.pkce = Some(PkceTx {
                 verifier: verifier.clone(),
                 state: csrf.clone(),
@@ -103,16 +155,6 @@ impl AuthManager {
         if let Ok(value) = serde_json::to_value(&snap) {
             self.emit("auth.changed", value).await;
         }
-
-        let (cancel_tx, cancel_rx) = oneshot::channel();
-        *self.cancel.lock().await = Some(cancel_tx);
-        let this = Arc::clone(self);
-        let handle = tokio::spawn(async move {
-            if let Err(e) = this.serve_callback(listener, bound_port, cancel_rx).await {
-                warn!(error = %e, "auth callback server failed");
-            }
-        });
-        *self.join_handle.lock().await = Some(handle);
 
         Ok(snap)
     }
@@ -139,31 +181,29 @@ impl AuthManager {
         if std::env::var("SPOTOEI_MOCK_AUTH").is_ok() {
             return self.begin_mock(true).await;
         }
-        self.cancel_in_flight().await;
-
+        if !self.has_current_session().await {
+            return Err(AuthError::NotAuthenticated);
+        }
         let verifier = generate_verifier();
         let challenge = s256_challenge(&verifier);
         let csrf = generate_state();
-
         let port = KEYMASTER_PORT; // 8989
-        let listener = match tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await {
-            Ok(l) => l,
-            Err(e) => {
+        let bound_port = match self.start_callback_listener(port).await {
+            Ok(bound_port) => bound_port,
+            Err(error) => {
                 let snap = {
-                    let mut s = self.state.lock().await;
-                    s.pkce = None;
-                    self.snapshot_locked(&s, None)
+                    let mut state = self.state.lock().await;
+                    state.clear_all_pkce();
+                    state.last_auth_url = None;
+                    state.state = AuthState::Authenticated;
+                    self.snapshot_locked(&state, None)
                 };
                 if let Ok(value) = serde_json::to_value(&snap) {
                     self.emit("auth.changed", value).await;
                 }
-                return Err(AuthError::Http(format!("bind 127.0.0.1:{port}: {e}")));
+                return Err(error);
             }
         };
-        let bound_port = listener
-            .local_addr()
-            .map_err(|e| AuthError::Http(format!("local_addr: {e}")))?
-            .port();
         let redirect_uri = format!("http://127.0.0.1:{bound_port}/login");
         let scope_str = STREAMING_SCOPES;
         let url = format!(
@@ -176,6 +216,7 @@ impl AuthManager {
         );
         let snap = {
             let mut s = self.state.lock().await;
+            s.clear_all_pkce();
             s.pkce = Some(PkceTx {
                 verifier: verifier.clone(),
                 state: csrf.clone(),
@@ -193,15 +234,6 @@ impl AuthManager {
             self.emit("auth.changed", value).await;
         }
 
-        let this = Arc::clone(self);
-        let (cancel_tx, cancel_rx) = oneshot::channel();
-        *self.cancel.lock().await = Some(cancel_tx);
-        let handle = tokio::spawn(async move {
-            if let Err(e) = this.serve_callback(listener, bound_port, cancel_rx).await {
-                warn!(error = %e, "auth callback server failed");
-            }
-        });
-        *self.join_handle.lock().await = Some(handle);
         Ok(snap)
     }
     async fn begin_mock(self: &Arc<Self>, streaming: bool) -> Result<AuthStatus, AuthError> {
@@ -284,7 +316,7 @@ impl AuthManager {
             let account_id = s.current.as_ref().map(|at| at.account_id.clone());
             s.current = None;
             s.streaming = None;
-            s.pkce = None;
+            s.clear_all_pkce();
             s.last_auth_url = None;
             s.state = AuthState::Unauthenticated;
             (self.snapshot_locked(&s, None), account_id)
@@ -312,13 +344,10 @@ impl AuthManager {
         port: u16,
     ) -> Result<(), AuthError> {
         let pkce = {
-            let s = self.state.lock().await;
-            s.pkce.clone()
+            let mut s = self.state.lock().await;
+            s.remove_pkce(state)
         };
         let pkce = pkce.ok_or_else(|| AuthError::OAuth("no in-flight PKCE tx".into()))?;
-        if pkce.state != state {
-            return Err(AuthError::OAuth("state mismatch".into()));
-        }
         let (exchange_cid, is_streaming_auth) =
             resolve_exchange_target(pkce.flow, &self.client_id.read().await.clone());
 
@@ -331,7 +360,7 @@ impl AuthManager {
                 warn!(error = %e, "auth code exchange failed; restoring previous session");
                 let snap = {
                     let mut s = self.state.lock().await;
-                    s.pkce = None;
+                    s.remove_pkce(state);
                     s.last_auth_url = None;
                     // A streaming top-up over a Web login falls back to the
                     // surviving Authenticated session; a cold login with no
@@ -355,7 +384,6 @@ impl AuthManager {
         let scopes = at.scopes.clone();
         let token_for_store = at.clone();
 
-
         if is_streaming_auth {
             let web_account = self
                 .state
@@ -364,18 +392,59 @@ impl AuthManager {
                 .current
                 .as_ref()
                 .map(|token| token.account_id.clone());
-            if web_account.as_deref() != Some(account_id.as_str()) {
+            let account_id =
+                reconcile_streaming_account(web_account.as_deref(), &account_id).to_string();
+            let mut token_for_store = at.clone();
+            token_for_store.account_id = account_id.clone();
+            // Only a genuinely different account is a conflict. A placeholder
+            // identity is reconciled below before both credentials are stored.
+            if account_conflict(web_account.as_deref(), &account_id) {
+                let snap = {
+                    let mut state = self.state.lock().await;
+                    state.clear_all_pkce();
+                    state.last_auth_url = None;
+                    state.state = if state.current.is_some() {
+                        AuthState::Authenticated
+                    } else {
+                        AuthState::Unauthenticated
+                    };
+                    self.snapshot_locked(&state, None)
+                };
+                if let Ok(value) = serde_json::to_value(&snap) {
+                    self.emit("auth.changed", value).await;
+                }
                 return Err(AuthError::OAuth(
                     "streaming authorization belongs to a different Spotify account".into(),
                 ));
             }
-            let persisted = storage::save_streaming_session(&token_for_store).await.is_ok();
+            let upgraded_web_token =
+                if should_upgrade_web_account(web_account.as_deref(), &account_id) {
+                    let mut state = self.state.lock().await;
+                    state.current.as_mut().map(|token| {
+                        token.account_id.clone_from(&account_id);
+                        token.clone()
+                    })
+                } else {
+                    None
+                };
+            if let Some(web_token) = upgraded_web_token {
+                if let Err(error) = storage::save_session(&web_token).await {
+                    warn!(error = %error, "upgraded Web account identity could not be persisted");
+                }
+            }
+            let persisted = storage::save_streaming_session(&token_for_store)
+                .await
+                .is_ok();
             storage::delete_librespot_credentials_cache();
             self.bump_epoch();
             let snap = {
                 let mut s = self.state.lock().await;
                 s.streaming = Some(token_for_store);
-                s.storage = if persisted { Storage::Keyring } else { Storage::Memory };
+                s.storage = if persisted {
+                    Storage::Keyring
+                } else {
+                    Storage::Memory
+                };
                 s.pkce = None;
                 s.last_auth_url = None;
                 s.state = AuthState::Authenticated;
@@ -430,11 +499,24 @@ impl AuthManager {
             }
         }
         // A fresh login belongs to a (possibly different) user: drop the old
-        // playback credentials and force the engine to reconnect.
+        // playback credentials and force the engine to reconnect. A streaming
+        // session for the same account can survive explicit Web reauthorization.
         let previous_streaming = self.state.lock().await.streaming.take();
-        storage::delete_streaming_session(previous_streaming.as_ref().map(|token| token.account_id.as_str())).await;
-        storage::delete_librespot_credentials_cache();
-        self.bump_epoch();
+        let keep_streaming = previous_streaming
+            .as_ref()
+            .is_some_and(|token| token.account_id == account_id);
+        if keep_streaming {
+            self.state.lock().await.streaming = previous_streaming;
+        } else {
+            storage::delete_streaming_session(
+                previous_streaming
+                    .as_ref()
+                    .map(|token| token.account_id.as_str()),
+            )
+            .await;
+            storage::delete_librespot_credentials_cache();
+            self.bump_epoch();
+        }
         tracing::info!("web login completed for account {account_id}");
         self.emit(
             "auth.completed",

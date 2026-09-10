@@ -125,7 +125,11 @@ impl AuthManager {
                     let persisted = storage::save_streaming_session(&new_at).await.is_ok();
                     let mut state = self.state.lock().await;
                     state.streaming = Some(new_at.clone());
-                    state.storage = if persisted { super::types::Storage::Keyring } else { super::types::Storage::Memory };
+                    state.storage = if persisted {
+                        super::types::Storage::Keyring
+                    } else {
+                        super::types::Storage::Memory
+                    };
                     return Ok((new_at.access_token, new_at.expires_at));
                 }
                 if status.is_client_error() {
@@ -277,8 +281,9 @@ async fn fetch_spotify_user_id(access_token: &str) -> Option<String> {
         return None;
     }
     let body: serde_json::Value = resp.json().await.ok()?;
-    body.get("id")?
-        .as_str()
+    body.get("id")
+        .or_else(|| body.get("account_id"))
+        .and_then(|v| v.as_str())
         .map(String::from)
         .filter(|id| !id.trim().is_empty())
 }

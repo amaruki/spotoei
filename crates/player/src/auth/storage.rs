@@ -12,6 +12,13 @@ fn memory_only() -> bool {
 /// keyring-only policy. These files contain OAuth tokens and must not remain
 /// after an upgrade.
 pub fn purge_legacy_file_credentials() {
+    // Memory-only mode (tests, keyring-less runs) is a sandbox: it must not
+    // touch credential files on disk, including legacy ones. Callers' other
+    // storage ops already honor `memory_only()`; this one was the outlier
+    // that made logout/shutdown delete `session.json` behind the tests' back.
+    if memory_only() {
+        return;
+    }
     let config_dir = std::env::var("XDG_CONFIG_HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
@@ -52,7 +59,9 @@ pub async fn load_from_keyring(account_id: &str) -> Result<Option<AccessToken>, 
     }
 }
 
-pub async fn load_streaming_session_for(account_id: &str) -> Result<Option<AccessToken>, AuthError> {
+pub async fn load_streaming_session_for(
+    account_id: &str,
+) -> Result<Option<AccessToken>, AuthError> {
     if memory_only() {
         return Ok(None);
     }
@@ -60,7 +69,9 @@ pub async fn load_streaming_session_for(account_id: &str) -> Result<Option<Acces
     match entry.get_password() {
         Ok(s) => serde_json::from_str::<AccessToken>(&s)
             .map(Some)
-            .map_err(|e| AuthError::KeyringUnavailable(format!("invalid streaming credential: {e}"))),
+            .map_err(|e| {
+                AuthError::KeyringUnavailable(format!("invalid streaming credential: {e}"))
+            }),
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(AuthError::KeyringUnavailable(e.to_string())),
     }
@@ -68,7 +79,9 @@ pub async fn load_streaming_session_for(account_id: &str) -> Result<Option<Acces
 
 pub async fn save_streaming_session(at: &AccessToken) -> Result<(), AuthError> {
     if memory_only() {
-        return Err(AuthError::KeyringUnavailable("memory-only authentication".into()));
+        return Err(AuthError::KeyringUnavailable(
+            "memory-only authentication".into(),
+        ));
     }
     let s = serde_json::to_string(at).map_err(|e| AuthError::Config(e.to_string()))?;
     let entry = streaming_keyring_entry(&at.account_id)?;
@@ -116,7 +129,9 @@ pub fn delete_librespot_credentials_cache() {
 
 pub async fn load_session(client_id: &str) -> Result<Option<AccessToken>, AuthError> {
     if memory_only() {
-        return Err(AuthError::KeyringUnavailable("memory-only authentication".into()));
+        return Err(AuthError::KeyringUnavailable(
+            "memory-only authentication".into(),
+        ));
     }
     let Some(at) = load_from_keyring("default").await? else {
         return Ok(None);
@@ -141,7 +156,9 @@ pub async fn save_to_keyring_account(account_id: &str, at: &AccessToken) -> Resu
 
 pub async fn save_session(at: &AccessToken) -> Result<(), AuthError> {
     if memory_only() {
-        return Err(AuthError::KeyringUnavailable("memory-only authentication".into()));
+        return Err(AuthError::KeyringUnavailable(
+            "memory-only authentication".into(),
+        ));
     }
     save_to_keyring_account(&at.account_id, at).await?;
     save_to_keyring_account("default", at).await

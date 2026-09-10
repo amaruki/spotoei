@@ -223,6 +223,7 @@ fn streaming_login_requests_full_metadata_scopes() {
         "user-read-playback-position",
         "user-top-read",
         "user-read-recently-played",
+        "user-read-private",
     ];
     for scope in &required {
         assert!(
@@ -244,12 +245,167 @@ fn web_login_with_keymaster_client_stays_a_web_login() {
     // Regression: the old URL-substring detector routed a Web login through
     // the streaming store whenever the configured client was Keymaster, so
     // the app never became authenticated.
-    let (client, is_streaming) = resolve_exchange_target(
-        AuthFlow::Web,
-        super::constants::KEYMASTER_CLIENT_ID,
-    );
+    let (client, is_streaming) =
+        resolve_exchange_target(AuthFlow::Web, super::constants::KEYMASTER_CLIENT_ID);
     assert_eq!(client, super::constants::KEYMASTER_CLIENT_ID);
     assert!(!is_streaming);
+}
+
+#[test]
+fn account_conflict_requires_two_known_account_ids() {
+    let streaming_account = "user-1";
+    assert!(
+        !super::oauth_flow::account_conflict(None, streaming_account),
+        "an unknown account must not create a false mismatch"
+    );
+    assert!(
+        !super::oauth_flow::account_conflict(Some("user-1"), streaming_account),
+        "same-account streaming top-up must stay accepted"
+    );
+    assert!(
+        super::oauth_flow::account_conflict(Some("user-2"), streaming_account),
+        "a genuinely different web account must still be rejected"
+    );
+}
+
+#[test]
+fn account_conflict_treats_default_sentinel_as_non_conflicting() {
+    // When /v1/me fails (missing scope, rate limit, offline), the token
+    // exchange falls back to "default". This placeholder must NEVER conflict
+    // with a real user ID, otherwise streaming login fails as a mismatch.
+    assert!(
+        !super::oauth_flow::account_conflict(Some("default"), "lt43ui36u1dp7b0w8giykp19f"),
+        "default web account must not conflict with incoming real account"
+    );
+    assert!(
+        !super::oauth_flow::account_conflict(Some("lt43ui36u1dp7b0w8giykp19f"), "default"),
+        "real web account must not conflict with incoming default fallback"
+    );
+    assert!(
+        !super::oauth_flow::account_conflict(Some("default"), "default"),
+        "default and default must not conflict"
+    );
+    assert!(
+        super::oauth_flow::account_conflict(Some("user-1"), "user-2"),
+        "two genuinely different accounts must still conflict"
+    );
+}
+
+#[test]
+fn reconcile_streaming_account_adopts_active_web_user() {
+    // When Keymaster token has "default" because profile lookup was unavailable,
+    // but a Web login is already active, streaming must bind to that web account.
+    let reconciled = super::oauth_flow::reconcile_streaming_account(
+        Some("lt43ui36u1dp7b0w8giykp19f"),
+        "default",
+    );
+    assert_eq!(reconciled, "lt43ui36u1dp7b0w8giykp19f");
+
+    let kept_real = super::oauth_flow::reconcile_streaming_account(
+        Some("lt43ui36u1dp7b0w8giykp19f"),
+        "lt43ui36u1dp7b0w8giykp19f",
+    );
+    assert_eq!(kept_real, "lt43ui36u1dp7b0w8giykp19f");
+
+    let no_web = super::oauth_flow::reconcile_streaming_account(None, "default");
+    assert_eq!(no_web, "default");
+
+    let discovered = super::oauth_flow::reconcile_streaming_account(
+        Some("default"),
+        "lt43ui36u1dp7b0w8giykp19f",
+    );
+    assert_eq!(discovered, "lt43ui36u1dp7b0w8giykp19f");
+    assert!(super::oauth_flow::should_upgrade_web_account(
+        Some("default"),
+        discovered,
+    ));
+    assert!(!super::oauth_flow::should_upgrade_web_account(
+        Some("lt43ui36u1dp7b0w8giykp19f"),
+        discovered,
+    ));
+}
+
+#[test]
+fn web_completion_keeps_only_a_same_account_streaming_session() {
+    // Explicit Web reauthorization for the same user must not discard the
+    // valid streaming session. Only an account switch may drop it.
+    let fresh_web_account = "user-1";
+    let keep = |stored: Option<&str>| stored.is_some_and(|prev| prev == fresh_web_account);
+    assert!(keep(Some("user-1")), "same-account session must survive");
+    assert!(
+        !keep(Some("user-2")),
+        "other-account session must be dropped"
+    );
+    assert!(!keep(None), "nothing to keep without a stored session");
+}
+
+#[tokio::test]
+async fn streaming_login_replaces_the_finished_web_callback_transaction() {
+    with_memory_storage(|| async {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(16);
+        let auth = std::sync::Arc::new(AuthManager::new(
+            super::constants::NCSPOT_CLIENT_ID.to_string(),
+            tx,
+        ));
+
+        auth.begin(None).await.expect("begin web login");
+        let web_state = auth
+            .state
+            .lock()
+            .await
+            .pkce
+            .as_ref()
+            .expect("web PKCE transaction")
+            .state
+            .clone();
+        {
+            let mut state = auth.state.lock().await;
+            state.current = Some(AccessToken {
+                access_token: "web-access".to_string(),
+                refresh_token: "web-refresh".to_string(),
+                expires_at: super::constants::now_ms() + 3_600_000,
+                account_id: "test-user".to_string(),
+                scopes: vec![],
+                client_id: super::constants::NCSPOT_CLIENT_ID.to_string(),
+            });
+            state.state = AuthState::Authenticated;
+        }
+
+        auth.begin_streaming().await.expect("begin streaming login");
+        let state = auth.state.lock().await;
+        assert!(
+            state.find_pkce(&web_state).is_none(),
+            "the completed Web callback must not remain valid after streaming login starts"
+        );
+        assert!(
+            state
+                .pkce
+                .as_ref()
+                .is_some_and(|transaction| transaction.flow == AuthFlow::Streaming),
+            "the replacement listener must own the streaming transaction"
+        );
+        drop(state);
+        auth.cancel_in_flight().await;
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn streaming_login_requires_a_completed_web_session() {
+    with_memory_storage(|| async {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(8);
+        let auth = std::sync::Arc::new(AuthManager::new(
+            super::constants::NCSPOT_CLIENT_ID.to_string(),
+            tx,
+        ));
+        let error = auth
+            .begin_streaming()
+            .await
+            .expect_err("streaming must not start before Web authentication completes");
+        assert!(matches!(error, AuthError::NotAuthenticated));
+        assert!(auth.state.lock().await.pkce.is_none());
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -399,7 +555,9 @@ async fn memory_storage_never_persists_credentials() {
 
     with_memory_storage(|| async {
         assert!(super::storage::save_session(&token).await.is_err());
-        assert!(super::storage::save_streaming_session(&token).await.is_err());
+        assert!(super::storage::save_streaming_session(&token)
+            .await
+            .is_err());
         assert!(super::storage::load_session("test-client").await.is_err());
         assert!(super::storage::load_streaming_session_for("test-user")
             .await
@@ -419,8 +577,14 @@ fn credential_is_bound_to_the_issuing_client() {
         scopes: vec![],
         client_id: "issuer-client".to_string(),
     };
-    assert!(super::storage::credential_matches_client(&token, "issuer-client"));
-    assert!(!super::storage::credential_matches_client(&token, "other-client"));
+    assert!(super::storage::credential_matches_client(
+        &token,
+        "issuer-client"
+    ));
+    assert!(!super::storage::credential_matches_client(
+        &token,
+        "other-client"
+    ));
 }
 
 #[tokio::test]
@@ -435,7 +599,10 @@ async fn streaming_token_never_borrows_web_token_with_streaming_scope() {
                 refresh_token: "ncspot-web-refresh".to_string(),
                 expires_at: super::constants::now_ms() + 3600_000,
                 account_id: "test-user".to_string(),
-                scopes: vec!["streaming".to_string(), "user-read-playback-state".to_string()],
+                scopes: vec![
+                    "streaming".to_string(),
+                    "user-read-playback-state".to_string(),
+                ],
                 client_id: super::constants::NCSPOT_CLIENT_ID.to_string(),
             });
             s.state = AuthState::Authenticated;

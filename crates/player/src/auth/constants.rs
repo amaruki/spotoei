@@ -28,6 +28,7 @@ pub const DEFAULT_SCOPES: &[&str] = &[
     "user-top-read",
     "user-read-recently-played",
     "streaming",
+    "user-read-private",
 ];
 
 #[cfg(test)]
@@ -38,6 +39,7 @@ mod tests {
         assert!(super::DEFAULT_SCOPES.contains(&"user-read-recently-played"));
         assert!(super::DEFAULT_SCOPES.contains(&"user-library-modify"));
         assert!(super::DEFAULT_SCOPES.contains(&"playlist-modify-private"));
+        assert!(super::DEFAULT_SCOPES.contains(&"user-read-private"));
     }
 }
 

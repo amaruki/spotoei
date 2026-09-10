@@ -33,6 +33,8 @@ pub struct AuthManager {
     /// `JoinHandle` for the in-flight loopback callback server, if any.
     /// Held so the sidecar main loop can abort + await it on shutdown.
     pub(super) join_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// The TCP port the active callback server is listening on, if any.
+    pub(super) bound_port: Mutex<Option<u16>>,
 }
 
 impl AuthManager {
@@ -56,6 +58,7 @@ impl AuthManager {
             events,
             cancel: Mutex::new(None),
             join_handle: Mutex::new(None),
+            bound_port: Mutex::new(None),
         }
     }
 
@@ -69,7 +72,7 @@ impl AuthManager {
             let account_id = s.current.as_ref().map(|token| token.account_id.clone());
             s.current = None;
             s.streaming = None;
-            s.pkce = None;
+            s.clear_all_pkce();
             s.last_auth_url = None;
             s.state = AuthState::Unauthenticated;
             (self.snapshot_locked(&s, None), account_id)
@@ -147,9 +150,8 @@ impl AuthManager {
             handle.abort();
             let _ = handle.await;
         }
+        *self.bound_port.lock().await = None;
     }
-
-    /// Determine storage tier and load any persisted refresh material.
     /// Returns the active status snapshot after hydration.
     pub async fn hydrate(&self) -> AuthStatus {
         storage::purge_legacy_file_credentials();
