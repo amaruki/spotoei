@@ -493,7 +493,9 @@ async fn bogus_callback_keeps_the_pending_login_intact() {
         let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
         let server = std::sync::Arc::clone(&auth);
         let handle = tokio::spawn(async move {
-            let _ = server.serve_callback(listener, port, cancel_rx).await;
+            let _ = server
+                .serve_callback(listener, port, "correct-csrf".to_string(), cancel_rx)
+                .await;
         });
         let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
             .await
@@ -538,6 +540,138 @@ async fn bogus_callback_keeps_the_pending_login_intact() {
             s.pkce.as_ref().map(|p| p.state.as_str()) == Some("correct-csrf"),
             "pending login must survive a bogus callback so the newest tab still works"
         );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn accepted_callback_finishes_after_listener_shutdown() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    with_memory_storage(|| async {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(16);
+        let auth = std::sync::Arc::new(AuthManager::new("regression-client".to_string(), tx));
+        {
+            let mut state = auth.state.lock().await;
+            state.state = AuthState::Authenticating;
+            state.pkce = Some(super::types::PkceTx {
+                verifier: "verifier".to_string(),
+                state: "accepted-csrf".to_string(),
+                flow: AuthFlow::Web,
+            });
+            state.last_auth_url = Some("http://127.0.0.1:0/login".to_string());
+        }
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("loopback bind");
+        let port = listener.local_addr().expect("local addr").port();
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+        let server = std::sync::Arc::clone(&auth);
+        let handle = tokio::spawn(async move {
+            let _ = server
+                .serve_callback(listener, port, "accepted-csrf".to_string(), cancel_rx)
+                .await;
+        });
+
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .expect("connect");
+        stream
+            .write_all(
+                b"GET /login?code=callback-lifetime-test&state=accepted-csrf HTTP/1.1\r\nHost: x\r\nConnection: close\r\n",
+            )
+            .await
+            .expect("write partial callback");
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        let _ = cancel_tx.send(());
+        handle.await.expect("callback listener shutdown");
+        stream
+            .write_all(b"\r\n")
+            .await
+            .expect("finish callback request");
+
+        let mut response = Vec::new();
+        stream
+            .read_to_end(&mut response)
+            .await
+            .expect("read callback response");
+        let response = String::from_utf8_lossy(&response);
+        assert!(
+            response.contains("200 OK"),
+            "an accepted callback must finish after the listener closes: {response}"
+        );
+        assert!(
+            !response.contains("Spotoei stopped waiting"),
+            "an accepted callback must not lose its completion receiver"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn duplicate_callbacks_share_the_first_completion_result() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    with_memory_storage(|| async {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(16);
+        let auth = std::sync::Arc::new(AuthManager::new("regression-client".to_string(), tx));
+        {
+            let mut state = auth.state.lock().await;
+            state.state = AuthState::Authenticating;
+            state.pkce = Some(super::types::PkceTx {
+                verifier: "verifier".to_string(),
+                state: "duplicate-csrf".to_string(),
+                flow: AuthFlow::Web,
+            });
+        }
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("loopback bind");
+        let port = listener.local_addr().expect("local addr").port();
+        let (_cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+        let server = std::sync::Arc::clone(&auth);
+        let handle = tokio::spawn(async move {
+            let _ = server
+                .serve_callback(listener, port, "duplicate-csrf".to_string(), cancel_rx)
+                .await;
+        });
+
+        let mut first = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .expect("first connect");
+        let mut second = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .expect("second connect");
+        let partial = b"GET /login?code=callback-lifetime-test&state=duplicate-csrf HTTP/1.1\r\nHost: x\r\nConnection: close\r\n";
+        first.write_all(partial).await.expect("first partial write");
+        second
+            .write_all(partial)
+            .await
+            .expect("second partial write");
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        first.write_all(b"\r\n").await.expect("finish first request");
+        second
+            .write_all(b"\r\n")
+            .await
+            .expect("finish second request");
+
+        let first_read = async {
+            let mut response = Vec::new();
+            first.read_to_end(&mut response).await.expect("first read");
+            String::from_utf8_lossy(&response).into_owned()
+        };
+        let second_read = async {
+            let mut response = Vec::new();
+            second
+                .read_to_end(&mut response)
+                .await
+                .expect("second read");
+            String::from_utf8_lossy(&response).into_owned()
+        };
+        let (first_response, second_response) = tokio::join!(first_read, second_read);
+        assert!(first_response.contains("200 OK"), "{first_response}");
+        assert!(second_response.contains("200 OK"), "{second_response}");
+        handle.await.expect("callback listener completion");
     })
     .await;
 }

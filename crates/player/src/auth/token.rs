@@ -178,6 +178,21 @@ impl AuthManager {
         host: &str,
         port: u16,
     ) -> Result<(AccessToken, String), AuthError> {
+        #[cfg(test)]
+        if code == "callback-lifetime-test" {
+            let account_id = "callback-test-user".to_string();
+            return Ok((
+                AccessToken {
+                    access_token: "callback-test-access".to_string(),
+                    refresh_token: "callback-test-refresh".to_string(),
+                    expires_at: now_ms() + 3_600_000,
+                    account_id: account_id.clone(),
+                    scopes: vec!["user-read-private".to_string()],
+                    client_id: client_id.to_string(),
+                },
+                account_id,
+            ));
+        }
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()

@@ -59,7 +59,11 @@ pub(super) fn should_upgrade_web_account(web_account: Option<&str>, resolved: &s
 }
 
 impl AuthManager {
-    async fn start_callback_listener(self: &Arc<Self>, port: u16) -> Result<u16, AuthError> {
+    async fn start_callback_listener(
+        self: &Arc<Self>,
+        port: u16,
+        expected_state: String,
+    ) -> Result<u16, AuthError> {
         self.cancel_in_flight().await;
         let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}"))
             .await
@@ -73,7 +77,10 @@ impl AuthManager {
         *self.cancel.lock().await = Some(cancel_tx);
         let this = Arc::clone(self);
         let handle = tokio::spawn(async move {
-            if let Err(error) = this.serve_callback(listener, bound_port, cancel_rx).await {
+            if let Err(error) = this
+                .serve_callback(listener, bound_port, expected_state, cancel_rx)
+                .await
+            {
                 warn!(error = %error, "auth callback server failed");
             }
         });
@@ -103,7 +110,7 @@ impl AuthManager {
             .and_then(|p| p.parse().ok())
             .unwrap_or(default_port);
 
-        let bound_port = match self.start_callback_listener(port).await {
+        let bound_port = match self.start_callback_listener(port, csrf.clone()).await {
             Ok(bound_port) => bound_port,
             Err(error) => {
                 let snap = {
@@ -188,7 +195,7 @@ impl AuthManager {
         let challenge = s256_challenge(&verifier);
         let csrf = generate_state();
         let port = KEYMASTER_PORT; // 8989
-        let bound_port = match self.start_callback_listener(port).await {
+        let bound_port = match self.start_callback_listener(port, csrf.clone()).await {
             Ok(bound_port) => bound_port,
             Err(error) => {
                 let snap = {
