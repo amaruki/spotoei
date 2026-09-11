@@ -17,6 +17,7 @@ import {
   COLOR_PANEL_BG,
   COLOR_TEXT,
 } from '../theme';
+import { resolveImageProtocol } from '../imageProtocol';
 import type { UiViewState } from '../types';
 
 export interface EntityViewNodes {
@@ -121,6 +122,7 @@ export function buildEntityViews(renderer: CliRenderer, state: UiViewState): Ent
     width: 12,
     height: 6,
     fit: 'cover',
+    protocol: resolveImageProtocol(),
     visible: false,
     zIndex: 5,
   });

@@ -1,5 +1,13 @@
-import { BoxRenderable, type CliRenderer, ImageRenderable, TextRenderable, fg, t } from '@opentui/core';
+import {
+  BoxRenderable,
+  type CliRenderer,
+  ImageRenderable,
+  TextRenderable,
+  fg,
+  t,
+} from '@opentui/core';
 import { COLOR_BORDER, COLOR_DIM, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
+import { resolveImageProtocol } from '../imageProtocol';
 
 export interface PlaybackBarNodes {
   playbackBar: BoxRenderable;
@@ -28,18 +36,19 @@ export function buildPlaybackBar(renderer: CliRenderer): PlaybackBarNodes {
     id: 'playback-cover-box',
     width: 8,
     height: 3,
-    borderStyle: 'rounded',
-    borderColor: COLOR_BORDER,
     backgroundColor: COLOR_PANEL_BG,
     marginRight: 1,
     visible: false,
   });
 
+  // Full inner height of the bar: a 6x1 crop is unrecognizable, especially
+  // on terminals that fall back to the block protocol.
   const playbackCoverImage = new ImageRenderable(renderer, {
     id: 'playback-cover-image',
-    width: 6,
-    height: 1,
+    width: 8,
+    height: 3,
     fit: 'cover',
+    protocol: resolveImageProtocol(),
   });
   playbackCoverBox.add(playbackCoverImage);
 
