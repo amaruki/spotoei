@@ -53,10 +53,19 @@ export function createAuthActions(ctx: AppContext) {
     // Minting a new flow here would orphan the open tab, and completing the
     // orphaned tab is rejected as a state mismatch.
     const pending = await clients.auth.status().catch(() => null);
-    if (
-      pending?.authUrl &&
-      (pending.state === 'authenticating' || ctx.state.currentInfo?.streamingPending)
-    ) {
+    // `pending` is authoritative when the player reports it: any in-flight
+    // PKCE transaction must be re-opened, never replaced by a second flow
+    // (which would orphan the browser tab and answer it with a state error).
+    const pendingFlow =
+      pending?.pending ??
+      (pending?.state === 'authenticating' || Boolean(ctx.state.currentInfo?.streamingPending));
+    if (pending?.authUrl && pendingFlow) {
+      if (pending.state === 'authenticated') {
+        // A live flow on top of an authenticated session is the streaming
+        // top-up; keep the onboarding screen waiting on it.
+        ctx.state.currentInfo.streamingPending = true;
+        if (ui) ui.setStreamingPending(true);
+      }
       await openAuthUrl(ui, pending.authUrl, 'the pending login', true);
       return;
     }
@@ -109,7 +118,12 @@ export function createAuthActions(ctx: AppContext) {
       await clients.auth.logout();
       state.currentInfo.playback = null;
       state.lastPlaybackState = 'idle';
+      // The session that owned any pending streaming login is gone; a stale
+      // pending flag would make the next press reopen a dead authorization tab.
+      state.hasStreaming = false;
+      state.currentInfo.streamingPending = false;
       if (ui) {
+        ui.setStreamingPending(false);
         ui.setPlayback(null);
         ui.setRoute('onboarding');
         ui.setStatus('Logged out successfully. Press [A] or [Enter] to login again.', true);

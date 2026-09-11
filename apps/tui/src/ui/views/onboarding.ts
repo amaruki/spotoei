@@ -51,6 +51,7 @@ ${fg(COLOR_TEXT)('Actions:')}
   }
 
   if (state.auth.state === 'authenticated' && state.streamingPending) {
+    const pendingUrl = state.auth.authUrl;
     return t`${bold('== Step 2 of 2: Audio Streaming Authorization ==')}${keyringWarning}
 ${fg(COLOR_SUCCESS)('[✔ Step 1/2: Web API Connected]')} ───▶ ${fg(COLOR_ACCENT)(bold('[● Step 2/2: Audio Streaming]'))}
 
@@ -58,6 +59,7 @@ ${fg(COLOR_TEXT)('Web API is authorized. Step 2 connects local Librespot playbac
 
 ${bold('Press [A] or [Enter]')} to open browser (or re-open tab)!
 ${fg(COLOR_TEXT)('Complete the authorization in the newest browser tab.')}
+${pendingUrl ? `\n${bold('Current login URL:')}\n${fg(COLOR_DIM)(pendingUrl)}\n${fg(COLOR_WARN)('(Only this tab is valid — older tabs are stale.)')}` : ''}
 
 ${fg(COLOR_DIM)('Press [C] to edit Client ID  •  Press [Q] to quit  •  ?: palette')}`;
   }
@@ -79,12 +81,14 @@ ${fg(COLOR_DIM)('Or press [D] to use the default shared Client ID (higher risk o
 
   if (step === 'authenticating') {
     const header = isKeymaster ? '== Authenticating with Spotify ==' : '== Step 2 of 2: Authenticating ==';
+    const pendingUrl = state.auth.authUrl;
     return t`${bold(header)}${keyringWarning}
 ${fg(COLOR_ACCENT)(bold('Browser opened for authentication!'))}
 ${fg(COLOR_TEXT)('Complete the login in your browser window.')}
 
 ${bold('Redirect URI listening at:')}
 ${fg(COLOR_SUCCESS)(redirectUri)} ${fg(COLOR_DIM)('(127.0.0.1 — ensure Dashboard lists exactly this URI)')}
+${pendingUrl ? `\n${bold('Current login URL:')}\n${fg(COLOR_DIM)(pendingUrl)}\n${fg(COLOR_WARN)('(Only this tab is valid — older tabs are stale.)')}` : ''}
 
 ${fg(COLOR_DIM)('Waiting for Spotify login callback…')}
 ${fg(COLOR_DIM)('Press [A] to re-open browser  •  Press [C] to edit Client ID')}`;

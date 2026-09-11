@@ -73,9 +73,21 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
   const failureListeners = new Set<(failure: AuthFailedEventDataT) => void>();
   const completedListeners = new Set<(completed: AuthCompletedEventDataT) => void>();
 
-  // Cached in-memory token state.
+  // Cached in-memory token state. `tokenEpoch` is bumped whenever the cache
+  // is dropped (401 invalidation, login, logout, client-ID change) so a
+  // refresh already on the wire can never repopulate the cache with a token
+  // minted for an identity the app has moved on from.
   let cachedToken: AuthTokenDataT | null = null;
-  let refreshPromise: Promise<string> | null = null;
+  let refreshPromise: Promise<string | null> | null = null;
+  let tokenEpoch = 0;
+  // In-flight `auth.invalidate_token` command. New token fetches wait for it
+  // so the player cannot be asked for a token before it drops the rejected one.
+  let invalidationPromise: Promise<void> | null = null;
+
+  const dropCachedToken = (): void => {
+    cachedToken = null;
+    tokenEpoch++;
+  };
 
   if (!child.stdout || !child.stdin) {
     throw new Error('child stdin/stdout must be piped to createAuthClient');
@@ -113,7 +125,7 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
             res.data.state === 'refresh-failed' ||
             res.data.state === 'authenticating'
           ) {
-            cachedToken = null;
+            dropCachedToken();
           }
           for (const l of statusListeners) {
             try {
@@ -124,7 +136,7 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
           }
         }
       } else if (msg.event === 'auth.failed') {
-        cachedToken = null;
+        dropCachedToken();
         const res = AuthFailedEventData.safeParse(msg.data);
         if (res.success) {
           for (const l of failureListeners) {
@@ -199,11 +211,14 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
       return sendCommand<AuthStatusDataT>(cmd, validateAuthStatus);
     },
     async begin(scopes?: string[]): Promise<AuthStatusDataT> {
+      // A login may belong to another account: drop any token the previous
+      // identity still has in flight before the flow starts.
+      dropCachedToken();
       const id = newRequestId();
       const cmd = makeAuthBegin(id, scopes);
       const res = await sendCommand<AuthStatusDataT>(cmd, validateAuthStatus);
-      // Invalidate any old in-memory token.
-      cachedToken = null;
+      // Invalidate anything that raced the command itself.
+      dropCachedToken();
       return res;
     },
     async beginStreaming(): Promise<AuthStatusDataT> {
@@ -221,65 +236,91 @@ export function createAuthClient(options: AuthClientOptions): AuthClient {
       return res?.authenticated ?? false;
     },
     async logout(): Promise<AuthStatusDataT> {
+      dropCachedToken();
       const id = newRequestId();
       const cmd = makeAuthLogout(id);
       const res = await sendCommand<AuthStatusDataT>(cmd, validateAuthStatus);
-      cachedToken = null;
+      dropCachedToken();
       return res;
     },
 
     async setClientId(clientId: string): Promise<void> {
+      dropCachedToken();
       const id = newRequestId();
       const cmd = makeAuthSetClientId(id, clientId);
       await sendCommand<unknown>(cmd, (data) => ({ ok: true, value: data }));
-      cachedToken = null;
+      dropCachedToken();
     },
 
     async getWebToken(): Promise<string> {
-      const now = Date.now();
-      // Proactive refresh at 80% TTL. If expires in 1hr, refresh at remaining 12min.
-      if (cachedToken && cachedToken.expiresAt > now + 60_000) {
-        return cachedToken.accessToken;
-      }
-
-      if (refreshPromise) {
-        return refreshPromise;
-      }
-
-      refreshPromise = (async () => {
-        try {
-          const id = newRequestId();
-          const cmd = makeAuthGetWebToken(id);
-          const data = await sendCommand<AuthTokenDataT>(cmd, validateAuthToken);
-          const prevRefreshToken = cachedToken?.refreshToken;
-          const nextRefreshToken = data.refreshToken || prevRefreshToken;
-          cachedToken = {
-            ...data,
-            ...(nextRefreshToken ? { refreshToken: nextRefreshToken } : {}),
-          };
-          return data.accessToken;
-        } finally {
-          refreshPromise = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        // An invalidation is being applied: wait for the player to drop the
+        // rejected token before asking for the next one.
+        if (invalidationPromise) {
+          await invalidationPromise.catch(() => {});
+          continue;
         }
-      })();
+        const now = Date.now();
+        // Proactive refresh at 80% TTL. If expires in 1hr, refresh at remaining 12min.
+        if (cachedToken && cachedToken.expiresAt > now + 60_000) {
+          return cachedToken.accessToken;
+        }
 
-      return refreshPromise;
+        let inFlight = refreshPromise;
+        if (!inFlight) {
+          const epoch = tokenEpoch;
+          inFlight = (async (): Promise<string | null> => {
+            try {
+              const id = newRequestId();
+              const cmd = makeAuthGetWebToken(id);
+              const data = await sendCommand<AuthTokenDataT>(cmd, validateAuthToken);
+              if (epoch !== tokenEpoch) {
+                // 401 invalidation, login, or logout happened while this
+                // refresh was on the wire: the value may be the rejected token
+                // or belong to a previous account. Never cache it.
+                return null;
+              }
+              const prevRefreshToken = cachedToken?.refreshToken;
+              const nextRefreshToken = data.refreshToken || prevRefreshToken;
+              cachedToken = {
+                ...data,
+                ...(nextRefreshToken ? { refreshToken: nextRefreshToken } : {}),
+              };
+              return data.accessToken;
+            } finally {
+              if (refreshPromise === inFlight) refreshPromise = null;
+            }
+          })();
+          refreshPromise = inFlight;
+        }
+        const token = await inFlight;
+        if (token !== null) return token;
+        // Superseded: loop and fetch for the current epoch.
+      }
+      throw new Error('token refresh superseded by a newer authentication state');
     },
 
     clearToken(): void {
-      cachedToken = null;
+      dropCachedToken();
     },
 
     async invalidateToken(): Promise<void> {
-      cachedToken = null;
-      try {
-        const id = newRequestId();
-        const cmd = makeAuthInvalidateToken(id);
-        await sendCommand<unknown>(cmd, (data) => ({ ok: true, value: data }));
-      } catch {
-        // Local cache is already cleared; the retry's getWebToken call
-        // surfaces the real error if the player is unreachable.
-      }
+      dropCachedToken();
+      if (invalidationPromise) return invalidationPromise;
+      const run = (async (): Promise<void> => {
+        try {
+          const id = newRequestId();
+          const cmd = makeAuthInvalidateToken(id);
+          await sendCommand<unknown>(cmd, (data) => ({ ok: true, value: data }));
+        } catch {
+          // Local cache is already cleared; the retry's getWebToken call
+          // surfaces the real error if the player is unreachable.
+        } finally {
+          invalidationPromise = null;
+        }
+      })();
+      invalidationPromise = run;
+      return run;
     },
 
     onStatusChange(listener: (status: AuthStatusDataT) => void): () => void {

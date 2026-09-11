@@ -29,6 +29,9 @@ export const AuthStatusData = z.object({
   accessTokenExpiresAt: z.number().int().nonnegative().nullable(),
   // PKCE flow target, populated only when `state === 'authenticating'`.
   authUrl: z.string().url().nullable(),
+  // True while a PKCE transaction is in flight. The TUI re-opens the pending
+  // browser tab instead of minting a competing flow when this is set.
+  pending: z.boolean().optional(),
 });
 export type AuthStatusDataT = z.infer<typeof AuthStatusData>;
 

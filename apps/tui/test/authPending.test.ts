@@ -54,7 +54,7 @@ function authClients(overrides: Record<string, unknown> = {}) {
       streamingStatus: async () => false,
       ...overrides,
     },
-    playback: { onChange: () => {}, onPosition: () => {} },
+    playback: { onChange: () => {}, onPosition: () => {}, pause: async () => {} },
     queueManager: { subscribe: () => {} },
     lyrics: { subscribe: () => {} },
     webApi: {},
@@ -345,6 +345,73 @@ describe('pending login flow', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(triggers).toBe(1);
     expect(directStreamingBegins).toBe(0);
+  });
+
+  test('logout clears a stale streaming-pending flag', async () => {
+    const currentInfo = view('authenticated');
+    currentInfo.streamingPending = true;
+    let logouts = 0;
+    const ctx = {
+      clients: authClients({
+        logout: async () => {
+          logouts++;
+          return view('unauthenticated').auth;
+        },
+      }),
+      state: { currentInfo, hasStreaming: true, lastPlaybackState: 'idle' },
+      getUi: (): Ui | null => null,
+    } as unknown as AppContext;
+
+    await createAuthActions(ctx).triggerLogout();
+
+    expect(logouts).toBe(1);
+    expect(currentInfo.streamingPending).toBe(false);
+    expect(ctx.state.hasStreaming).toBe(false);
+  });
+
+  test('an unauthenticated status clears the stale streaming-pending flag', async () => {
+    const currentInfo = view('authenticated');
+    currentInfo.streamingPending = true;
+    let statusListener: ((status: AuthStatusDataT) => void) | null = null;
+    const ctx = {
+      clients: authClients({
+        onStatusChange: (listener: (status: AuthStatusDataT) => void) => {
+          statusListener = listener;
+        },
+      }),
+      state: { currentInfo, lastPlaybackState: 'idle' },
+      getUi: (): Ui | null => null,
+    } as unknown as AppContext;
+    wireSubscriptions(ctx, baseActions, { enrichPlaybackTrack: (x: never) => x } as never);
+
+    statusListener!(view('unauthenticated').auth);
+
+    expect(currentInfo.streamingPending).toBe(false);
+  });
+
+  test('a player-reported pending flow is reopened without a local pending flag', async () => {
+    openedUrls.length = 0;
+    let streamingBegins = 0;
+    const ctx = {
+      clients: authClients({
+        status: async () => ({
+          ...view('authenticated').auth,
+          authUrl: 'http://127.0.0.1:8989/login?state=pending',
+          pending: true,
+        }),
+        beginStreaming: async () => {
+          streamingBegins++;
+          return view('authenticating').auth;
+        },
+      }),
+      state: { currentInfo: view('authenticated'), hasStreaming: true, lastPlaybackState: 'idle' },
+      getUi: (): Ui | null => null,
+    } as unknown as AppContext;
+
+    await createAuthActions(ctx).triggerAuth();
+
+    expect(streamingBegins).toBe(0);
+    expect(openedUrls).toEqual(['http://127.0.0.1:8989/login?state=pending']);
   });
 
   test('setAuth keeps user on onboarding while streamingPending is true, and onAuthCompleted routes home', async () => {

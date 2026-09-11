@@ -62,6 +62,12 @@ export function wireSubscriptions(
     }
   };
 
+  const clearStreamingPending = (): void => {
+    const ui = getUi();
+    if (ui) ui.setStreamingPending(false);
+    else state.currentInfo.streamingPending = false;
+  };
+
   const reconcileStreaming = async (startWhenMissing: boolean): Promise<void> => {
     const version = ++streamingCheckVersion;
     const hasStreaming =
@@ -142,13 +148,18 @@ export function wireSubscriptions(
       state.currentInfo.playback = null;
       if (ui) ui.setPlayback(null);
     }
-    if (wasAuthed && next.state === 'unauthenticated') {
-      void clients.playback.pause().catch(() => {});
-      state.hasStreaming = false;
-      state.currentInfo.playback = null;
-      if (ui) {
-        ui.setPlayback(null);
+    if (next.state === 'unauthenticated') {
+      if (wasAuthed) {
+        void clients.playback.pause().catch(() => {});
+        state.hasStreaming = false;
+        state.currentInfo.playback = null;
+        if (ui) {
+          ui.setPlayback(null);
+        }
       }
+      // A pending streaming login died with the session: without this, the
+      // next press re-opens a dead authorization URL instead of starting fresh.
+      clearStreamingPending();
     } else if (next.state === 'refresh-failed') {
       if (ui) ui.setStatus('Session refresh failed; will retry', true);
     }
