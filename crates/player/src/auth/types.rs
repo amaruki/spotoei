@@ -10,6 +10,8 @@ pub enum AuthError {
     StreamingLoginRequired,
     #[error("OAuth error: {0}")]
     OAuth(String),
+    #[error("login superseded by a newer request or sign-out")]
+    Superseded,
     #[error("HTTP error: {0}")]
     Http(String),
     #[error("keyring unavailable: {0}")]
@@ -47,7 +49,23 @@ pub struct AuthStatus {
     pub storage: Storage,
     pub access_token_expires_at: Option<u64>,
     pub auth_url: Option<String>,
+    /// True while a PKCE transaction is in flight. The TUI uses this instead
+    /// of local flags to decide whether a press should re-open the pending
+    /// browser tab rather than mint a competing flow.
+    pub pending: bool,
 }
+
+/// A PKCE state that was already used or intentionally superseded. A browser
+/// tab that completes one of these after a newer flow started gets a neutral
+/// page instead of the alarming "state mismatch" error.
+#[derive(Debug, Clone)]
+pub struct RecentState {
+    pub state: String,
+    pub at_ms: u64,
+}
+
+const RECENT_STATE_TTL_MS: u64 = 10 * 60 * 1000;
+const RECENT_STATE_CAP: usize = 8;
 
 /// Which of the two independent logins a PKCE transaction belongs to.
 /// The Web login authorizes API access under the configured client; the
@@ -93,6 +111,8 @@ pub struct InnerState {
     pub streaming: Option<AccessToken>,
     pub pkce: Option<PkceTx>,
     pub last_auth_url: Option<String>,
+    /// Recently completed/superseded PKCE states, newest last.
+    pub recent_states: Vec<RecentState>,
 }
 
 impl InnerState {
@@ -103,16 +123,50 @@ impl InnerState {
             .cloned()
     }
 
+    fn remember_state(&mut self, state: &str) {
+        if state.is_empty() {
+            return;
+        }
+        let now = super::constants::now_ms();
+        self.recent_states.retain(|recent| {
+            now.saturating_sub(recent.at_ms) <= RECENT_STATE_TTL_MS && recent.state != state
+        });
+        self.recent_states.push(RecentState {
+            state: state.to_string(),
+            at_ms: now,
+        });
+        while self.recent_states.len() > RECENT_STATE_CAP {
+            self.recent_states.remove(0);
+        }
+    }
+
+    /// Whether `state` was minted by this process and already consumed. Used
+    /// to answer a late browser tab with a neutral page rather than treating
+    /// it like a forged state parameter.
+    pub fn is_recent_state(&self, state: &str) -> bool {
+        if state.is_empty() {
+            return false;
+        }
+        let now = super::constants::now_ms();
+        self.recent_states.iter().any(|recent| {
+            recent.state == state && now.saturating_sub(recent.at_ms) <= RECENT_STATE_TTL_MS
+        })
+    }
+
     pub fn remove_pkce(&mut self, state: &str) -> Option<PkceTx> {
         if self.pkce.as_ref().map(|p| p.state.as_str()) == Some(state) {
-            self.pkce.take()
+            let pkce = self.pkce.take();
+            self.remember_state(state);
+            pkce
         } else {
             None
         }
     }
 
     pub fn clear_all_pkce(&mut self) {
-        self.pkce = None;
+        if let Some(pkce) = self.pkce.take() {
+            self.remember_state(&pkce.state);
+        }
     }
 }
 

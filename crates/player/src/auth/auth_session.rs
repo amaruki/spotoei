@@ -342,6 +342,9 @@ fn web_completion_keeps_only_a_same_account_streaming_session() {
 #[tokio::test]
 async fn streaming_login_replaces_the_finished_web_callback_transaction() {
     with_memory_storage(|| async {
+        // Ephemeral port so the suite never fights a running app for 8989.
+        let old_port = std::env::var("SPOTOEI_REDIRECT_PORT").ok();
+        std::env::set_var("SPOTOEI_REDIRECT_PORT", "0");
         let (tx, _rx) = tokio::sync::mpsc::channel::<String>(16);
         let auth = std::sync::Arc::new(AuthManager::new(
             super::constants::NCSPOT_CLIENT_ID.to_string(),
@@ -386,6 +389,10 @@ async fn streaming_login_replaces_the_finished_web_callback_transaction() {
         );
         drop(state);
         auth.cancel_in_flight().await;
+        match old_port {
+            Some(value) => std::env::set_var("SPOTOEI_REDIRECT_PORT", value),
+            None => std::env::remove_var("SPOTOEI_REDIRECT_PORT"),
+        }
     })
     .await;
 }
@@ -470,7 +477,7 @@ async fn failed_exchange_restores_the_previous_session() {
 }
 
 #[tokio::test]
-async fn bogus_callback_keeps_the_pending_login_intact() {
+async fn previous_run_callback_cannot_complete_the_pending_login() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     with_memory_storage(|| async {
@@ -532,13 +539,88 @@ async fn bogus_callback_keeps_the_pending_login_intact() {
         let _ = cancel_tx.send(());
         handle.abort();
         assert!(
-            text.contains("400"),
-            "bogus callback must be rejected, got: {text}"
+            text.contains("200") && text.contains("Login Tab Expired"),
+            "an unknown-state redirect must get the expired-tab notice, got: {text}"
         );
         let s = auth.state.lock().await;
         assert!(
             s.pkce.as_ref().map(|p| p.state.as_str()) == Some("correct-csrf"),
             "pending login must survive a bogus callback so the newest tab still works"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn expired_callback_forwards_the_browser_to_the_active_login() {
+    use tokio::io::AsyncWriteExt;
+
+    with_memory_storage(|| async {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(64);
+        let auth = std::sync::Arc::new(AuthManager::new("regression-client".to_string(), tx));
+        {
+            let mut s = auth.state.lock().await;
+            s.state = AuthState::Authenticating;
+            s.pkce = Some(web_pkce("active-csrf"));
+            s.last_auth_url = Some(
+                "https://accounts.spotify.com/authorize?client_id=x&state=active-csrf".to_string(),
+            );
+        }
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("loopback bind");
+        let port = listener.local_addr().expect("local addr").port();
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+        let server = std::sync::Arc::clone(&auth);
+        let handle = tokio::spawn(async move {
+            let _ = server
+                .serve_callback(listener, port, "active-csrf".to_string(), cancel_rx)
+                .await;
+        });
+
+        let send_stale = |port: u16| async move {
+            let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .expect("connect");
+            stream
+                .write_all(
+                    b"GET /callback?code=stale-code&state=old-run-csrf HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n",
+                )
+                .await
+                .expect("write");
+            read_one_http_response(&mut stream).await
+        };
+
+        let first = send_stale(port).await;
+        let second = send_stale(port).await;
+        let third = send_stale(port).await;
+        let _ = cancel_tx.send(());
+        handle.abort();
+
+        assert!(
+            first.contains("200") && first.contains("Login Tab Expired"),
+            "expired tab must get the neutral notice, got: {first}"
+        );
+        assert!(
+            first.contains("accounts.spotify.com/authorize")
+                && first.contains("http-equiv=\"refresh\""),
+            "expired tab must be forwarded to the pending login, got: {first}"
+        );
+        assert!(
+            second.contains("http-equiv=\"refresh\""),
+            "the second attempt may still auto-forward, got: {second}"
+        );
+        assert!(
+            !third.contains("http-equiv=\"refresh\"")
+                && third.contains("Open the current login")
+                && third.contains("accounts.spotify.com/authorize"),
+            "after a bounce the notice must stop auto-forwarding and offer a link, got: {third}"
+        );
+        assert!(
+            auth.state.lock().await.pkce.as_ref().map(|p| p.state.as_str())
+                == Some("active-csrf"),
+            "the live flow must survive the forwarded stale callback"
         );
     })
     .await;
@@ -671,7 +753,96 @@ async fn duplicate_callbacks_share_the_first_completion_result() {
         let (first_response, second_response) = tokio::join!(first_read, second_read);
         assert!(first_response.contains("200 OK"), "{first_response}");
         assert!(second_response.contains("200 OK"), "{second_response}");
+        // Both responses must close their connection: a browser reusing a
+        // completed flow's connection would hit that flow's stale closure.
+        assert!(
+            first_response
+                .to_lowercase()
+                .contains("connection: close"),
+            "{first_response}"
+        );
+        assert!(
+            second_response
+                .to_lowercase()
+                .contains("connection: close"),
+            "{second_response}"
+        );
         handle.await.expect("callback listener completion");
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn callback_on_an_old_listener_completes_the_live_flow() {
+    use tokio::io::AsyncWriteExt;
+
+    with_memory_storage(|| async {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(16);
+        let auth = std::sync::Arc::new(AuthManager::new("regression-client".to_string(), tx));
+        {
+            let mut state = auth.state.lock().await;
+            state.state = AuthState::Authenticating;
+            state.pkce = Some(web_pkce("old-csrf"));
+            state.last_auth_url = Some(
+                "https://accounts.spotify.com/authorize?client_id=x&state=old-csrf".to_string(),
+            );
+        }
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("loopback bind");
+        let port = listener.local_addr().expect("local addr").port();
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+        let server = std::sync::Arc::clone(&auth);
+        let handle = tokio::spawn(async move {
+            let _ = server
+                .serve_callback(listener, port, "old-csrf".to_string(), cancel_rx)
+                .await;
+        });
+
+        // A newer login replaces the transaction while the old listener (and
+        // any browser connection to it) is still alive. This is exactly what
+        // happens when step 1 completes and step 2 starts on the same origin.
+        {
+            let mut state = auth.state.lock().await;
+            state.pkce = Some(web_pkce("new-csrf"));
+            state.last_auth_url = Some(
+                "https://accounts.spotify.com/authorize?client_id=x&state=new-csrf".to_string(),
+            );
+        }
+
+        // The live flow's callback arrives on a connection accepted by the
+        // old listener. It must complete the live flow, never expire.
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .expect("connect");
+        stream
+            .write_all(
+                b"GET /callback?code=callback-lifetime-test&state=new-csrf HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n",
+            )
+            .await
+            .expect("write");
+        let response = read_one_http_response(&mut stream).await;
+        let _ = cancel_tx.send(());
+        handle.abort();
+
+        assert!(
+            response.contains("200 OK") && response.contains("Authenticated with Spotify"),
+            "a live callback served by an older listener must complete, got: {response}"
+        );
+        assert!(
+            response.to_lowercase().contains("connection: close"),
+            "{response}"
+        );
+        assert_eq!(
+            auth.state
+                .lock()
+                .await
+                .current
+                .as_ref()
+                .map(|token| token.account_id.as_str()),
+            Some("callback-test-user"),
+            "the live login must land in the session"
+        );
     })
     .await;
 }
@@ -782,6 +953,376 @@ async fn revoked_streaming_credentials_require_a_new_login() {
         assert!(auth.has_streaming_session().await);
         auth.clear_revoked_streaming_session().await;
         assert!(!auth.has_streaming_session().await);
+    })
+    .await;
+}
+
+async fn read_one_http_response(stream: &mut tokio::net::TcpStream) -> String {
+    use tokio::io::AsyncReadExt;
+
+    let mut raw = Vec::new();
+    let mut buf = [0u8; 1024];
+    let header_end = loop {
+        let n = stream.read(&mut buf).await.expect("read");
+        assert!(n > 0, "server closed connection without responding");
+        raw.extend_from_slice(&buf[..n]);
+        if let Some(pos) = find_subslice(&raw, b"\r\n\r\n") {
+            break pos + 4;
+        }
+        assert!(raw.len() < 65536, "response headers too large");
+    };
+    let headers = String::from_utf8_lossy(&raw[..header_end]).to_lowercase();
+    let content_length: usize = headers
+        .lines()
+        .filter_map(|line| line.strip_prefix("content-length:"))
+        .find_map(|v| v.trim().parse().ok())
+        .unwrap_or(0);
+    while raw.len() < header_end + content_length {
+        let n = stream.read(&mut buf).await.expect("read body");
+        assert!(n > 0, "server closed connection mid-body");
+        raw.extend_from_slice(&buf[..n]);
+    }
+    String::from_utf8_lossy(&raw).into_owned()
+}
+
+fn web_pkce(state: &str) -> super::types::PkceTx {
+    super::types::PkceTx {
+        verifier: "verifier".to_string(),
+        state: state.to_string(),
+        flow: AuthFlow::Web,
+    }
+}
+
+#[tokio::test]
+async fn logout_during_the_code_exchange_aborts_the_login() {
+    with_memory_storage(|| async {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(64);
+        let auth = std::sync::Arc::new(AuthManager::new("regression-client".to_string(), tx));
+        {
+            let mut s = auth.state.lock().await;
+            s.state = AuthState::Authenticating;
+            s.pkce = Some(web_pkce("slow-csrf"));
+            s.last_auth_url = Some("http://127.0.0.1:8989/callback".to_string());
+        }
+
+        let exchanging = {
+            let auth = std::sync::Arc::clone(&auth);
+            tokio::spawn(async move {
+                auth.complete_flow("slow-exchange-test", "slow-csrf", 8989)
+                    .await
+            })
+        };
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        let logout = auth.logout().await.expect("logout");
+        assert_eq!(logout.state, AuthState::Unauthenticated);
+
+        let result = exchanging.await.expect("exchange task");
+        assert!(
+            matches!(result, Err(AuthError::Superseded)),
+            "a callback that outlives logout must be discarded, got: {result:?}"
+        );
+        let snap = auth.status().await;
+        assert_eq!(snap.state, AuthState::Unauthenticated);
+        assert!(
+            snap.account_id.is_none(),
+            "a logged-out session must not be resurrected by a late callback"
+        );
+
+        let mut saw_completed = false;
+        while let Ok(line) = rx.try_recv() {
+            if line.contains("\"auth.completed\"") {
+                saw_completed = true;
+            }
+        }
+        assert!(
+            !saw_completed,
+            "a superseded login must not emit auth.completed"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn client_id_change_during_the_code_exchange_aborts_the_login() {
+    with_memory_storage(|| async {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(64);
+        let auth = std::sync::Arc::new(AuthManager::new("old-client".to_string(), tx));
+        {
+            let mut s = auth.state.lock().await;
+            s.state = AuthState::Authenticating;
+            s.pkce = Some(web_pkce("slow-csrf"));
+        }
+
+        let exchanging = {
+            let auth = std::sync::Arc::clone(&auth);
+            tokio::spawn(async move {
+                auth.complete_flow("slow-exchange-test", "slow-csrf", 8989)
+                    .await
+            })
+        };
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        auth.set_client_id("new-client".to_string()).await;
+
+        let result = exchanging.await.expect("exchange task");
+        assert!(
+            matches!(result, Err(AuthError::Superseded)),
+            "a token minted for the old client must be discarded, got: {result:?}"
+        );
+        let snap = auth.status().await;
+        assert_ne!(
+            snap.state,
+            AuthState::Authenticated,
+            "client ID reset must not be undone by a late callback"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn web_login_replaces_streaming_credentials_atomically() {
+    with_memory_storage(|| async {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(64);
+        let auth = AuthManager::new("regression-client".to_string(), tx);
+        let epoch_before = auth.session_epoch();
+        {
+            let mut s = auth.state.lock().await;
+            s.current = Some(AccessToken {
+                access_token: "web-a".to_string(),
+                refresh_token: "web-refresh-a".to_string(),
+                expires_at: super::constants::now_ms() + 3_600_000,
+                account_id: "user-a".to_string(),
+                scopes: vec![],
+                client_id: "regression-client".to_string(),
+            });
+            s.streaming = Some(AccessToken {
+                access_token: "streaming-a".to_string(),
+                refresh_token: "streaming-refresh-a".to_string(),
+                expires_at: super::constants::now_ms() + 3_600_000,
+                account_id: "user-a".to_string(),
+                scopes: vec![],
+                client_id: super::constants::KEYMASTER_CLIENT_ID.to_string(),
+            });
+            s.state = AuthState::Authenticated;
+            s.pkce = Some(web_pkce("web-csrf"));
+        }
+
+        auth.complete_flow("callback-lifetime-test", "web-csrf", 8989)
+            .await
+            .expect("web completion");
+
+        let s = auth.state.lock().await;
+        assert_eq!(
+            s.current.as_ref().map(|token| token.account_id.as_str()),
+            Some("callback-test-user"),
+            "the web login must own the session"
+        );
+        assert!(
+            s.streaming.is_none(),
+            "the previous account's streaming credentials must be dropped"
+        );
+        assert!(s.pkce.is_none());
+        drop(s);
+        assert!(
+            auth.session_epoch() > epoch_before,
+            "playback epoch must bump before the new identity becomes visible"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn streaming_token_from_another_account_is_never_served() {
+    with_memory_storage(|| async {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(64);
+        let auth = AuthManager::new("regression-client".to_string(), tx);
+        {
+            let mut s = auth.state.lock().await;
+            s.current = Some(AccessToken {
+                access_token: "web-b".to_string(),
+                refresh_token: "web-refresh-b".to_string(),
+                expires_at: super::constants::now_ms() + 3_600_000,
+                account_id: "user-b".to_string(),
+                scopes: vec![],
+                client_id: "regression-client".to_string(),
+            });
+            s.streaming = Some(AccessToken {
+                access_token: "streaming-a".to_string(),
+                // Empty refresh token keeps the test off the network.
+                refresh_token: String::new(),
+                expires_at: super::constants::now_ms() + 3_600_000,
+                account_id: "user-a".to_string(),
+                scopes: vec![],
+                client_id: super::constants::KEYMASTER_CLIENT_ID.to_string(),
+            });
+            s.state = AuthState::Authenticated;
+        }
+
+        let err = auth
+            .get_streaming_token()
+            .await
+            .expect_err("another account's streaming token must not be served");
+        assert!(matches!(err, AuthError::StreamingLoginRequired));
+        assert!(
+            auth.state.lock().await.streaming.is_none(),
+            "the mismatched streaming token must be dropped"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn superseded_callback_gets_a_neutral_page() {
+    use tokio::io::AsyncWriteExt;
+
+    with_memory_storage(|| async {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(64);
+        let auth = std::sync::Arc::new(AuthManager::new("regression-client".to_string(), tx));
+        {
+            let mut s = auth.state.lock().await;
+            s.state = AuthState::Authenticating;
+            s.pkce = Some(web_pkce("live-csrf"));
+            s.recent_states.push(super::types::RecentState {
+                state: "old-csrf".to_string(),
+                at_ms: super::constants::now_ms(),
+            });
+        }
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("loopback bind");
+        let port = listener.local_addr().expect("local addr").port();
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+        let server = std::sync::Arc::clone(&auth);
+        let handle = tokio::spawn(async move {
+            let _ = server
+                .serve_callback(listener, port, "live-csrf".to_string(), cancel_rx)
+                .await;
+        });
+
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .expect("connect");
+        stream
+            .write_all(
+                b"GET /callback?code=abc&state=old-csrf HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n",
+            )
+            .await
+            .expect("write");
+        let response = read_one_http_response(&mut stream).await;
+        let _ = cancel_tx.send(());
+        handle.abort();
+
+        assert!(
+            response.contains("200"),
+            "a recognized superseded tab must not see an error page: {response}"
+        );
+        assert!(
+            response.contains("Login Already Handled"),
+            "expected the neutral notice page, got: {response}"
+        );
+        let s = auth.state.lock().await;
+        assert!(
+            s.pkce.as_ref().map(|p| p.state.as_str()) == Some("live-csrf"),
+            "the live flow must survive a stale tab callback"
+        );
+    })
+    .await;
+}
+
+fn port_from_auth_url(url: &str) -> u16 {
+    let redirect = url
+        .split("redirect_uri=")
+        .nth(1)
+        .and_then(|rest| rest.split('&').next())
+        .unwrap_or_else(|| panic!("auth url has no redirect_uri: {url}"));
+    let decoded = urlencoding::decode(redirect)
+        .unwrap_or_else(|_| panic!("auth url redirect_uri is not decodable: {url}"))
+        .into_owned();
+    decoded
+        .split("127.0.0.1:")
+        .nth(1)
+        .and_then(|rest| rest.split('/').next())
+        .and_then(|port| port.parse().ok())
+        .unwrap_or_else(|| panic!("auth url contains no loopback port: {url}"))
+}
+
+#[tokio::test]
+async fn callback_from_a_replaced_flow_gets_the_neutral_page() {
+    use tokio::io::AsyncWriteExt;
+
+    with_memory_storage(|| async {
+        let old_port_env = std::env::var("SPOTOEI_REDIRECT_PORT").ok();
+        std::env::set_var("SPOTOEI_REDIRECT_PORT", "0");
+
+        let (tx, _rx) = tokio::sync::mpsc::channel::<String>(64);
+        let auth = std::sync::Arc::new(AuthManager::new("personal-client".to_string(), tx));
+
+        // First login: a real listener on an ephemeral port.
+        let first = auth.begin(None).await.expect("first begin");
+        let first_url = first.auth_url.clone().expect("first auth url");
+        let first_port = port_from_auth_url(&first_url);
+        let first_state = auth
+            .state
+            .lock()
+            .await
+            .pkce
+            .as_ref()
+            .expect("first pkce")
+            .state
+            .clone();
+
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", first_port))
+            .await
+            .expect("connect first listener");
+        stream
+            .write_all(
+                format!(
+                    "GET /callback?code=callback-lifetime-test&state={first_state} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"
+                )
+                .as_bytes(),
+            )
+            .await
+            .expect("write first callback");
+        let response = read_one_http_response(&mut stream).await;
+        assert!(response.contains("200 OK"), "first login failed: {response}");
+
+        // A new login (e.g. the automatic streaming step) replaces the listener.
+        let second = auth.begin_streaming().await.expect("second begin");
+        let second_url = second.auth_url.clone().expect("second auth url");
+        let second_port = port_from_auth_url(&second_url);
+        assert!(
+            second.pending,
+            "the streaming flow must be reported as pending before any callback"
+        );
+
+        // The stale browser tab completes against the new listener: it must
+        // get the calm notice, not the state-mismatch error.
+        let mut stale = tokio::net::TcpStream::connect(("127.0.0.1", second_port))
+            .await
+            .expect("connect second listener");
+        stale
+            .write_all(
+                format!(
+                    "GET /callback?code=callback-lifetime-test&state={first_state} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"
+                )
+                .as_bytes(),
+            )
+            .await
+            .expect("write stale callback");
+        let response = read_one_http_response(&mut stale).await;
+        assert!(
+            response.contains("200 OK"),
+            "stale tab must not see an error: {response}"
+        );
+        assert!(
+            response.contains("Login Already Handled"),
+            "stale tab must see the neutral page: {response}"
+        );
+
+        match old_port_env {
+            Some(value) => std::env::set_var("SPOTOEI_REDIRECT_PORT", value),
+            None => std::env::remove_var("SPOTOEI_REDIRECT_PORT"),
+        }
     })
     .await;
 }

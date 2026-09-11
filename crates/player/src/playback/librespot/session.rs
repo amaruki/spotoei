@@ -22,6 +22,10 @@ enum ConnectError {
     /// Spotify rejected the token on the playback services; retrying once
     /// with a fresh token may recover.
     Credentials,
+    /// The auth identity changed (sign-out, new login, client ID reset) while
+    /// the session was connecting. The half-built session belongs to a user
+    /// nobody wants any more and must not be installed.
+    Superseded,
     /// Anything else, with the message for the caller.
     Fatal(String),
 }
@@ -30,6 +34,7 @@ impl ConnectError {
     fn message(self) -> String {
         match self {
             ConnectError::Credentials => "Spotify rejected the playback credentials".to_string(),
+            ConnectError::Superseded => "authentication changed while connecting".to_string(),
             ConnectError::Fatal(message) => message,
         }
     }
@@ -228,6 +233,19 @@ impl super::LibrespotEngine {
 
         match self.connect_active(wanted_epoch).await {
             Ok(act) => Ok(act),
+            Err(ConnectError::Superseded) => {
+                // Rebuild for whatever identity is current now. Doing this here
+                // keeps a caller from surfacing a transient error just because
+                // the user switched accounts mid-connect.
+                if !self.auth.has_current_session().await {
+                    *self.inner.lock().await = None;
+                    return Err("Spotify authentication required".to_string());
+                }
+                let current_epoch = self.auth.session_epoch();
+                self.connect_active(current_epoch)
+                    .await
+                    .map_err(|e| e.message())
+            }
             Err(ConnectError::Credentials) => {
                 tracing::warn!("playback credentials rejected; clearing credentials cache, refreshing token and retrying once");
                 crate::auth::storage::delete_librespot_credentials_cache();
@@ -446,6 +464,14 @@ impl super::LibrespotEngine {
             active_audio_backend: active_backend,
             created_epoch: wanted_epoch,
         };
+
+        // The connect above can take seconds: the user may have signed out or
+        // switched accounts meanwhile. Installing then would register the
+        // device as the previous user until the next epoch check notices.
+        if self.auth.session_epoch() != wanted_epoch || !self.auth.has_current_session().await {
+            tracing::warn!("discarding playback session for a superseded auth identity");
+            return Err(ConnectError::Superseded);
+        }
 
         *self.inner.lock().await = Some(active.clone());
         info!(

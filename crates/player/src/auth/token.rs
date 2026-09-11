@@ -48,6 +48,16 @@ impl AuthManager {
         let token_for_return = new_at.access_token.clone();
         let expires_at = new_at.expires_at;
         let mut s = self.state.lock().await;
+        // A login/logout executed while the refresh was on the wire may have
+        // replaced the session. Committing the result then would resurrect the
+        // previous identity and overwrite the newer credentials on disk.
+        if s.current
+            .as_ref()
+            .map(|current| current.refresh_token.as_str())
+            != Some(at.refresh_token.as_str())
+        {
+            return Err(AuthError::NotAuthenticated);
+        }
         s.current = Some(new_at.clone());
         s.state = AuthState::Authenticated;
         drop(s);
@@ -73,20 +83,30 @@ impl AuthManager {
         let force_refresh = self
             .streaming_force_refresh
             .swap(false, std::sync::atomic::Ordering::SeqCst);
-        let current_streaming = { self.state.lock().await.streaming.clone() };
-        let stored = match current_streaming {
+        let epoch = self.session_epoch();
+        let (current_account, stored) = {
+            let mut s = self.state.lock().await;
+            let current_account = s.current.as_ref().map(|token| token.account_id.clone());
+            let matching = match (current_account.as_deref(), s.streaming.as_ref()) {
+                (Some(current), Some(streaming)) if streaming.account_id == current => {
+                    Some(streaming.clone())
+                }
+                (Some(_), Some(_)) => {
+                    // Credentials left over from the previous account. Serving
+                    // them would connect playback as the wrong user.
+                    s.streaming = None;
+                    None
+                }
+                _ => None,
+            };
+            (current_account, matching)
+        };
+        let Some(current_account) = current_account else {
+            return Err(AuthError::StreamingLoginRequired);
+        };
+        let stored = match stored {
             Some(token) => Some(token),
-            None => {
-                let account_id = self
-                    .state
-                    .lock()
-                    .await
-                    .current
-                    .as_ref()
-                    .map(|token| token.account_id.clone())
-                    .ok_or(AuthError::StreamingLoginRequired)?;
-                storage::load_streaming_session_for(&account_id).await?
-            }
+            None => storage::load_streaming_session_for(&current_account).await?,
         };
         match stored {
             Some(st) if !force_refresh && st.expires_at > now_ms() + 30_000 => {
@@ -122,9 +142,22 @@ impl AuthManager {
                         scopes: st.scopes,
                         client_id: KEYMASTER_CLIENT_ID.to_string(),
                     };
+                    let mut state = self.state.lock().await;
+                    // Sign-out or an account switch may have happened while
+                    // the refresh was on the wire. Committing then would
+                    // resurrect stale playback credentials.
+                    let still_current = self.session_epoch() == epoch
+                        && state
+                            .current
+                            .as_ref()
+                            .is_some_and(|token| token.account_id == new_at.account_id);
+                    if !still_current {
+                        return Err(AuthError::StreamingLoginRequired);
+                    }
+                    state.streaming = Some(new_at.clone());
+                    drop(state);
                     let persisted = storage::save_streaming_session(&new_at).await.is_ok();
                     let mut state = self.state.lock().await;
-                    state.streaming = Some(new_at.clone());
                     state.storage = if persisted {
                         super::types::Storage::Keyring
                     } else {
@@ -185,6 +218,24 @@ impl AuthManager {
                 AccessToken {
                     access_token: "callback-test-access".to_string(),
                     refresh_token: "callback-test-refresh".to_string(),
+                    expires_at: now_ms() + 3_600_000,
+                    account_id: account_id.clone(),
+                    scopes: vec!["user-read-private".to_string()],
+                    client_id: client_id.to_string(),
+                },
+                account_id,
+            ));
+        }
+        #[cfg(test)]
+        if code == "slow-exchange-test" {
+            // Simulates a token exchange that is still on the wire while the
+            // user signs out or starts another login.
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            let account_id = "slow-test-user".to_string();
+            return Ok((
+                AccessToken {
+                    access_token: "slow-test-access".to_string(),
+                    refresh_token: "slow-test-refresh".to_string(),
                     expires_at: now_ms() + 3_600_000,
                     account_id: account_id.clone(),
                     scopes: vec!["user-read-private".to_string()],
@@ -279,9 +330,25 @@ impl AuthManager {
 }
 
 /// Resolve the Spotify user id for a fresh access token so per-account caches
-/// stay isolated. Falls back to `None` when the profile request fails; the
-/// caller keeps the previous placeholder instead of failing the login.
+/// stay isolated. Rate limiting is common right after a login burst, so a
+/// couple of short retries avoid binding the whole session to the "default"
+/// placeholder (which later forces an unnecessary streaming re-login).
 async fn fetch_spotify_user_id(access_token: &str) -> Option<String> {
+    for attempt in 0..3u32 {
+        if let Some(id) = fetch_spotify_user_id_once(access_token).await {
+            return Some(id);
+        }
+        if attempt < 2 {
+            tokio::time::sleep(std::time::Duration::from_millis(
+                500 * u64::from(attempt + 1),
+            ))
+            .await;
+        }
+    }
+    None
+}
+
+async fn fetch_spotify_user_id_once(access_token: &str) -> Option<String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()

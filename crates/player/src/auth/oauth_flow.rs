@@ -59,11 +59,14 @@ pub(super) fn should_upgrade_web_account(web_account: Option<&str>, resolved: &s
 }
 
 impl AuthManager {
-    async fn start_callback_listener(
+    /// Reserve the loopback port and return the bound listener. Serving starts
+    /// only after the PKCE transaction is recorded, so a callback can never
+    /// reach a listener whose state/URL are still unset.
+    async fn bind_callback_listener(
         self: &Arc<Self>,
         port: u16,
-        expected_state: String,
-    ) -> Result<u16, AuthError> {
+        expected_state: &str,
+    ) -> Result<(tokio::net::TcpListener, u16), AuthError> {
         self.cancel_in_flight().await;
         let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}"))
             .await
@@ -73,8 +76,23 @@ impl AuthManager {
             .map_err(|error| AuthError::Http(format!("local_addr: {error}")))?
             .port();
         *self.bound_port.lock().await = Some(bound_port);
+        *self.listener_state.lock().await = Some(expected_state.to_string());
+        Ok((listener, bound_port))
+    }
+
+    async fn serve_bound_callback(
+        self: &Arc<Self>,
+        listener: tokio::net::TcpListener,
+        bound_port: u16,
+        expected_state: String,
+    ) {
         let (cancel_tx, cancel_rx) = oneshot::channel();
         *self.cancel.lock().await = Some(cancel_tx);
+        tracing::info!(
+            state = %expected_state,
+            port = bound_port,
+            "auth callback listener armed"
+        );
         let this = Arc::clone(self);
         let handle = tokio::spawn(async move {
             if let Err(error) = this
@@ -85,7 +103,6 @@ impl AuthManager {
             }
         });
         *self.join_handle.lock().await = Some(handle);
-        Ok(bound_port)
     }
 
     pub async fn begin(
@@ -110,8 +127,8 @@ impl AuthManager {
             .and_then(|p| p.parse().ok())
             .unwrap_or(default_port);
 
-        let bound_port = match self.start_callback_listener(port, csrf.clone()).await {
-            Ok(bound_port) => bound_port,
+        let (listener, bound_port) = match self.bind_callback_listener(port, &csrf).await {
+            Ok(bound) => bound,
             Err(error) => {
                 let snap = {
                     let mut state = self.state.lock().await;
@@ -156,12 +173,14 @@ impl AuthManager {
             });
             s.last_auth_url = Some(url.clone());
             s.state = AuthState::Authenticating;
+            self.bump_flow_epoch();
             self.snapshot_locked(&s, Some(url))
         };
 
         if let Ok(value) = serde_json::to_value(&snap) {
             self.emit("auth.changed", value).await;
         }
+        self.serve_bound_callback(listener, bound_port, csrf).await;
 
         Ok(snap)
     }
@@ -194,9 +213,17 @@ impl AuthManager {
         let verifier = generate_verifier();
         let challenge = s256_challenge(&verifier);
         let csrf = generate_state();
+        // The Keymaster client only accepts its registered ports; tests may
+        // override the port so the suite never fights a running app for 8989.
+        #[cfg(test)]
+        let port = std::env::var("SPOTOEI_REDIRECT_PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(KEYMASTER_PORT);
+        #[cfg(not(test))]
         let port = KEYMASTER_PORT; // 8989
-        let bound_port = match self.start_callback_listener(port, csrf.clone()).await {
-            Ok(bound_port) => bound_port,
+        let (listener, bound_port) = match self.bind_callback_listener(port, &csrf).await {
+            Ok(bound) => bound,
             Err(error) => {
                 let snap = {
                     let mut state = self.state.lock().await;
@@ -235,11 +262,13 @@ impl AuthManager {
             } else {
                 AuthState::Authenticating
             };
+            self.bump_flow_epoch();
             self.snapshot_locked(&s, Some(url))
         };
         if let Ok(value) = serde_json::to_value(&snap) {
             self.emit("auth.changed", value).await;
         }
+        self.serve_bound_callback(listener, bound_port, csrf).await;
 
         Ok(snap)
     }
@@ -316,6 +345,10 @@ impl AuthManager {
     }
 
     pub async fn logout(&self) -> Result<AuthStatus, AuthError> {
+        // Serialize with the background streaming refresh: a refresh that
+        // completes after this point would rewrite the credentials the user
+        // just asked to delete.
+        let _refresh_guard = self.refresh_lock.lock().await;
         self.cancel_in_flight().await;
         storage::purge_legacy_file_credentials();
         let (snap, account_id) = {
@@ -326,6 +359,11 @@ impl AuthManager {
             s.clear_all_pkce();
             s.last_auth_url = None;
             s.state = AuthState::Unauthenticated;
+            // Bump inside the same critical section: a callback that already
+            // passed its epoch check must observe the change before it can
+            // commit a token.
+            self.bump_epoch();
+            self.bump_flow_epoch();
             (self.snapshot_locked(&s, None), account_id)
         };
         if let Some(account_id) = account_id.as_deref() {
@@ -337,24 +375,40 @@ impl AuthManager {
         // silently resumes the previous user's connection.
         storage::delete_streaming_session(account_id.as_deref()).await;
         storage::delete_librespot_credentials_cache();
-        self.bump_epoch();
         if let Ok(value) = serde_json::to_value(&snap) {
             self.emit("auth.changed", value).await;
         }
         Ok(snap)
     }
 
+    /// Claim and complete in one step. Only used by tests; the callback
+    /// server claims explicitly so it can distinguish "duplicate tab" from
+    /// "live transaction".
+    #[cfg(test)]
     pub(super) async fn complete_flow(
         &self,
         code: &str,
         state: &str,
         port: u16,
     ) -> Result<(), AuthError> {
-        let pkce = {
-            let mut s = self.state.lock().await;
-            s.remove_pkce(state)
+        let Some((flow_seen, pkce)) = self.claim_pkce(state).await else {
+            return Err(AuthError::OAuth("no in-flight PKCE tx".into()));
         };
-        let pkce = pkce.ok_or_else(|| AuthError::OAuth("no in-flight PKCE tx".into()))?;
+        self.complete_claimed_flow(flow_seen, pkce, code, port)
+            .await
+    }
+
+    /// Complete a PKCE transaction that `claim_pkce` has already taken out of
+    /// the shared state. `flow_seen` is the generation captured at claim time:
+    /// if a sign-out or newer login bumps it during the exchange, the
+    /// credentials are discarded instead of resurrecting the old identity.
+    pub(super) async fn complete_claimed_flow(
+        &self,
+        flow_seen: u64,
+        pkce: super::types::PkceTx,
+        code: &str,
+        port: u16,
+    ) -> Result<(), AuthError> {
         let (exchange_cid, is_streaming_auth) =
             resolve_exchange_target(pkce.flow, &self.client_id.read().await.clone());
 
@@ -365,9 +419,13 @@ impl AuthManager {
             Ok(ok) => ok,
             Err(e) => {
                 warn!(error = %e, "auth code exchange failed; restoring previous session");
+                // A newer login/sign-out may own the state now: never reset
+                // its pending URL or auth state from this dead transaction.
+                if self.flow_epoch() != flow_seen {
+                    return Err(AuthError::Superseded);
+                }
                 let snap = {
                     let mut s = self.state.lock().await;
-                    s.remove_pkce(state);
                     s.last_auth_url = None;
                     // A streaming top-up over a Web login falls back to the
                     // surviving Authenticated session; a cold login with no
@@ -387,6 +445,22 @@ impl AuthManager {
                 return Err(e);
             }
         };
+        // The token is real, but the identity it belongs to may no longer be
+        // wanted: a sign-out, a client-ID reset, or a newer login started
+        // while the exchange was on the wire. Never publish it then.
+        if self.flow_epoch() != flow_seen {
+            warn!("auth callback completed after being superseded; credentials discarded");
+            return Err(AuthError::Superseded);
+        }
+        // Serialize the commit with sign-out, client-ID reset, and the
+        // background streaming refresh: those take the same lock before
+        // deleting credentials, so the commit either lands before the
+        // deletion or is rejected by the epoch re-checks below.
+        let _commit_guard = self.refresh_lock.lock().await;
+        if self.flow_epoch() != flow_seen {
+            warn!("auth callback superseded while waiting to commit; credentials discarded");
+            return Err(AuthError::Superseded);
+        }
         let account_id = at.account_id.clone();
         let scopes = at.scopes.clone();
         let token_for_store = at.clone();
@@ -439,13 +513,19 @@ impl AuthManager {
                     warn!(error = %error, "upgraded Web account identity could not be persisted");
                 }
             }
+            if self.flow_epoch() != flow_seen {
+                warn!("streaming login superseded before commit; credentials discarded");
+                return Err(AuthError::Superseded);
+            }
             let persisted = storage::save_streaming_session(&token_for_store)
                 .await
                 .is_ok();
             storage::delete_librespot_credentials_cache();
-            self.bump_epoch();
             let snap = {
                 let mut s = self.state.lock().await;
+                if self.flow_epoch() != flow_seen {
+                    return Err(AuthError::Superseded);
+                }
                 s.streaming = Some(token_for_store);
                 s.storage = if persisted {
                     Storage::Keyring
@@ -455,6 +535,7 @@ impl AuthManager {
                 s.pkce = None;
                 s.last_auth_url = None;
                 s.state = AuthState::Authenticated;
+                self.bump_epoch();
                 self.snapshot_locked(&s, None)
             };
             if let Ok(value) = serde_json::to_value(&snap) {
@@ -473,14 +554,41 @@ impl AuthManager {
             return Ok(());
         }
 
-        let snap = {
+        // One critical section publishes the new identity and decides the fate
+        // of the previous streaming credentials. The playback epoch is bumped
+        // before the snapshot becomes observable, so no observer can pair the
+        // new account with the old playback session.
+        let (snap, dropped_streaming) = {
             let mut s = self.state.lock().await;
+            if self.flow_epoch() != flow_seen {
+                warn!("web login superseded before commit; credentials discarded");
+                return Err(AuthError::Superseded);
+            }
+            let previous_streaming = s.streaming.take();
+            let keep_streaming = previous_streaming
+                .as_ref()
+                .is_some_and(|token| token.account_id == account_id);
+            s.streaming = if keep_streaming {
+                previous_streaming.clone()
+            } else {
+                None
+            };
             s.current = Some(at);
             s.state = AuthState::Authenticated;
             s.pkce = None;
             s.last_auth_url = None;
             s.storage = Storage::Memory;
-            self.snapshot_locked(&s, None)
+            let dropped = if keep_streaming {
+                None
+            } else {
+                // Delete the cache before the epoch bump makes the new
+                // identity visible: a rebuild triggered by the new epoch must
+                // not resume credentials belonging to the previous account.
+                storage::delete_librespot_credentials_cache();
+                self.bump_epoch();
+                previous_streaming
+            };
+            (self.snapshot_locked(&s, None), dropped)
         };
         match storage::save_session(&token_for_store).await {
             Ok(()) => {
@@ -505,24 +613,8 @@ impl AuthManager {
                 }
             }
         }
-        // A fresh login belongs to a (possibly different) user: drop the old
-        // playback credentials and force the engine to reconnect. A streaming
-        // session for the same account can survive explicit Web reauthorization.
-        let previous_streaming = self.state.lock().await.streaming.take();
-        let keep_streaming = previous_streaming
-            .as_ref()
-            .is_some_and(|token| token.account_id == account_id);
-        if keep_streaming {
-            self.state.lock().await.streaming = previous_streaming;
-        } else {
-            storage::delete_streaming_session(
-                previous_streaming
-                    .as_ref()
-                    .map(|token| token.account_id.as_str()),
-            )
-            .await;
-            storage::delete_librespot_credentials_cache();
-            self.bump_epoch();
+        if let Some(previous) = dropped_streaming {
+            storage::delete_streaming_session(Some(previous.account_id.as_str())).await;
         }
         tracing::info!("web login completed for account {account_id}");
         self.emit(

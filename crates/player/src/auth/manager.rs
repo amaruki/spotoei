@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use serde_json::Value;
@@ -8,7 +9,7 @@ use crate::event;
 
 use super::constants::{now_ms, DEFAULT_SCOPES};
 use super::storage;
-use super::types::{AuthState, AuthStatus, InnerState, Storage};
+use super::types::{AuthState, AuthStatus, InnerState, PkceTx, Storage};
 
 pub struct AuthManager {
     pub(super) client_id: RwLock<String>,
@@ -22,6 +23,11 @@ pub struct AuthManager {
     /// (logout, new login, client ID reset) so the playback engine drops a
     /// session that belongs to the previous user instead of resuming it.
     session_epoch: AtomicU64,
+    /// Auth-flow generation. Bumped whenever a sign-out or a new login
+    /// supersedes the in-flight OAuth transaction. A callback that finishes
+    /// its token exchange after this bump must throw the credentials away
+    /// instead of resurrecting the identity the user just replaced.
+    flow_epoch: AtomicU64,
     /// Forces the next streaming-token read to skip its cache and refresh.
     /// The streaming tier lives in the keyring (no in-memory copy to expire),
     /// so invalidation is a flag consumed once by `get_streaming_token`.
@@ -35,6 +41,12 @@ pub struct AuthManager {
     pub(super) join_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// The TCP port the active callback server is listening on, if any.
     pub(super) bound_port: Mutex<Option<u16>>,
+    /// PKCE state owned by the active listener, if any. Used to close the
+    /// listener when its flow completes without racing a newer flow.
+    pub(super) listener_state: Mutex<Option<String>>,
+    /// How many times a stale callback was auto-forwarded to the active
+    /// login, keyed by the stale state. Caps redirect loops.
+    redirect_counts: Mutex<HashMap<String, (u32, u64)>>,
 }
 
 impl AuthManager {
@@ -51,14 +63,57 @@ impl AuthManager {
                 streaming: None,
                 pkce: None,
                 last_auth_url: None,
+                recent_states: Vec::new(),
             }),
             refresh_lock: Mutex::new(()),
             session_epoch: AtomicU64::new(0),
+            flow_epoch: AtomicU64::new(0),
             streaming_force_refresh: AtomicBool::new(false),
             events,
             cancel: Mutex::new(None),
             join_handle: Mutex::new(None),
             bound_port: Mutex::new(None),
+            listener_state: Mutex::new(None),
+            redirect_counts: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Count an auto-forward of a stale callback for `state`. Returns how many
+    /// times this state has been forwarded. Callers stop redirecting beyond a
+    /// small cap so a browser/bounce loop cannot spin forever.
+    pub async fn note_callback_redirect(&self, state: &str) -> u32 {
+        let now = now_ms();
+        let mut counts = self.redirect_counts.lock().await;
+        counts.retain(|_, (_, at)| now.saturating_sub(*at) <= 10 * 60 * 1000);
+        let count = {
+            let entry = counts.entry(state.to_string()).or_insert((0, now));
+            entry.0 += 1;
+            entry.1 = now;
+            entry.0
+        };
+        if counts.len() > 64 {
+            counts.clear();
+        }
+        count
+    }
+
+    /// Atomically claim the in-flight PKCE transaction for `state`. Only one
+    /// caller can win; the state is recorded as recently handled so duplicate
+    /// tabs get a calm notice. The returned generation was captured before the
+    /// claim so a later sign-out/new login invalidates the exchange.
+    pub(super) async fn claim_pkce(&self, state: &str) -> Option<(u64, PkceTx)> {
+        let mut s = self.state.lock().await;
+        let flow = self.flow_epoch();
+        s.remove_pkce(state).map(|tx| (flow, tx))
+    }
+
+    /// Close the loopback listener when it still owns `state`. Called after a
+    /// flow completes so the port is free immediately, without racing a newer
+    /// login that already replaced the listener.
+    pub(super) async fn close_listener_if_owner(&self, state: &str) {
+        let owns = self.listener_state.lock().await.as_deref() == Some(state);
+        if owns {
+            self.cancel_in_flight().await;
         }
     }
 
@@ -66,6 +121,9 @@ impl AuthManager {
     /// A token minted for one client is rejected under another, so any
     /// existing session is dropped and playback is told to reconnect.
     pub async fn set_client_id(&self, client_id: String) {
+        // Serialize with the background streaming refresh: a token minted for
+        // the old client must never be persisted after this reset.
+        let _refresh_guard = self.refresh_lock.lock().await;
         *self.client_id.write().await = client_id;
         let (snap, account_id) = {
             let mut s = self.state.lock().await;
@@ -75,13 +133,14 @@ impl AuthManager {
             s.clear_all_pkce();
             s.last_auth_url = None;
             s.state = AuthState::Unauthenticated;
+            self.bump_epoch();
+            self.bump_flow_epoch();
             (self.snapshot_locked(&s, None), account_id)
         };
         if let Some(account_id) = account_id.as_deref() {
             let _ = storage::delete_session(account_id).await;
         }
         storage::delete_streaming_session(account_id.as_deref()).await;
-        self.bump_epoch();
         storage::delete_librespot_credentials_cache();
         if let Ok(value) = serde_json::to_value(&snap) {
             self.emit("auth.changed", value).await;
@@ -93,8 +152,17 @@ impl AuthManager {
         self.session_epoch.load(Ordering::SeqCst)
     }
 
+    /// Auth-flow generation for superseding in-flight OAuth callbacks.
+    pub fn flow_epoch(&self) -> u64 {
+        self.flow_epoch.load(Ordering::SeqCst)
+    }
+
     pub(super) fn bump_epoch(&self) {
         self.session_epoch.fetch_add(1, Ordering::SeqCst);
+    }
+
+    pub(super) fn bump_flow_epoch(&self) {
+        self.flow_epoch.fetch_add(1, Ordering::SeqCst);
     }
 
     /// Whether an auth session is currently held (used to fail fast instead
@@ -151,6 +219,7 @@ impl AuthManager {
             let _ = handle.await;
         }
         *self.bound_port.lock().await = None;
+        *self.listener_state.lock().await = None;
     }
     /// Returns the active status snapshot after hydration.
     pub async fn hydrate(&self) -> AuthStatus {
@@ -207,6 +276,7 @@ impl AuthManager {
             storage: s.storage,
             access_token_expires_at: s.current.as_ref().map(|a| a.expires_at),
             auth_url,
+            pending: s.pkce.is_some(),
         }
     }
 }
