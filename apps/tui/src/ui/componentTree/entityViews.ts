@@ -8,7 +8,14 @@ import {
   fg,
   t,
 } from '@opentui/core';
-import { COLOR_ACCENT, COLOR_BORDER, COLOR_BORDER_FOCUS, COLOR_DIM, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
+import {
+  COLOR_ACCENT,
+  COLOR_BORDER,
+  COLOR_BORDER_FOCUS,
+  COLOR_DIM,
+  COLOR_PANEL_BG,
+  COLOR_TEXT,
+} from '../theme';
 import type { UiViewState } from '../types';
 
 export interface EntityViewNodes {
@@ -74,15 +81,17 @@ export function buildEntityViews(renderer: CliRenderer, state: UiViewState): Ent
     backgroundColor: COLOR_PANEL_BG,
     title: 'Visualizer (V: close, m: mode)',
     flexDirection: 'column',
+    alignItems: 'center',
     paddingLeft: 1,
     paddingRight: 1,
     paddingTop: 1,
     visible: false,
   });
-  // Fullscreen visualizer owns the only pixels. The frame buffer has a
-  // fixed size: @opentui/core 0.5.10 exposes no public fb-resize API, so
-  // per-resize pixel sizing is blocked upstream; drawing adapts to these
-  // dimensions and narrow terminals reduce bar density instead.
+  // Fullscreen visualizer owns the only pixels. The frame buffer fills the
+  // whole panel: its Yoga size change flows through
+  // Renderable.onLayoutResize -> FrameBufferRenderable.onResize, which
+  // resizes the backing OptimizedBuffer automatically. Drawing centers the
+  // bar group itself, so the canvas can stay full-bleed.
   const visualizerFullTitle = new TextRenderable(renderer, {
     id: 'visualizer-full-title',
     content: t`${fg(COLOR_DIM)('mode: ')}${fg(COLOR_ACCENT)(bold(state.visualizer.mode))}  ${fg(COLOR_DIM)('fps: ')}${fg(COLOR_TEXT)(String(state.visualizer.fps))}`,
@@ -93,6 +102,10 @@ export function buildEntityViews(renderer: CliRenderer, state: UiViewState): Ent
     width: 104,
     height: 20,
   });
+  visualizerFullFb.width = '100%';
+  visualizerFullFb.height = 'auto';
+  visualizerFullFb.flexGrow = 1;
+  visualizerFullFb.flexShrink = 1;
   visualizerFull.add(visualizerFullFb);
 
   return {

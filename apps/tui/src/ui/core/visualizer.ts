@@ -1,6 +1,12 @@
 import { RGBA, bold, fg, t } from '@opentui/core';
 import { COLOR_ACCENT, COLOR_DIM, COLOR_PANEL_BG, COLOR_TEXT } from '../theme';
-import { drawBars, drawWave, type OptimizedBufferLike } from '../visualizerCanvas';
+import {
+  createPeakState,
+  drawBars,
+  drawWave,
+  resetPeakState,
+  type OptimizedBufferLike,
+} from '../visualizerCanvas';
 import type { UiCoreContext } from './types';
 
 // Fullscreen visualizer painter. Frame rendering touches only the
@@ -8,6 +14,8 @@ import type { UiCoreContext } from './types';
 // so slow frames cannot block audio or rerender unrelated screens.
 export function createVisualizerHelpers(ctx: UiCoreContext) {
   const { built, latestVizFrame, renderer, state } = ctx;
+  let lastPaintedMode: string | null = null;
+  const peakState = createPeakState();
 
   const setVizTitle = (): void => {
     const r = renderer as unknown as { targetFps?: number };
@@ -18,17 +26,30 @@ export function createVisualizerHelpers(ctx: UiCoreContext) {
 
   const paintViz = (): void => {
     const fb = built.visualizerFullFb.frameBuffer;
-    if (state.visualizer.mode === 'off' || !latestVizFrame.value) {
+    const frame = latestVizFrame.value;
+    const mode = frame?.mode ?? state.visualizer.mode;
+    if (mode !== lastPaintedMode) {
+      resetPeakState(peakState);
+      lastPaintedMode = mode;
+    }
+    if (state.visualizer.mode === 'off' || !frame) {
       fb.clear(RGBA.fromHex(COLOR_PANEL_BG));
       return;
     }
-    const rawData = latestVizFrame.value.data ?? latestVizFrame.value.bands ?? [];
+    const rawData = frame.data ?? frame.bands ?? [];
     const dataArr = Array.isArray(rawData) ? rawData : Array.from(rawData);
-    if (latestVizFrame.value.mode === 'spectrum' || latestVizFrame.value.mode === 'winamp') {
-      drawBars(fb as unknown as OptimizedBufferLike, dataArr);
+    if (frame.mode === 'spectrum' || frame.mode === 'winamp') {
+      drawBars(fb as unknown as OptimizedBufferLike, dataArr, peakState);
     } else {
       drawWave(fb as unknown as OptimizedBufferLike, dataArr);
     }
+  };
+
+  // The backing buffer is reallocated (and cleared) whenever the layout size
+  // changes — on route entry and on terminal resize. Repaint the last frame
+  // so the canvas never flashes blank until the next visualizer event.
+  built.visualizerFullFb.onSizeChange = (): void => {
+    paintViz();
   };
 
   return {
