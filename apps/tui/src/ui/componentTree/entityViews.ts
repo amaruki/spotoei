@@ -2,6 +2,7 @@ import {
   BoxRenderable,
   type CliRenderer,
   FrameBufferRenderable,
+  ImageRenderable,
   SelectRenderable,
   TextRenderable,
   bold,
@@ -30,6 +31,7 @@ export interface EntityViewNodes {
   visualizerFull: BoxRenderable;
   visualizerFullTitle: TextRenderable;
   visualizerFullFb: FrameBufferRenderable;
+  visualizerCoverImage: ImageRenderable;
 }
 
 function makeListView(
@@ -108,6 +110,22 @@ export function buildEntityViews(renderer: CliRenderer, state: UiViewState): Ent
   visualizerFullFb.flexShrink = 1;
   visualizerFull.add(visualizerFullFb);
 
+  // Cover art sits on top of the frame buffer at the center of the circular
+  // spectrum. Absolute positioning lets it float without changing the canvas
+  // layout that every other mode depends on.
+  const visualizerCoverImage = new ImageRenderable(renderer, {
+    id: 'visualizer-cover-image',
+    position: 'absolute',
+    top: 1,
+    left: 0,
+    width: 12,
+    height: 6,
+    fit: 'cover',
+    visible: false,
+    zIndex: 5,
+  });
+  visualizerFull.add(visualizerCoverImage);
+
   return {
     artist: artist.box,
     artistList: artist.list,
@@ -120,5 +138,6 @@ export function buildEntityViews(renderer: CliRenderer, state: UiViewState): Ent
     visualizerFull,
     visualizerFullTitle,
     visualizerFullFb,
+    visualizerCoverImage,
   };
 }

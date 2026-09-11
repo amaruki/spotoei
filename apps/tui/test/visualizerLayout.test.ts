@@ -52,8 +52,8 @@ function getFb(renderer: { root: unknown }): FbProbe {
   };
 }
 
-function makeUi(renderer: Parameters<typeof createUiCore>[0]) {
-  return createUiCore(renderer, baseState, {
+function makeUi(renderer: Parameters<typeof createUiCore>[0], state: UiViewState = baseState) {
+  return createUiCore(renderer, state, {
     onKey: () => {},
     onSearchSubmit: () => {},
     onSelectLibrary: () => {},
@@ -147,6 +147,60 @@ describe('fullscreen visualizer frame buffer', () => {
     const leftMargin = minX;
     const rightMargin = renderer.width - 1 - maxX;
     expect(Math.abs(leftMargin - rightMargin)).toBeLessThanOrEqual(1);
+    await ui.shutdown();
+  });
+
+  it('shows the centered cover image only in circular mode', async () => {
+    const { renderer, renderOnce } = await createTestRenderer({ width: 100, height: 30 });
+    const state: UiViewState = {
+      ...baseState,
+      playback: {
+        revision: 1,
+        observedAtMonotonicMs: Date.now(),
+        state: 'playing',
+        track: {
+          uri: 'spotify:track:cover',
+          name: 'Cover Track',
+          artists: ['Artist'],
+          durationMs: 180000,
+          imageUrl:
+            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        },
+        positionMs: 0,
+        durationMs: 180000,
+        volume: 1,
+        shuffle: false,
+        repeat: 'off',
+        autoplay: false,
+      },
+    };
+    const ui = makeUi(renderer, state);
+    ui.setRoute({ kind: 'visualizer' });
+    ui.setVisualizerFrame({
+      mode: 'circular',
+      data: Array.from({ length: 64 }, () => 0.6),
+    });
+    await renderOnce();
+
+    const cover = findNode(renderer.root as TreeNode, 'visualizer-cover-image') as unknown as {
+      visible: boolean;
+      width: number;
+      height: number;
+      left: number;
+      top: number;
+    };
+    expect(cover.visible).toBe(true);
+    expect(cover.width).toBeGreaterThan(0);
+    expect(cover.height).toBeGreaterThan(0);
+    expect(cover.left).toBeGreaterThan(0);
+    expect(cover.top).toBeGreaterThan(0);
+
+    ui.setVisualizerFrame({
+      mode: 'spectrum',
+      data: Array.from({ length: 64 }, () => 0.6),
+    });
+    await renderOnce();
+    expect(cover.visible).toBe(false);
     await ui.shutdown();
   });
 });

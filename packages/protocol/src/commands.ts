@@ -140,7 +140,7 @@ export function makeVisualizerConfigure(
   id: string,
   config: {
     enabled?: boolean;
-    mode?: 'spectrum' | 'winamp' | 'oscilloscope' | 'off';
+    mode?: 'spectrum' | 'winamp' | 'oscilloscope' | 'circular' | 'off';
     fps?: number;
     bands?: number;
     waveformSamples?: number;

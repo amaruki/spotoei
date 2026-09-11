@@ -4,6 +4,7 @@ import {
   barLayout,
   createPeakState,
   drawBars,
+  drawCircular,
   drawWave,
   type OptimizedBufferLike,
 } from '../src/ui/visualizerCanvas';
@@ -121,6 +122,24 @@ describe('visualizer canvas layout', () => {
     expect(markerRows(fb)).toEqual([0]);
   });
 
+  it('omits peak caps in winamp mode where the bars are the peak envelope', () => {
+    const fb = makeFb(8, 4);
+    const state = createPeakState();
+    const high = [1, 1, 1, 1];
+    const low = [0.05, 0.05, 0.05, 0.05];
+
+    drawBars(fb, high, state, 1000);
+    drawBars(fb, low, state, 1001, false);
+    expect(markerRows(fb)).toEqual([]);
+
+    // Spectrums caps still render for the same sequence.
+    const capped = makeFb(8, 4);
+    const cappedState = createPeakState();
+    drawBars(capped, high, cappedState, 1000);
+    drawBars(capped, low, cappedState, 1001);
+    expect(markerRows(capped)).toEqual([0]);
+  });
+
   it('keeps peak state isolated between canvases', () => {
     const a = makeFb(8, 4);
     const b = makeFb(8, 4);
@@ -145,14 +164,32 @@ describe('visualizer canvas layout', () => {
     expect(markerRows(a)).toEqual([0]);
   });
 
-  it('drawWave renders an oscilloscope centered on the vertical midpoint', () => {
+  it('drawWave renders a flat trace over the center baseline without filling', () => {
     const fb = makeFb(40, 21);
     drawWave(fb, [0.5, 0.5, 0.5, 0.5]);
-    expect(fb.cells.get('0,5')).toBe('●');
-    expect(fb.cells.get('0,8')).toBe('│');
-    expect(fb.cells.get('0,10')).toBe('│');
+    // center = 10; 0.5 amplitude maps to y = 10 - round(0.5 * 10) = 5.
+    expect(fb.cells.get('0,5')).toBe('•');
+    expect(fb.cells.get('39,5')).toBe('•');
+    expect(fb.cells.get('0,10')).toBe('┄');
     expect(fb.cells.has('0,0')).toBe(false);
-    expect(fb.cells.get('0,10')).not.toBeUndefined();
+    // No center-filled envelope: nothing between the trace and the baseline.
+    expect(fb.cells.has('0,7')).toBe(false);
+    expect(fb.cells.has('0,9')).toBe(false);
+  });
+
+  it('drawWave connects consecutive samples with vertical segments', () => {
+    const fb = makeFb(5, 11);
+    // center = 5, scale = 5: 0.9 -> y=0, -0.9 -> y=9.
+    drawWave(fb, [0, 0.9, 0, -0.9, 0]);
+    expect(fb.cells.get('0,5')).toBe('•');
+    expect(fb.cells.get('1,0')).toBe('•');
+    expect(fb.cells.get('1,3')).toBe('│');
+    expect(fb.cells.get('1,5')).toBe('│');
+    expect(fb.cells.get('3,9')).toBe('•');
+    expect(fb.cells.get('3,7')).toBe('│');
+    expect(fb.cells.get('4,5')).toBe('•');
+    // The rising column before the peak must not fill toward the center.
+    expect(fb.cells.has('0,2')).toBe(false);
   });
 
   it('drawWave clears to background when there is no data', () => {
@@ -160,6 +197,42 @@ describe('visualizer canvas layout', () => {
     fb.cells.set('3,3', '█');
     drawWave(fb, []);
     expect(fb.cells.size).toBe(0);
+  });
+
+  it('drawCircular draws the hole ring and no rays without signal', () => {
+    const fb = makeFb(40, 20);
+    drawCircular(
+      fb,
+      Array.from({ length: 64 }, () => 0),
+      3,
+    );
+    const bars = [...fb.cells.values()].filter((ch) => ch === '█');
+    expect(bars.length).toBe(0);
+    expect([...fb.cells.values()].filter((ch) => ch === '·').length).toBeGreaterThan(8);
+  });
+
+  it('drawCircular grows rays outward from the cover hole', () => {
+    const fb = makeFb(40, 20);
+    const data = Array.from({ length: 64 }, () => 0);
+    data[0] = 1.0;
+    drawCircular(fb, data, 3);
+
+    const bars = [...fb.cells.entries()].filter(([, ch]) => ch === '█');
+    expect(bars.length).toBeGreaterThan(3);
+    for (const [key] of bars) {
+      const [x, y] = key.split(',').map(Number);
+      // Band 0 points straight up from the center (19.5, 9.5).
+      expect(x).toBe(20);
+      expect(y).toBeLessThan(9);
+      const radius = Math.hypot((x! - 19.5) / 2, y! - 9.5);
+      expect(radius).toBeGreaterThanOrEqual(2.4);
+    }
+    // The hole itself stays free for the cover art.
+    const hole = [...fb.cells.entries()].filter(([key]) => {
+      const [x, y] = key.split(',').map(Number);
+      return Math.hypot((x! - 19.5) / 2, y! - 9.5) < 2.0;
+    });
+    expect(hole.length).toBe(0);
   });
 
   it('accepts a plain RGBA-clearing buffer without throwing', () => {

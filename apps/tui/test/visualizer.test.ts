@@ -133,7 +133,7 @@ describe('VisualizerController unit tests', () => {
     ctrl.stop();
   });
 
-  test('cycleMode rotates spectrum -> winamp -> oscilloscope -> off -> spectrum', () => {
+  test('cycleMode rotates spectrum -> winamp -> oscilloscope -> circular -> off -> spectrum', () => {
     const { child } = makeMockChild();
     const ctrl = new VisualizerController({ child, initialMode: 'spectrum' });
 
@@ -142,6 +142,8 @@ describe('VisualizerController unit tests', () => {
     expect(ctrl.getMode()).toBe('winamp');
     expect(ctrl.cycleMode()).toBe('oscilloscope');
     expect(ctrl.getMode()).toBe('oscilloscope');
+    expect(ctrl.cycleMode()).toBe('circular');
+    expect(ctrl.getMode()).toBe('circular');
     expect(ctrl.cycleMode()).toBe('off');
     expect(ctrl.getMode()).toBe('off');
     expect(ctrl.cycleMode()).toBe('spectrum');

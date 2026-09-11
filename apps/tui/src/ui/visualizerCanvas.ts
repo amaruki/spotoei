@@ -110,6 +110,7 @@ export function drawBars(
   data: number[],
   state: PeakState,
   now: number = performance.now(),
+  drawPeakCaps: boolean = true,
 ): void {
   const bg = RGBA.fromHex(COLOR_PANEL_BG);
   fb.clear(bg);
@@ -175,6 +176,8 @@ export function drawBars(
       }
     }
 
+    if (!drawPeakCaps) continue;
+
     const peakRow = Math.min(h - 1, Math.floor((state.heights[i] ?? 0) / 8));
     if (peakRow > fullRows && peakRow < h) {
       const peakColor = RGBA.fromHex(COLOR_BAR_PEAK);
@@ -187,7 +190,32 @@ export function drawBars(
   }
 }
 
-// Render a centered oscilloscope (waveform) over a faint baseline.
+// Sample the waveform at a column: average the source bucket when the
+// samples are denser than the canvas, interpolate when they are sparser.
+function sampleWaveAt(data: number[], x: number, width: number): number {
+  const start = (x / width) * data.length;
+  const end = ((x + 1) / width) * data.length;
+  const lo = Math.floor(start);
+  const hi = Math.max(lo + 1, Math.ceil(end));
+  if (hi - lo <= 1) {
+    const idx = Math.min(lo, data.length - 1);
+    const frac = Math.min(1, Math.max(0, start - idx));
+    const a = data[idx] ?? 0;
+    const b = data[Math.min(idx + 1, data.length - 1)] ?? a;
+    return a + (b - a) * frac;
+  }
+  let sum = 0;
+  let count = 0;
+  for (let k = lo; k < Math.min(hi, data.length); k++) {
+    sum += data[k] ?? 0;
+    count++;
+  }
+  return count > 0 ? sum / count : 0;
+}
+
+// Render the waveform as a connected polyline: one point per column with
+// vertical segments joining consecutive points, over a faint center baseline.
+// This reads like a real scope trace instead of a center-filled envelope.
 export function drawWave(fb: OptimizedBufferLike, data: number[]): void {
   const bg = RGBA.fromHex(COLOR_PANEL_BG);
   fb.clear(bg);
@@ -196,26 +224,68 @@ export function drawWave(fb: OptimizedBufferLike, data: number[]): void {
   if (w <= 0 || h <= 0 || data.length === 0) return;
 
   const center = Math.floor(h / 2);
-  const centerColor = RGBA.fromHex('#3a4252');
-  const wavePeakColor = RGBA.fromHex(COLOR_BAR_PEAK);
-  const waveBodyColor = RGBA.fromHex(COLOR_ACCENT);
+  const baselineColor = RGBA.fromHex('#3a4252');
+  const traceColor = RGBA.fromHex(COLOR_ACCENT);
 
   for (let x = 0; x < w; x++) {
-    fb.setCell(x, center, '┄', centerColor, bg);
+    fb.setCell(x, center, '┄', baselineColor, bg);
   }
 
+  let prevY: number | null = null;
   for (let x = 0; x < w; x++) {
-    const v = data[Math.floor((x / w) * data.length)] ?? 0;
-    const offset = Math.round(v * ((h - 1) / 2));
-    const targetY = Math.max(0, Math.min(h - 1, center - offset));
+    const v = Math.max(-1, Math.min(1, sampleWaveAt(data, x, w)));
+    const y = Math.max(0, Math.min(h - 1, center - Math.round(v * ((h - 1) / 2))));
 
-    const minY = Math.min(targetY, center);
-    const maxY = Math.max(targetY, center);
+    if (prevY !== null && prevY !== y) {
+      const from = Math.min(prevY, y);
+      const to = Math.max(prevY, y);
+      for (let yy = from; yy <= to; yy++) {
+        fb.setCell(x, yy, '│', traceColor, bg);
+      }
+    }
+    fb.setCell(x, y, '•', traceColor, bg);
+    prevY = y;
+  }
+}
 
-    for (let y = minY; y <= maxY; y++) {
-      const ch = y === targetY ? '●' : '│';
-      const color = y === targetY ? wavePeakColor : waveBodyColor;
-      fb.setCell(x, y, ch, color, bg);
+// Render a circular spectrum around a central hole reserved for cover art.
+// Terminal cells are roughly twice as tall as wide, so the horizontal radius
+// is doubled to keep the ring visually circular. `holeRows` is the diameter
+// of the cover hole in rows.
+export function drawCircular(fb: OptimizedBufferLike, data: number[], holeRows: number): void {
+  const bg = RGBA.fromHex(COLOR_PANEL_BG);
+  fb.clear(bg);
+  const w = fb.width;
+  const h = fb.height;
+  if (w <= 0 || h <= 0 || data.length === 0) return;
+
+  const cx = (w - 1) / 2;
+  const cy = (h - 1) / 2;
+  const maxR = Math.max(1, Math.min(Math.floor(cy), Math.floor(cx / 2)));
+  const inner = Math.max(1, Math.min(holeRows, maxR - 2));
+  const ringColor = RGBA.fromHex('#3a4252');
+
+  // Faint frame just outside the cover hole.
+  for (let a = 0; a < Math.PI * 2; a += 1 / (inner * 3)) {
+    const x = Math.round(cx + Math.cos(a) * inner * 2);
+    const y = Math.round(cy + Math.sin(a) * inner);
+    if (x >= 0 && x < w && y >= 0 && y < h) {
+      fb.setCell(x, y, '·', ringColor, bg);
+    }
+  }
+
+  for (let i = 0; i < data.length; i++) {
+    const v = Math.max(0, Math.min(1, data[i] ?? 0));
+    if (v <= 0.001) continue;
+    const angle = -Math.PI / 2 + (i / data.length) * Math.PI * 2;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const outer = inner + v * (maxR - inner);
+    for (let r = inner; r <= outer; r += 0.5) {
+      const x = Math.round(cx + cos * r * 2);
+      const y = Math.round(cy + sin * r);
+      if (x < 0 || x >= w || y < 0 || y >= h) continue;
+      fb.setCell(x, y, '█', getBarColor(Math.round(r), maxR), bg);
     }
   }
 }

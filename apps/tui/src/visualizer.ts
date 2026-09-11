@@ -236,7 +236,7 @@ export class VisualizerController {
   }
 
   cycleMode(): VisualizerModeT {
-    const modes: VisualizerModeT[] = ['spectrum', 'winamp', 'oscilloscope', 'off'];
+    const modes: VisualizerModeT[] = ['spectrum', 'winamp', 'oscilloscope', 'circular', 'off'];
     const cur = this.enabled ? this.mode : ('off' as VisualizerModeT);
     const nextIdx = (modes.indexOf(cur as VisualizerModeT) + 1) % modes.length;
     const next = modes[nextIdx] ?? 'spectrum';

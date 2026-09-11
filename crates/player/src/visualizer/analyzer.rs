@@ -22,10 +22,22 @@ pub const FFT_SIZE: usize = 4096;
 // pedestal instead of leaving them at zero.
 const EQ_BOOST_EXP: f32 = 0.35;
 const EQ_BOOST_MAX: f32 = 4.0;
+// Winamp peak-hold physics: pin the peak for a short hold, then let gravity
+// take it down. Expressed per second so 30 and 60 FPS feel the same.
+const PEAK_HOLD_SECS: f32 = 0.5;
+const PEAK_FALL_ACCEL: f32 = 0.375;
+const PEAK_FALL_MAX: f32 = 0.6;
+// Oscilloscope auto-gain: quiet tracks are lifted until the trace fills the
+// canvas, loud tracks are attenuated. Attack is instant, release is gradual.
+const WAVE_TARGET_PEAK: f32 = 0.9;
+const WAVE_MAX_GAIN: f32 = 20.0;
+const WAVE_GAIN_RELEASE: f32 = 0.12;
+const WAVE_GAIN_FLOOR: f32 = 0.002;
 
 pub struct Analyzer {
     bands: usize,
     sample_rate: f32,
+    fps: f32,
     r2c: Arc<dyn RealToComplex<f32>>,
     fft_in: Vec<f32>,
     fft_out: Vec<Complex<f32>>,
@@ -33,7 +45,9 @@ pub struct Analyzer {
     bars: Vec<f32>,
     peaks: Vec<f32>,
     fall_speed: Vec<f32>,
-    decay_rate: f32,
+    peak_fall_speed: Vec<f32>,
+    peak_hold: Vec<f32>,
+    wave_gain: f32,
 }
 
 impl Analyzer {
@@ -52,6 +66,7 @@ impl Analyzer {
         Self {
             bands,
             sample_rate: 44100.0,
+            fps: 60.0,
             r2c,
             fft_in,
             fft_out,
@@ -59,7 +74,9 @@ impl Analyzer {
             bars: vec![0.0; bands],
             peaks: vec![0.0; bands],
             fall_speed: vec![0.0; bands],
-            decay_rate: 0.04,
+            peak_fall_speed: vec![0.0; bands],
+            peak_hold: vec![0.0; bands],
+            wave_gain: 1.0,
         }
     }
 
@@ -69,6 +86,8 @@ impl Analyzer {
             self.bars = vec![0.0; bands];
             self.peaks = vec![0.0; bands];
             self.fall_speed = vec![0.0; bands];
+            self.peak_fall_speed = vec![0.0; bands];
+            self.peak_hold = vec![0.0; bands];
         }
     }
 
@@ -77,6 +96,29 @@ impl Analyzer {
     pub fn set_sample_rate(&mut self, sample_rate: f32) {
         if sample_rate > 0.0 {
             self.sample_rate = sample_rate;
+        }
+    }
+
+    /// Delivery rate of analyzer frames; drives the time-based peak physics.
+    pub fn set_fps(&mut self, fps: f32) {
+        if fps > 0.0 {
+            self.fps = fps;
+        }
+    }
+
+    /// Winamp peak physics for one band: hold at the high-water mark, then
+    /// accelerate downward but never below the current bar.
+    fn apply_peak_dynamics(&mut self, i: usize, dt: f32) {
+        if self.bars[i] >= self.peaks[i] {
+            self.peaks[i] = self.bars[i];
+            self.peak_fall_speed[i] = 0.0;
+            self.peak_hold[i] = PEAK_HOLD_SECS;
+        } else if self.peak_hold[i] > 0.0 {
+            self.peak_hold[i] = (self.peak_hold[i] - dt).max(0.0);
+        } else {
+            self.peak_fall_speed[i] =
+                (self.peak_fall_speed[i] + PEAK_FALL_ACCEL * dt).min(PEAK_FALL_MAX);
+            self.peaks[i] = (self.peaks[i] - self.peak_fall_speed[i] * dt).max(self.bars[i]);
         }
     }
 
@@ -94,9 +136,10 @@ impl Analyzer {
     /// real FFT, dB perceptual scaling, and gravity falloff.
     pub fn compute_spectrum(&mut self, samples: &[f32], mode: VisualizerMode) -> Vec<f32> {
         if samples.is_empty() || self.bands == 0 {
+            let dt = 1.0 / self.fps.max(1.0);
             for i in 0..self.bands {
                 self.bars[i] = (self.bars[i] - 0.05).max(0.0);
-                self.peaks[i] = (self.peaks[i] - 0.03).max(0.0);
+                self.apply_peak_dynamics(i, dt);
             }
             return if mode == VisualizerMode::Winamp {
                 self.peaks.clone()
@@ -190,6 +233,7 @@ impl Analyzer {
         }
 
         // CAVA Physics: Gravity Falloff
+        let dt = 1.0 / self.fps.max(1.0);
         for i in 0..self.bands {
             let target = smoothed[i];
             if target >= self.bars[i] {
@@ -200,11 +244,7 @@ impl Analyzer {
                 self.bars[i] = (self.bars[i] - self.fall_speed[i]).max(target);
             }
 
-            if self.bars[i] >= self.peaks[i] {
-                self.peaks[i] = self.bars[i];
-            } else {
-                self.peaks[i] = (self.peaks[i] - self.decay_rate).max(0.0);
-            }
+            self.apply_peak_dynamics(i, dt);
         }
 
         if mode == VisualizerMode::Winamp {
@@ -214,20 +254,46 @@ impl Analyzer {
         }
     }
 
-    /// Downsample waveform to target number of points, mapped to [-1.0, 1.0].
-    pub fn compute_waveform(samples: &[f32], target_samples: usize) -> Vec<f32> {
+    /// Downsample the waveform to `target_samples` points across the whole
+    /// buffer, mapped to [-1.0, 1.0]. Each point averages its source bucket
+    /// (smooth, alias-free) and an auto-gain stage keeps quiet tracks wide.
+    pub fn compute_waveform(&mut self, samples: &[f32], target_samples: usize) -> Vec<f32> {
         if samples.is_empty() || target_samples == 0 {
             return vec![0.0; target_samples];
         }
 
-        let step = (samples.len() as f32) / (target_samples as f32);
+        let step = samples.len() as f32 / target_samples as f32;
         let mut out = Vec::with_capacity(target_samples);
 
         for i in 0..target_samples {
-            let idx = ((i as f32 * step) as usize).min(samples.len() - 1);
-            out.push(samples[idx].clamp(-1.0, 1.0));
+            let start = (i as f32 * step) as usize;
+            let end = (((i + 1) as f32 * step) as usize)
+                .max(start + 1)
+                .min(samples.len());
+            let mut sum = 0.0f32;
+            for k in start..end {
+                sum += samples[k];
+            }
+            out.push(sum / ((end - start) as f32));
         }
 
+        // Auto gain: cut immediately when the signal gets louder, swell back
+        // slowly so quiet passages still fill the scope.
+        let frame_peak = out.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+        let target_gain = if frame_peak > WAVE_GAIN_FLOOR {
+            (WAVE_TARGET_PEAK / frame_peak).clamp(1.0, WAVE_MAX_GAIN)
+        } else {
+            1.0
+        };
+        if target_gain < self.wave_gain {
+            self.wave_gain = target_gain;
+        } else {
+            self.wave_gain += (target_gain - self.wave_gain) * WAVE_GAIN_RELEASE;
+        }
+
+        for v in out.iter_mut() {
+            *v = (*v * self.wave_gain).clamp(-1.0, 1.0);
+        }
         out
     }
 }

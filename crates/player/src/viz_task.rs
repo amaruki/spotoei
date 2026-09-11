@@ -19,6 +19,11 @@ pub const RING_LEN: usize = FFT_SIZE;
 // the stream as stalled and decay the bars instead of freezing stale heights.
 const PCM_STALE_AFTER: Duration = Duration::from_secs(2);
 
+// Time to morph the scope between consecutive PCM windows. The analyzer runs
+// at 60 FPS but packets arrive far less often; interpolating keeps the trace
+// moving instead of freezing between packets.
+const WAVE_MORPH_SECS: f32 = 0.22;
+
 /// Slide a new mono PCM chunk into the analysis ring buffer. Chunks larger
 /// than the ring keep only their newest `RING_LEN` samples.
 pub fn update_ring(ring: &mut [f32; RING_LEN], chunk: &[f32]) {
@@ -50,6 +55,11 @@ pub fn spawn_visualizer_task(
         // about the frequencies of the current track.
         let mut received_real_pcm = false;
         let mut last_real_pcm_at: Option<Instant> = None;
+        // Scope morph state: previous/current windows plus when the blend
+        // towards the current one started.
+        let mut wave_prev: Vec<f32> = Vec::new();
+        let mut wave_cur: Vec<f32> = Vec::new();
+        let mut wave_blend_at: Option<Instant> = None;
         loop {
             let fps = viz_cfg.read().await.fps.max(1);
             let interval_ms = (1000_u64 / fps as u64).max(1);
@@ -66,6 +76,7 @@ pub fn spawn_visualizer_task(
             drop(cfg);
             analyzer.set_bands(bands);
             analyzer.set_sample_rate(sample_rate);
+            analyzer.set_fps(fps as f32);
 
             let snap = playback.snapshot().await;
             if snap.state != "playing" {
@@ -106,12 +117,32 @@ pub fn spawn_visualizer_task(
             let seq = next_event_seq();
             let line = match mode {
                 VisualizerMode::Oscilloscope => {
+                    if wave_cur.len() != waveform_samples {
+                        wave_prev = vec![0.0; waveform_samples];
+                        wave_cur = vec![0.0; waveform_samples];
+                        wave_blend_at = None;
+                    }
                     if silence {
                         format_waveform_event(seq, &vec![0.0; waveform_samples])
                     } else {
-                        let downsampled =
-                            Analyzer::compute_waveform(&ring_buffer, waveform_samples);
-                        format_waveform_event(seq, &downsampled)
+                        if got_real_pcm {
+                            wave_prev.copy_from_slice(&wave_cur);
+                            let fresh = analyzer.compute_waveform(&ring_buffer, waveform_samples);
+                            wave_cur.copy_from_slice(&fresh);
+                            wave_blend_at = Some(Instant::now());
+                        }
+                        let t = wave_blend_at
+                            .map(|at| {
+                                (at.elapsed().as_secs_f32() / WAVE_MORPH_SECS).clamp(0.0, 1.0)
+                            })
+                            .unwrap_or(1.0);
+                        let e = t * t * (3.0 - 2.0 * t);
+                        let samples: Vec<f32> = wave_prev
+                            .iter()
+                            .zip(wave_cur.iter())
+                            .map(|(a, b)| a + (b - a) * e)
+                            .collect();
+                        format_waveform_event(seq, &samples)
                     }
                 }
                 _ => {

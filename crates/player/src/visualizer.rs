@@ -13,6 +13,7 @@ pub enum VisualizerMode {
     Spectrum,
     Winamp,
     Oscilloscope,
+    Circular,
     Off,
 }
 
@@ -59,3 +60,5 @@ pub fn format_waveform_event(seq: u64, samples: &[f32]) -> String {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod waveform_tests;

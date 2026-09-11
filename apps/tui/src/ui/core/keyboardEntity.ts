@@ -44,7 +44,7 @@ export function handleEntityBrowseKeys(
       if (ctx.opts.onCycleVisualizerMode) {
         ctx.opts.onCycleVisualizerMode();
       } else {
-        const order = ['spectrum', 'winamp', 'oscilloscope', 'off'] as const;
+        const order = ['spectrum', 'winamp', 'oscilloscope', 'circular', 'off'] as const;
         const curMode = state.visualizer.mode as (typeof order)[number];
         const next = order[(order.indexOf(curMode) + 1) % order.length] ?? 'spectrum';
         state.visualizer.mode = next as typeof state.visualizer.mode;
