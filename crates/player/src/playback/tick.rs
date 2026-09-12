@@ -1,10 +1,14 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::state::Playback;
 use super::types::PlaybackState;
 use super::types::RepeatMode;
 
 const POSITION_EVENT_PERIOD_MS: u64 = 200; // 5 Hz
+/// Give up on a load that never reaches Playing/Paused (dead session,
+/// silently rejected Connect load, stalled audio key fetch) so the UI does
+/// not sit on a loading state forever.
+const LOADING_TIMEOUT: Duration = Duration::from_secs(20);
 
 impl Playback {
     /// Tick the position clock forward while playing. Emits a
@@ -13,6 +17,17 @@ impl Playback {
     pub async fn tick(&self) {
         let mut inner = self.inner.lock().await;
         if inner.state != PlaybackState::Playing {
+            if inner.state == PlaybackState::Loading
+                && inner.last_change_at.elapsed() >= LOADING_TIMEOUT
+            {
+                inner.state = PlaybackState::Idle;
+                inner.position_ms = 0;
+                inner.last_change_at = Instant::now();
+                inner.revision = inner.revision.wrapping_add(1);
+                let snap = self.snapshot_locked(&inner);
+                drop(inner);
+                self.emit_changed(&snap).await;
+            }
             return;
         }
         let elapsed = inner.last_change_at.elapsed().as_millis() as u64;

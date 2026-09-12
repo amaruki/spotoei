@@ -154,7 +154,10 @@ export class OptimisticPlaybackStateMachine {
         break;
       case 'load': {
         next.positionMs = 0;
-        next.state = action.opts.autoplay !== false ? 'playing' : 'paused';
+        // The backend only reports playing once librespot actually starts the
+        // stream. Predicting 'playing' here would advance the progress bar
+        // during session/connect time that is not playback.
+        next.state = 'loading';
         if (action.opts.durationMs && action.opts.durationMs > 0) {
           next.durationMs = action.opts.durationMs;
         }

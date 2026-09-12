@@ -99,7 +99,7 @@ export function createPlaybackActions(ctx: AppContext) {
         ...loadMeta,
       });
       nativeSuccess = true;
-      ui?.setStatus(`▶ Playing: ${opts.title}`);
+      ui?.setStatus(`⏳ Loading: ${opts.title}`);
     } catch (err) {
       logToFile(`[Native Play Error] ${err instanceof Error ? err.message : String(err)}`);
     }

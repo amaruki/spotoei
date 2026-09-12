@@ -67,28 +67,50 @@ export function createPlaybackBarHelpers(ctx: UiCoreContext) {
     const pb = optimisticPlayback.getEffectiveState() ?? state.playback;
     const track = pb?.track;
     const pbState =
-      pb?.state === 'playing' ? 'playing' : pb?.state === 'paused' ? 'paused' : 'idle';
+      pb?.state === 'playing'
+        ? 'playing'
+        : pb?.state === 'paused'
+          ? 'paused'
+          : pb?.state === 'loading' || pb?.state === 'buffering'
+            ? 'loading'
+            : 'idle';
 
     const stateLabel =
-      pbState === 'playing' ? '▶ Now Playing' : pbState === 'paused' ? '⏸ Paused' : 'Now Playing';
+      pbState === 'playing'
+        ? '▶ Now Playing'
+        : pbState === 'paused'
+          ? '⏸ Paused'
+          : pbState === 'loading'
+            ? '⏳ Loading…'
+            : 'Now Playing';
     const privateBadge = state.isPrivateSession ? ' • 🕶 Private' : '';
     built.playbackBar.title = ` ${stateLabel}${privateBadge} `;
     built.playbackBar.titleColor =
-      pbState === 'playing' ? COLOR_SUCCESS : pbState === 'paused' ? COLOR_WARN : COLOR_TEXT;
+      pbState === 'playing'
+        ? COLOR_SUCCESS
+        : pbState === 'paused' || pbState === 'loading'
+          ? COLOR_WARN
+          : COLOR_TEXT;
     if (!track) {
       const stateIcon =
         pbState === 'playing'
           ? fg(COLOR_SUCCESS)(bold('▶ PLAYING'))
           : pbState === 'paused'
             ? fg(COLOR_WARN)(bold('⏸ PAUSED'))
-            : fg(COLOR_DIM)('■ IDLE');
-      built.playbackTrackText.content = t`${stateIcon}  ${fg(COLOR_DIM)('No track playing — select a song from Library [r] or Search [/]')}`;
+            : pbState === 'loading'
+              ? fg(COLOR_WARN)(bold('⏳ LOADING'))
+              : fg(COLOR_DIM)('■ IDLE');
+      const hint =
+        pbState === 'loading'
+          ? 'Fetching playback from Spotify…'
+          : 'No track playing — select a song from Library [r] or Search [/]';
+      built.playbackTrackText.content = t`${stateIcon}  ${fg(COLOR_DIM)(hint)}`;
       const width = ctx.termWidth.value;
       const barLen = Math.max(10, width - 4 - 6 - 12);
       const emptyBar = '─'.repeat(barLen);
       built.playbackCoverBox.visible = false;
       built.playbackProgressText.content = t`${fg(COLOR_DIM)(`0:00 ${emptyBar} 0:00 (0%)`)}`;
-      built.statusText.content = t`${fg(COLOR_DIM)('Select a song to start listening')}`;
+      built.statusText.content = t`${fg(COLOR_DIM)(pbState === 'loading' ? 'Starting playback…' : 'Select a song to start listening')}`;
       if (playbackTickTimer) {
         clearInterval(playbackTickTimer);
         playbackTickTimer = null;

@@ -186,12 +186,17 @@ export function wireSubscriptions(
 
   clients.playback.onChange((next: PlaybackChangedDataT) => {
     const wasPlaying = state.lastPlaybackState === 'playing';
+    const previousState = state.lastPlaybackState;
     state.lastPlaybackState = next.state;
 
     const view = enrichment.enrichPlaybackTrack(next);
     state.currentInfo.playback = view;
     const ui = getUi();
     if (ui) ui.setPlayback(view);
+    // Confirm the load only once librespot actually starts the stream.
+    const justStarted =
+      next.state === 'playing' && (previousState === 'loading' || previousState === 'buffering');
+    if (ui && justStarted && view.track?.name) ui.setStatus(`▶ Playing: ${view.track.name}`);
     void actions.updateQueueView();
     void actions.ensureAutoplayTracks();
     if (ui && routeKind(ui.getRoute()) === 'lyrics') {

@@ -122,6 +122,80 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_load_with_autoplay_starts_in_loading_until_player_event() {
+        use ::librespot::core::spotify_uri::SpotifyUri;
+        use ::librespot::playback::player::PlayerEvent;
+
+        let (tx, mut rx) = mpsc::channel::<String>(16);
+        let pb = Playback::new(FakeEngine, tx);
+
+        let snap = pb
+            .load_opts(
+                LoadRequest {
+                    context_uri: None,
+                    track_uri: Some("spotify:track:autoplay1"),
+                    queue_uris: None,
+                    name: Some("Autoplay Track"),
+                    artists: Some(vec!["Artist".to_string()]),
+                    album: None,
+                    duration_ms: Some(100_000),
+                    genre: None,
+                },
+                true,
+            )
+            .await
+            .expect("load should succeed");
+        assert_eq!(snap.state, "loading");
+        assert_eq!(snap.position_ms, 0);
+        let event = rx.recv().await.expect("playback.changed event");
+        assert!(event.contains("loading"));
+
+        // FakeEngine never emits events; simulate librespot starting the
+        // stream, which is the only transition to Playing.
+        pb.handle_player_event(PlayerEvent::Playing {
+            play_request_id: 1,
+            track_id: SpotifyUri::from_uri("spotify:track:6rqhFgbbKwnb9MLmUQDhG6").unwrap(),
+            position_ms: 0,
+        })
+        .await;
+        assert_eq!(pb.snapshot().await.state, "playing");
+        let _ = rx.recv().await.expect("playing event");
+    }
+
+    #[tokio::test]
+    async fn test_loading_watchdog_returns_to_idle_after_timeout() {
+        let (tx, mut rx) = mpsc::channel::<String>(16);
+        let pb = Playback::new(FakeEngine, tx);
+
+        pb.load(LoadRequest {
+            context_uri: None,
+            track_uri: Some("spotify:track:stuck"),
+            queue_uris: None,
+            name: None,
+            artists: None,
+            album: None,
+            duration_ms: None,
+            genre: None,
+        })
+        .await
+        .expect("load should succeed");
+        let _ = rx.recv().await.expect("load event");
+        assert_eq!(pb.snapshot().await.state, "loading");
+
+        {
+            let mut inner = pb.inner.lock().await;
+            inner.last_change_at = std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(21))
+                .expect("instant within range");
+        }
+        pb.tick().await;
+
+        assert_eq!(pb.snapshot().await.state, "idle");
+        let event = rx.recv().await.expect("idle event");
+        assert!(event.contains("idle"));
+    }
+
+    #[tokio::test]
     async fn test_tick_detects_end_from_clamped_position() {
         let (tx, mut rx) = mpsc::channel::<String>(16);
         let pb = Playback::new(FakeEngine, tx);

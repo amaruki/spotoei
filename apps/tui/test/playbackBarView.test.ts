@@ -70,4 +70,11 @@ describe('playback bar responsive variants', () => {
     });
     expect(out.line1).toContain('■');
   });
+
+  it('loading state renders the hourglass token without a play icon', () => {
+    const out = buildPlaybackBarContent({ ...base, state: 'loading', width: 120 });
+    expect(out.line1).toContain('⏳');
+    expect(out.line1).not.toContain('▶');
+    expect(out.line2).toContain('1:24');
+  });
 });

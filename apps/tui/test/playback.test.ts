@@ -61,14 +61,14 @@ describe('playback integration with player sidecar', () => {
     }
   });
 
-  test('load track with autoplay starts playback and emits changed event', async () => {
+  test('load track with autoplay enters loading until the player reports playback', async () => {
     const bin = locatePlayer();
     const handshake = await startPlayer(bin);
     const playback = createPlaybackClient({ child: handshake.child });
 
     const eventPromise = waitForChangedEvent(
       (l) => playback.onChange(l),
-      (s) => s.state === 'playing',
+      (s) => s.state === 'loading',
     );
 
     try {
@@ -77,12 +77,13 @@ describe('playback integration with player sidecar', () => {
         autoplay: true,
       });
 
-      expect(snap.state).toBe('playing');
+      expect(snap.state).toBe('loading');
+      expect(snap.positionMs).toBe(0);
       expect(snap.track?.name).toBe('Track 4cOdK2wGLETKBW3PvgPWqT');
       expect(snap.track?.durationMs).toBe(240000);
 
       const event = await eventPromise;
-      expect(event.state).toBe('playing');
+      expect(event.state).toBe('loading');
     } finally {
       playback.close();
       await stopPlayer(handshake.child);
@@ -185,6 +186,9 @@ describe('playback integration with player sidecar', () => {
         trackUri: 'spotify:track:tickTest',
         autoplay: true,
       });
+      // FakeEngine emits no PlayerEvent, so drive the explicit transition
+      // the librespot engine would make when audio actually starts.
+      await playback.play();
 
       // Wait until at least 2 position events are observed (or short
       // window elapses). Position events arrive at ~5 Hz from the
@@ -217,7 +221,7 @@ describe('playback integration with player sidecar', () => {
         album: 'Album',
       });
 
-      expect(snap.state).toBe('playing');
+      expect(snap.state).toBe('loading');
       expect(snap.track?.durationMs).toBe(209720);
       expect(snap.durationMs).toBe(209720);
     } finally {

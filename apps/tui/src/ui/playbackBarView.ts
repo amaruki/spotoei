@@ -11,7 +11,7 @@ function truncate(text: string, max: number): string {
 }
 
 export interface PlaybackBarInput {
-  state: 'playing' | 'paused' | 'idle';
+  state: 'playing' | 'paused' | 'loading' | 'idle';
   title: string;
   artist: string;
   album?: string;
@@ -49,7 +49,14 @@ function renderFullProgressBar(pos: string, dur: string, pct: number, availableW
 }
 
 export function buildPlaybackBarContent(input: PlaybackBarInput): PlaybackBarContent {
-  const icon = input.state === 'playing' ? '▶' : input.state === 'paused' ? '⏸' : '■';
+  const icon =
+    input.state === 'playing'
+      ? '▶'
+      : input.state === 'paused'
+        ? '⏸'
+        : input.state === 'loading'
+          ? '⏳'
+          : '■';
   const pos = formatTime(input.positionMs);
   const dur = formatTime(input.durationMs);
   const rawTitle = input.title || '(no track)';

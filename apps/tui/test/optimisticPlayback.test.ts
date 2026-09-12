@@ -78,6 +78,24 @@ describe('OptimisticPlaybackStateMachine', () => {
     expect(sm.getEffectiveState()?.track?.name).toBe('Next Song');
   });
 
+  test('load predicts loading until the backend confirms playback', () => {
+    const sm = new OptimisticPlaybackStateMachine();
+    sm.setAuthoritativeState(createSampleState({ state: 'idle', track: null, positionMs: 0 }));
+
+    const predicted = sm.applyOptimistic(
+      {
+        type: 'load',
+        opts: { trackUri: 'spotify:track:next', name: 'Next Song', autoplay: true },
+      },
+      'cmd-load',
+    );
+
+    expect(predicted.state).toBe('loading');
+    expect(predicted.positionMs).toBe(0);
+    expect(predicted.track?.name).toBe('Next Song');
+    expect(sm.getEffectiveState()?.state).toBe('loading');
+  });
+
   test('buffers pending state changes with TTL (1500ms)', () => {
     const sm = new OptimisticPlaybackStateMachine(DEFAULT_OPTIMISTIC_TTL_MS);
     const initial = createSampleState({ state: 'paused' });

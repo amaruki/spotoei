@@ -40,7 +40,9 @@ impl Playback {
         let snap = {
             let mut inner = self.inner.lock().await;
             inner.revision = inner.revision.wrapping_add(1);
-            inner.state = if autoplay { PlaybackState::Playing } else { PlaybackState::Loading };
+            // Audio starts asynchronously; Playing only comes from
+            // PlayerEvent::Playing, never from load time.
+            inner.state = PlaybackState::Loading;
             inner.track = Some(track.clone());
             inner.context_uri = req.context_uri.map(|s| s.to_string());
             inner.position_ms = 0;
