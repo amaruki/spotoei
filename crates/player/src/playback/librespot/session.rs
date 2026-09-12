@@ -279,6 +279,7 @@ impl super::LibrespotEngine {
     /// distinctly so the caller can retry once with a fresh token; every
     /// other outcome (including the Spirc-less fallback) resolves here.
     async fn connect_active(&self, wanted_epoch: u64) -> Result<LibrespotActive, ConnectError> {
+        let started = std::time::Instant::now();
         let config_dir = std::env::var("XDG_CONFIG_HOME")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|_| {
@@ -492,8 +493,10 @@ impl super::LibrespotEngine {
 
         *self.inner.lock().await = Some(active.clone());
         info!(
+            connect_ms = started.elapsed().as_millis() as u64,
             "Spotoei Spotify Connect player initialized (mode={}, backend={})",
-            active_mode, active_backend
+            active_mode,
+            active_backend
         );
         Ok(active)
     }
@@ -508,6 +511,22 @@ pub fn monitor_player_events(
         use librespot::playback::player::PlayerEvent;
         use super::super::PlaybackEngine;
         while let Some(event) = event_channel.recv().await {
+            if let PlayerEvent::Playing {
+                track_id,
+                position_ms,
+                ..
+            } = &event
+            {
+                let load_ms = state_engine
+                    .load_started_at
+                    .lock()
+                    .ok()
+                    .and_then(|mut started| started.take())
+                    .map(|t0| t0.elapsed().as_millis() as u64);
+                if let Some(load_ms) = load_ms {
+                    info!(track = %track_id, load_ms, position_ms, "Playback started");
+                }
+            }
             match &event {
                 PlayerEvent::Playing { track_id, position_ms, .. } => {
                     tracing::debug!(track = %track_id, pos = position_ms, "PlayerEvent::Playing");

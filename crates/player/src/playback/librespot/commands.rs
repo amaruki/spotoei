@@ -4,6 +4,14 @@ use super::super::engine::PlaybackEngine;
 use super::super::types::{RepeatMode, Track};
 
 impl super::LibrespotEngine {
+    /// Timestamp the most recent load request so the first `Playing` event
+    /// can report end-to-end load latency.
+    pub(super) fn note_load_requested(&self) {
+        if let Ok(mut started) = self.load_started_at.lock() {
+            *started = Some(std::time::Instant::now());
+        }
+    }
+
     /// Report playback as stopped when no engine path can start it. Leaving
     /// the state in `Loading` forever would strand the UI.
     pub(super) fn emit_unavailable_stopped(&self, uri: &str) {
@@ -79,6 +87,7 @@ impl PlaybackEngine for super::LibrespotEngine {
     fn play_context(&self, context_uri: &str, autoplay: bool) {
         let self_clone = self.clone();
         let context = context_uri.to_string();
+        self.note_load_requested();
         tokio::spawn(async move {
             match self_clone.ensure_active().await {
                 Ok(act) => {
@@ -123,6 +132,7 @@ impl PlaybackEngine for super::LibrespotEngine {
         let uri_str = uri.to_string();
         let context_str = context_uri.map(String::from);
         let queue = queue_uris.to_vec();
+        self.note_load_requested();
         tokio::spawn(async move {
             match self_clone.ensure_active().await {
                 Ok(act) => {
