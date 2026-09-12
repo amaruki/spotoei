@@ -42,6 +42,16 @@ impl PlaybackEngine for super::LibrespotEngine {
         self.play_track_in_context(uri, None, &[], autoplay, position_ms);
     }
 
+    fn prewarm(&self) {
+        let self_clone = self.clone();
+        tokio::spawn(async move {
+            match self_clone.ensure_active().await {
+                Ok(_) => tracing::debug!("librespot session prewarmed"),
+                Err(e) => tracing::debug!("librespot prewarm skipped: {}", e),
+            }
+        });
+    }
+
     fn play_track_in_context(
         &self,
         uri: &str,

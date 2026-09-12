@@ -28,7 +28,17 @@ pub async fn handle(
             playback.release().await;
             auth_cmd::dispatch("auth.logout", &cmd, auth).await
         }
-        command if command.starts_with("auth.") => auth_cmd::dispatch(command, &cmd, auth).await,
+        command if command.starts_with("auth.") => {
+            let reply = auth_cmd::dispatch(command, &cmd, auth).await;
+            // Streaming credentials can arrive after process start, so the
+            // startup prewarm may have been skipped. Warm the librespot
+            // session as soon as the status poll observes them, keeping the
+            // connect cost out of the first playback.load.
+            if command == "auth.streaming_status" && auth.has_streaming_session().await {
+                playback.prewarm();
+            }
+            reply
+        }
         command if command.starts_with("playback.") => {
             playback_cmd::dispatch(command, &cmd, playback).await
         }

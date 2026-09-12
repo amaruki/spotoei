@@ -43,6 +43,12 @@ impl Playback {
         self.snapshot_locked(&inner)
     }
 
+    /// Warm the playback backend in the background so the first real load
+    /// does not pay session/connect setup on the critical path.
+    pub fn prewarm(&self) {
+        self.engine.prewarm();
+    }
+
     /// Release the playback backend and discard account-specific playback
     /// state. Called before auth logout removes the credential material.
     pub async fn release(&self) {

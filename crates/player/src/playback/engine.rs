@@ -7,6 +7,9 @@ pub trait PlaybackEngine: Send + Sync {
         Vec::new()
     }
     fn play_track(&self, _uri: &str, _autoplay: bool, _position_ms: u32) {}
+    /// Best-effort background warmup of the playback backend so the first
+    /// real load does not pay session/connect setup.
+    fn prewarm(&self) {}
     /// Play a track together with its upcoming queue so Connect receivers
     /// can broadcast and walk the same context. Defaults to plain playback
     /// for engines without Connect support.

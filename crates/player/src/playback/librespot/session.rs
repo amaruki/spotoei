@@ -215,13 +215,18 @@ impl super::LibrespotEngine {
 
     pub(super) async fn ensure_active(&self) -> Result<LibrespotActive, String> {
         let wanted_epoch = self.auth.session_epoch();
-        {
-            let guard = self.inner.lock().await;
-            if let Some(ref act) = *guard {
-                if act.created_epoch == wanted_epoch && !act.session.is_invalid() {
-                    return Ok(act.clone());
-                }
-            }
+        if let Some(act) = self.cached_active(wanted_epoch).await {
+            return Ok(act);
+        }
+
+        // A prewarm may already be connecting. Serialize so this call waits
+        // for that session instead of building a second one; re-check after
+        // acquiring the guard in case it completed while we waited.
+        let _guard = self.connect_guard.lock().await;
+        let wanted_epoch = self.auth.session_epoch();
+        if let Some(act) = self.cached_active(wanted_epoch).await {
+            tracing::debug!("librespot session became ready while waiting for connect");
+            return Ok(act);
         }
 
         // No auth session means no playback session: fail fast instead of
@@ -256,6 +261,18 @@ impl super::LibrespotEngine {
             }
             Err(ConnectError::Fatal(message)) => Err(message),
         }
+    }
+
+    /// Return the installed session when it still matches the auth identity
+    /// and is not invalid.
+    async fn cached_active(&self, wanted_epoch: u64) -> Option<LibrespotActive> {
+        let guard = self.inner.lock().await;
+        if let Some(ref act) = *guard {
+            if act.created_epoch == wanted_epoch && !act.session.is_invalid() {
+                return Some(act.clone());
+            }
+        }
+        None
     }
 
     /// Build a fresh librespot session. A credentials rejection is reported

@@ -24,6 +24,9 @@ pub struct LibrespotEngine {
     pub(super) state_listener: Arc<std::sync::Mutex<Option<Arc<dyn super::engine::PlaybackStateListener>>>>,
     pub(super) unavailable: Arc<std::sync::Mutex<reauth::UnavailableTracker>>,
     pub(super) is_stopped: Arc<std::sync::atomic::AtomicBool>,
+    /// Serializes `connect_active` so a prewarm and a play request never
+    /// build two Spotify sessions for the same device concurrently.
+    pub(super) connect_guard: Arc<Mutex<()>>,
 }
 
 impl LibrespotEngine {
@@ -52,6 +55,7 @@ impl LibrespotEngine {
             state_listener: Arc::new(std::sync::Mutex::new(None)),
             unavailable: Arc::new(std::sync::Mutex::new(reauth::UnavailableTracker::default())),
             is_stopped: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            connect_guard: Arc::new(Mutex::new(())),
         }
     }
 
