@@ -428,7 +428,7 @@ struct RawPlaybackConfig {
     pregain: Option<f32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Track {
     pub uri: String,
     pub name: String,

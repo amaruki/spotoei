@@ -23,11 +23,15 @@ impl Playback {
             }
             resolved
         } else if let Some(cu) = req.context_uri {
-            let mut first = self.engine.context_tracks(cu).into_iter().next();
-            if let Some(ref mut t) = first {
-                apply_track_overrides(t, &req);
-            }
-            first
+            // Context-only load: real metadata arrives with librespot's
+            // TrackChanged event; the placeholder carries what the TUI knows.
+            let mut placeholder = Track {
+                uri: cu.to_string(),
+                name: "Loading…".to_string(),
+                ..Track::default()
+            };
+            apply_track_overrides(&mut placeholder, &req);
+            Some(placeholder)
         } else {
             return Err(PlaybackError);
         };
@@ -52,8 +56,12 @@ impl Playback {
             self.snapshot_locked(&inner)
         };
         self.emit_changed(&snap).await;
-        self.engine
-            .play_track_in_context(&track.uri, req.context_uri, &queue_uris, autoplay, 0);
+        if let Some(tu) = req.track_uri {
+            self.engine
+                .play_track_in_context(tu, req.context_uri, &queue_uris, autoplay, 0);
+        } else if let Some(cu) = req.context_uri {
+            self.engine.play_context(cu, autoplay);
+        }
         Ok(snap)
     }
 

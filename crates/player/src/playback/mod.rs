@@ -163,6 +163,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_context_only_load_uses_placeholder_track() {
+        let (tx, mut rx) = mpsc::channel::<String>(16);
+        let pb = Playback::new(FakeEngine, tx);
+
+        let snap = pb
+            .load_opts(
+                LoadRequest {
+                    context_uri: Some("spotify:album:ctx1"),
+                    track_uri: None,
+                    queue_uris: None,
+                    name: Some("My Album"),
+                    artists: None,
+                    album: None,
+                    duration_ms: None,
+                    genre: None,
+                },
+                true,
+            )
+            .await
+            .expect("context load should succeed");
+        assert_eq!(snap.state, "loading");
+        assert_eq!(
+            snap.track.as_ref().map(|t| t.name.as_str()),
+            Some("My Album")
+        );
+        let event = rx.recv().await.expect("context load event");
+        assert!(event.contains("loading"));
+    }
+
+    #[tokio::test]
     async fn test_loading_watchdog_returns_to_idle_after_timeout() {
         let (tx, mut rx) = mpsc::channel::<String>(16);
         let pb = Playback::new(FakeEngine, tx);

@@ -3,6 +3,30 @@ use tracing::{info, warn};
 use super::super::engine::PlaybackEngine;
 use super::super::types::{RepeatMode, Track};
 
+impl super::LibrespotEngine {
+    /// Report playback as stopped when no engine path can start it. Leaving
+    /// the state in `Loading` forever would strand the UI.
+    pub(super) fn emit_unavailable_stopped(&self, uri: &str) {
+        self.is_stopped
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let track_id =
+            librespot::core::spotify_uri::SpotifyUri::from_uri(uri).unwrap_or_else(|_| {
+                librespot::core::spotify_uri::SpotifyUri::from_uri(
+                    "spotify:track:0000000000000000000000",
+                )
+                .expect("static fallback uri")
+            });
+        if let Ok(guard) = self.state_listener.lock() {
+            if let Some(listener) = &*guard {
+                listener.on_player_event(&librespot::playback::player::PlayerEvent::Stopped {
+                    play_request_id: 0,
+                    track_id,
+                });
+            }
+        }
+    }
+}
+
 impl PlaybackEngine for super::LibrespotEngine {
     fn remember_track_metadata(&self, track: &Track) {
         if let Ok(mut cache) = self.track_metadata_cache.try_lock() {
@@ -48,6 +72,41 @@ impl PlaybackEngine for super::LibrespotEngine {
             match self_clone.ensure_active().await {
                 Ok(_) => tracing::debug!("librespot session prewarmed"),
                 Err(e) => tracing::debug!("librespot prewarm skipped: {}", e),
+            }
+        });
+    }
+
+    fn play_context(&self, context_uri: &str, autoplay: bool) {
+        let self_clone = self.clone();
+        let context = context_uri.to_string();
+        tokio::spawn(async move {
+            match self_clone.ensure_active().await {
+                Ok(act) => {
+                    if let Some(spirc) = &act.spirc {
+                        let _ = spirc.activate();
+                        self_clone
+                            .is_stopped
+                            .store(false, std::sync::atomic::Ordering::SeqCst);
+                        let options = librespot::connect::LoadRequestOptions {
+                            start_playing: autoplay,
+                            ..Default::default()
+                        };
+                        let _ = spirc.load(librespot::connect::LoadRequest::from_context_uri(
+                            context.clone(),
+                            options,
+                        ));
+                    } else {
+                        warn!(
+                            "Connect playback unavailable; cannot play context {}",
+                            context
+                        );
+                        self_clone.emit_unavailable_stopped(&context);
+                    }
+                }
+                Err(e) => {
+                    warn!("Librespot playback unavailable: {}", e);
+                    self_clone.emit_unavailable_stopped(&context);
+                }
             }
         });
     }
@@ -107,16 +166,7 @@ impl PlaybackEngine for super::LibrespotEngine {
                 }
                 Err(e) => {
                     warn!("Librespot playback unavailable: {}", e);
-                    self_clone.is_stopped.store(true, std::sync::atomic::Ordering::SeqCst);
-                    if let Ok(guard) = self_clone.state_listener.lock() {
-                        if let Some(listener) = &*guard {
-                            listener.on_player_event(&librespot::playback::player::PlayerEvent::Stopped {
-                                play_request_id: 0,
-                                track_id: librespot::core::spotify_uri::SpotifyUri::from_uri(&uri_str)
-                                    .unwrap_or_else(|_| librespot::core::spotify_uri::SpotifyUri::from_uri("spotify:track:0000000000000000000000").unwrap()),
-                            });
-                        }
-                    }
+                    self_clone.emit_unavailable_stopped(&uri_str);
                 }
             }
         });

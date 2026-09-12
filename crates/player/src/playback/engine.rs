@@ -7,6 +7,11 @@ pub trait PlaybackEngine: Send + Sync {
         Vec::new()
     }
     fn play_track(&self, _uri: &str, _autoplay: bool, _position_ms: u32) {}
+    /// Play a context (album/playlist/artist/show) without a concrete track.
+    /// Engines without context support default to doing nothing; the state
+    /// layer keeps the request in Loading until a player event arrives or the
+    /// loading watchdog gives up.
+    fn play_context(&self, _context_uri: &str, _autoplay: bool) {}
     /// Best-effort background warmup of the playback backend so the first
     /// real load does not pay session/connect setup.
     fn prewarm(&self) {}
