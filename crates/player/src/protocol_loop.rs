@@ -76,6 +76,12 @@ pub async fn run() -> ExitCode {
             lyrics,
         )
     };
+    // Media keys and Bluetooth headset buttons reach a TUI only through the
+    // OS media control APIs (MPRIS, MediaPlayer, SMTC); mock runs stay
+    // integration-free for tests.
+    if !use_mock_playback {
+        crate::media::spawn(playback.clone());
+    }
     let visualizer_cfg = Arc::new(RwLock::new(VisualizerConfig::default()));
     // Visualizer publisher: emits real-time CAVA FFT spectrum and waveform
     // events from audio decoded by Librespot. Drops frames silently if

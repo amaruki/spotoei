@@ -53,5 +53,17 @@ crossbeam-channel = "0.5"
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
 
+# MPRIS D-Bus service so desktop environments can route media keys and
+# Bluetooth headset controls (AVRCP) to the player.
+[target.'cfg(target_os = "linux")'.dependencies]
+mpris-server = "0.10"
+
+# macOS/Windows have no MPRIS: souvlaki bridges MPRemoteCommandCenter and the
+# Windows System Media Transport Controls. Windows also needs an HWND, which
+# winit provides through an invisible window.
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+souvlaki = "0.8.3"
+winit = "0.30"
+
 [lints]
 workspace = true
