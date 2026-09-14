@@ -95,6 +95,7 @@ export async function fetchFollowedArtists(
         const walkUrl = walkCursor
           ? `/me/following?type=artist&limit=${safeLimit}&after=${encodeURIComponent(walkCursor)}`
           : `/me/following?type=artist&limit=${safeLimit}`;
+        // oxlint-disable-next-line no-await-in-loop -- cursor pagination walks sequentially
         const walkJson = await transport.request(walkUrl);
         const walkArtistsObj =
           walkJson !== null && typeof walkJson === 'object' && 'artists' in walkJson

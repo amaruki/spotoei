@@ -57,6 +57,7 @@ export function createAuthTokenCache(deps: AuthTokenCacheDeps): AuthTokenCache {
         // An invalidation is being applied: wait for the player to drop the
         // rejected token before asking for the next one.
         if (invalidationPromise) {
+          // oxlint-disable-next-line no-await-in-loop -- retry waits for in-flight invalidation
           await invalidationPromise.catch(() => {});
           continue;
         }
@@ -93,6 +94,7 @@ export function createAuthTokenCache(deps: AuthTokenCacheDeps): AuthTokenCache {
           })();
           refreshPromise = inFlight;
         }
+        // oxlint-disable-next-line no-await-in-loop -- retry waits for in-flight invalidation
         const token = await inFlight;
         if (token !== null) return token;
         // Superseded: loop and fetch for the current epoch.

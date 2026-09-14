@@ -30,6 +30,7 @@ describe('browseLive locale normalization', () => {
     ];
     for (const [input, expected] of localeCases) {
       seen.length = 0;
+      // oxlint-disable-next-line no-await-in-loop -- sequential locale assertions
       await api.getCategories(input, 20, 0);
       expect(seen[0]).toBe(expected);
     }

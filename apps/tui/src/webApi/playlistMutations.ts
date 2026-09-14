@@ -50,6 +50,7 @@ export async function addTracksToPlaylist(
     const body: Record<string, unknown> = { uris: batch };
     if (position !== undefined) body.position = position + i;
     if (lastSnapshot) body.snapshot_id = lastSnapshot;
+    // oxlint-disable-next-line no-await-in-loop -- playlist batches chain snapshot_id
     const json = await transport.request(
       `/playlists/${encodeURIComponent(playlistId)}/tracks`,
       body,
@@ -76,6 +77,7 @@ export async function removeTracksFromPlaylist(
       tracks: batch.map((uri) => ({ uri })),
     };
     if (lastSnapshot) body.snapshot_id = lastSnapshot;
+    // oxlint-disable-next-line no-await-in-loop -- playlist batches chain snapshot_id
     const json = await transport.request(
       `/playlists/${encodeURIComponent(playlistId)}/tracks`,
       body,

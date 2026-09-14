@@ -80,7 +80,9 @@ describe('playback bar cover art', () => {
     const image = findNode(renderer.root as TreeNode, 'playback-cover-image');
     let ready = Boolean(image?.image) && !image?.loading;
     for (let i = 0; i < 50 && !ready; i++) {
+      // oxlint-disable-next-line no-await-in-loop -- test waits for the render loop
       await new Promise((resolve) => setTimeout(resolve, 20));
+      // oxlint-disable-next-line no-await-in-loop -- test waits for the render loop
       await renderOnce();
       const current = findNode(renderer.root as TreeNode, 'playback-cover-image');
       ready = Boolean(current?.image) && !current?.loading;

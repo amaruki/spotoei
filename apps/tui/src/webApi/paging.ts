@@ -51,6 +51,7 @@ export async function fetchAllPages<T>(
       const remaining = total - offset;
       if (remaining <= 0) break;
       const jobs = Math.min(maxParallel, Math.ceil(remaining / pageLimit));
+      // oxlint-disable-next-line no-await-in-loop -- await is a parallel Promise.all batch
       const pages = await Promise.all(
         Array.from({ length: jobs }, (_, i) => fetchPage(offset + i * pageLimit, pageLimit)),
       );
@@ -60,6 +61,7 @@ export async function fetchAllPages<T>(
       }
       offset += jobs * pageLimit;
     } else {
+      // oxlint-disable-next-line no-await-in-loop -- await is a parallel Promise.all batch
       const pages = await Promise.all(
         Array.from({ length: maxParallel }, (_, i) => fetchPage(offset + i * pageLimit, pageLimit)),
       );

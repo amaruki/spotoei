@@ -37,6 +37,7 @@ async function moreFromSeedArtists(
     if (out.length >= count) break;
     let albums: CatalogAlbumT[] = [];
     try {
+      // oxlint-disable-next-line no-await-in-loop -- stop at count to bound requests
       albums = (await manager.loadArtistAlbums(artistId, 'album', 0, 10)).items;
     } catch {
       continue;
@@ -45,6 +46,7 @@ async function moreFromSeedArtists(
       if (out.length >= count) break;
       let items: CatalogTrackT[] = [];
       try {
+        // oxlint-disable-next-line no-await-in-loop -- stop at count to bound requests
         items = (await manager.loadAlbumTracks(album.id, 0, 5)).items;
       } catch {
         continue;

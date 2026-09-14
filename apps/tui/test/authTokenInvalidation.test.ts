@@ -157,6 +157,7 @@ async function waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<void
   const start = Date.now();
   while (!predicate()) {
     if (Date.now() - start > timeoutMs) throw new Error('timed out waiting for condition');
+    // oxlint-disable-next-line no-await-in-loop -- polling test condition
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }

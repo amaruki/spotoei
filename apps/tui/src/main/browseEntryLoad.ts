@@ -165,6 +165,7 @@ export async function handleSearchBrowseEntryInline(
         if (!pid) continue;
         if (entityManager?.loadPlaylistTracks) {
           try {
+            // oxlint-disable-next-line no-await-in-loop -- probe candidates until one resolves
             const page = await entityManager.loadPlaylistTracks(pid, 0, 100);
             if ((page.items as unknown[]).length === 0) continue;
           } catch {
@@ -191,6 +192,7 @@ export async function handleSearchBrowseEntryInline(
         if (!aid) continue;
         if (entityManager?.loadAlbumTracks) {
           try {
+            // oxlint-disable-next-line no-await-in-loop -- probe candidates until one resolves
             const page = await entityManager.loadAlbumTracks(aid, 0, 20);
             if ((page.items as unknown[]).length === 0) continue;
           } catch {

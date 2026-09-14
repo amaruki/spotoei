@@ -33,6 +33,7 @@ export async function getTopTracksFallback(
   for (const trackId of seedTracks) {
     if (artistIds.length >= 5) break;
     try {
+      // oxlint-disable-next-line no-await-in-loop -- capped lookups stop early
       const json = await transport.request(`/tracks/${encodeURIComponent(trackId)}`);
       const rawArtists =
         json !== null && typeof json === 'object'
@@ -58,6 +59,7 @@ export async function getTopTracksFallback(
   for (const artistId of artistIds) {
     if (tracks.length >= limit) break;
     try {
+      // oxlint-disable-next-line no-await-in-loop -- capped lookups stop early
       const json = await transport.request(
         `/artists/${encodeURIComponent(artistId)}/top-tracks?market=from_token`,
       );
