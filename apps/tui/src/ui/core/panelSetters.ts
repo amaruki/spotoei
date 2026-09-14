@@ -51,6 +51,7 @@ function renderSearchResults(ctx: UiCoreContext): void {
     { key: 'tracks', list: ctx.built.searchTracksList, refs: panels.tracks },
     { key: 'artists', list: ctx.built.searchArtistsList, refs: panels.artists },
     { key: 'albums', list: ctx.built.searchAlbumsList, refs: panels.albums },
+    { key: 'playlists', list: ctx.built.searchPlaylistsList, refs: panels.playlists },
   ];
   const playingUri =
     (ctx.state.playback as unknown as { track?: { uri?: string } })?.track?.uri ?? null;

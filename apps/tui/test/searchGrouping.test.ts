@@ -22,6 +22,17 @@ const artistHit = (id: string) => ({
   artist: { id, uri: `spotify:artist:${id}`, name: id },
 });
 
+const playlistHit = (id: string) => ({
+  type: 'playlist' as const,
+  playlist: {
+    id,
+    uri: `spotify:playlist:${id}`,
+    name: id,
+    owner: { id: 'o', name: 'Owner' },
+    trackCount: 12,
+  },
+});
+
 const showHit = (id: string) => ({
   type: 'show' as const,
   show: { id, uri: `spotify:show:${id}`, name: id, publisher: 'Pub', totalEpisodes: 5 },
@@ -134,6 +145,25 @@ describe('search grouping', () => {
     const target = ui.getContextTarget();
     expect(target?.kind).toBe('track');
     expect(target?.id).toBe('t1');
+    await ui.shutdown();
+  });
+
+  it('renders playlist hits in the playlists panel', async () => {
+    const { renderer, renderOnce } = await createTestRenderer({ width: 120, height: 40 });
+    const ui = createUiCore(renderer, baseState, {
+      onKey: () => {},
+      onSearchSubmit: () => {},
+      onSelectLibrary: () => {},
+      onSelectQueue: () => {},
+    });
+    await renderOnce();
+    ui.setRoute({ kind: 'search', query: 'q' });
+    ui.setSearchResults('q', {
+      query: 'q',
+      hits: [trackHit('t1') as never, playlistHit('p1') as never],
+    } as unknown as SearchResponseT);
+    ui.setSearchFilter('playlist');
+    expect(ui.getContextTarget()).toMatchObject({ kind: 'playlist', id: 'p1' });
     await ui.shutdown();
   });
 });
