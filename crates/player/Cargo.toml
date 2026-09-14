@@ -33,7 +33,7 @@ keyring = { version = "3", features = [
   "linux-native-sync-persistent",
 ] }
 rand = "0.8"
-sha2 = "0.10"
+sha2 = "0.11"
 base64 = "0.22"
 urlencoding = "2"
 hyper = { version = "1", features = ["server", "http1"] }
