@@ -2,7 +2,58 @@
 
 Packaged releases need no Bun, Node.js, Rust, or librespot installation.
 
-## From a release archive
+## Install script
+
+**Linux / macOS**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/amaruki/spotoei/main/scripts/install.sh | sh
+```
+
+**Windows (PowerShell)**
+
+```powershell
+irm https://raw.githubusercontent.com/amaruki/spotoei/main/scripts/install.ps1 | iex
+```
+
+The script resolves the latest release, downloads the archive for your OS/architecture,
+verifies the SHA-256 checksum, and installs:
+
+| Platform      | Install directory                 |
+| ------------- | --------------------------------- |
+| Linux / macOS | `$HOME/.local/libexec/spotoei`    |
+| Windows       | `%LOCALAPPDATA%\Programs\spotoei` |
+
+It links/registers `spotoei` on your user `PATH`. Open a new terminal (or run the printed
+`export PATH=...`) before using it.
+
+Prefer to review before running:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/amaruki/spotoei/main/scripts/install.sh
+less install.sh
+sh install.sh
+```
+
+Environment overrides:
+
+| Variable              | Effect                                        |
+| --------------------- | --------------------------------------------- |
+| `SPOTOEI_VERSION`     | Install a specific version (default: latest)  |
+| `SPOTOEI_PREFIX`      | Install prefix (default: `$HOME/.local`)      |
+| `SPOTOEI_INSTALL_DIR` | Windows install directory (default: as above) |
+
+### Linux runtime packages
+
+The player needs ALSA and PulseAudio runtime libraries:
+
+| Distro        | Packages                                    |
+| ------------- | ------------------------------------------- |
+| Debian/Ubuntu | `sudo apt install libasound2 libpulse0`     |
+| Fedora        | `sudo dnf install alsa-lib pulseaudio-libs` |
+| Arch          | `sudo pacman -S alsa-lib libpulse`          |
+
+## Manual install from an archive
 
 Download your platform's archive and `SHA256SUMS` from the
 [latest release](https://github.com/amaruki/spotoei/releases/latest). Each archive contains
@@ -18,9 +69,6 @@ Download your platform's archive and `SHA256SUMS` from the
 | Windows  | arm64         | `spotoei-v0.0.0-windows-arm64.tar.gz`  |
 
 ### Linux
-
-Runtime packages: `alsa-lib` and `libpulse` (Debian/Ubuntu: `libasound2 libpulse0`, Fedora:
-`alsa-lib pulseaudio-libs`, Arch: `alsa-lib libpulse`).
 
 ```sh
 sha256sum -c SHA256SUMS
