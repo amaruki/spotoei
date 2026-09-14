@@ -5,6 +5,7 @@ import { Cache, defaultCachePath } from '../cache';
 import { getCacheDir, getConfigDir } from '../config';
 import { resolveClientId, getRedirectUri, saveClientId, saveRedirectPort } from '../config';
 import { locatePlayer } from '../player';
+import { APP_VERSION } from '../version';
 
 const HELP_TEXT = `spotoei — Spotify TUI
 
@@ -42,7 +43,7 @@ export function printHelp(): void {
 }
 
 export function printVersion(): void {
-  process.stdout.write(`spotoei v0.0.0 (protocol v${PROTOCOL_VERSION})\n`);
+  process.stdout.write(`spotoei v${APP_VERSION} (protocol v${PROTOCOL_VERSION})\n`);
 }
 
 export function runDoctor(args: string[]): number {

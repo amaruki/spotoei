@@ -11,6 +11,7 @@ import type {
 } from 'spotoei-protocol';
 
 import type { HomeRow, LibraryItemT, UiViewState } from '../src/ui';
+import { APP_VERSION } from '../src/version';
 
 export function artist(name: string, i: number): CatalogArtistT {
   return { id: `artist-${i}`, uri: `spotify:artist:${i}${i}${i}`, name };
@@ -97,7 +98,7 @@ export function queueSnapshot(): QueueSnapshotT {
 export function baseState(): UiViewState {
   return {
     protocol: PROTOCOL_VERSION,
-    playerVersion: '0.0.0',
+    playerVersion: APP_VERSION,
     capabilities: ['audio', 'visualizer', 'lyrics.synced', 'queue.mutation'],
     auth: {
       v: PROTOCOL_VERSION,

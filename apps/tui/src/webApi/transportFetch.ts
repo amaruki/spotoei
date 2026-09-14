@@ -3,6 +3,7 @@
 // function so the Transport class body stays under the 300 LoC ceiling.
 
 import { diagnostic, reportFailure } from '../diagnostics';
+import { APP_VERSION } from '../version';
 import { ApiError, parseRetryAfterMs } from './transportErrors';
 import type { HttpMethod, TokenProvider } from './types';
 
@@ -29,7 +30,7 @@ export async function doFetchRequest(ctx: FetchContext, retryCount = 0): Promise
   });
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
-    'User-Agent': 'spotoei/0.0.0',
+    'User-Agent': `spotoei/${APP_VERSION}`,
   };
   if (bodyStr) {
     headers['Content-Type'] = 'application/json';

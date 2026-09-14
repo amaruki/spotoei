@@ -7,7 +7,7 @@ export interface HandshakeResult {
   child: ChildProcess;
 }
 
-export const UI_VERSION = 'spotoei-tui/0.0.0';
+export { UI_VERSION } from '../version';
 
 export const ANSI_REGEX =
   // eslint-disable-next-line no-control-regex
