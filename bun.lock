@@ -14,7 +14,7 @@
     },
     "apps/tui": {
       "name": "spotoei-tui",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "bin": {
         "spotoei": "./src/main.ts",
       },
@@ -25,7 +25,7 @@
     },
     "packages/protocol": {
       "name": "spotoei-protocol",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "zod": "^3.24.1",
       },

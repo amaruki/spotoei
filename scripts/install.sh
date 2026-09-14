@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/amaruki/spotoei/main/scripts/install.sh | sh
 #
 # Options (environment variables):
-#   SPOTOEI_VERSION        Install a specific version instead of the latest (e.g. 0.0.0)
+#   SPOTOEI_VERSION        Install a specific version instead of the latest (e.g. 0.1.0)
 #   SPOTOEI_PREFIX         Install prefix (default: $HOME/.local)
 #   SPOTOEI_DOWNLOAD_BASE  Override the release download base URL (testing/mirrors)
 set -eu

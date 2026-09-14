@@ -69,12 +69,12 @@ Download your platform's archive and `SHA256SUMS` from the
 
 | Platform | Architecture  | Archive                                |
 | -------- | ------------- | -------------------------------------- |
-| Linux    | x86_64        | `spotoei-v0.0.0-linux-x86_64.tar.gz`   |
-| Linux    | arm64         | `spotoei-v0.0.0-linux-arm64.tar.gz`    |
-| macOS    | Apple silicon | `spotoei-v0.0.0-macos-arm64.tar.gz`    |
-| macOS    | Intel         | `spotoei-v0.0.0-macos-x86_64.tar.gz`   |
-| Windows  | x86_64        | `spotoei-v0.0.0-windows-x86_64.tar.gz` |
-| Windows  | arm64         | `spotoei-v0.0.0-windows-arm64.tar.gz`  |
+| Linux    | x86_64        | `spotoei-v0.1.0-linux-x86_64.tar.gz`   |
+| Linux    | arm64         | `spotoei-v0.1.0-linux-arm64.tar.gz`    |
+| macOS    | Apple silicon | `spotoei-v0.1.0-macos-arm64.tar.gz`    |
+| macOS    | Intel         | `spotoei-v0.1.0-macos-x86_64.tar.gz`   |
+| Windows  | x86_64        | `spotoei-v0.1.0-windows-x86_64.tar.gz` |
+| Windows  | arm64         | `spotoei-v0.1.0-windows-arm64.tar.gz`  |
 
 ### Linux
 
@@ -83,7 +83,7 @@ sha256sum -c SHA256SUMS
 
 PREFIX=$HOME/.local
 mkdir -p "$PREFIX/bin" "$PREFIX/libexec/spotoei"
-tar -xzf spotoei-v0.0.0-linux-x86_64.tar.gz -C "$PREFIX/libexec/spotoei"
+tar -xzf spotoei-v0.1.0-linux-x86_64.tar.gz -C "$PREFIX/libexec/spotoei"
 ln -sf "$PREFIX/libexec/spotoei/spotoei" "$PREFIX/bin/spotoei"
 export PATH="$PREFIX/bin:$PATH"   # persist in ~/.bashrc or ~/.zshrc
 ```
@@ -98,7 +98,7 @@ shasum -a 256 -c SHA256SUMS
 
 PREFIX=$HOME/.local
 mkdir -p "$PREFIX/bin" "$PREFIX/libexec/spotoei"
-tar -xzf spotoei-v0.0.0-macos-arm64.tar.gz -C "$PREFIX/libexec/spotoei"
+tar -xzf spotoei-v0.1.0-macos-arm64.tar.gz -C "$PREFIX/libexec/spotoei"
 ln -sf "$PREFIX/libexec/spotoei/spotoei" "$PREFIX/bin/spotoei"
 
 # If Gatekeeper blocks the binaries
@@ -113,11 +113,11 @@ Run in PowerShell; the built-in `tar` (Windows 10 1803+) extracts the archive.
 
 ```powershell
 # Verify: compare with the value in SHA256SUMS
-Get-FileHash .\spotoei-v0.0.0-windows-x86_64.tar.gz -Algorithm SHA256
+Get-FileHash .\spotoei-v0.1.0-windows-x86_64.tar.gz -Algorithm SHA256
 
 $dest = "$env:LOCALAPPDATA\Programs\spotoei"
 New-Item -ItemType Directory -Force $dest | Out-Null
-tar -xzf .\spotoei-v0.0.0-windows-x86_64.tar.gz -C $dest
+tar -xzf .\spotoei-v0.1.0-windows-x86_64.tar.gz -C $dest
 [Environment]::SetEnvironmentVariable("Path", "$env:Path;$dest", "User")
 ```
 
