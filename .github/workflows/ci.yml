@@ -32,6 +32,10 @@ jobs:
         run: bun run typecheck
       - name: Build
         run: bun run build
+      - name: Check install script syntax
+        run: sh -n scripts/install.sh
+      - name: Check PowerShell install script syntax
+        run: pwsh -NoProfile -Command "[void][scriptblock]::Create((Get-Content -Raw scripts/install.ps1))"
 
   integration:
     name: Rust and integration
