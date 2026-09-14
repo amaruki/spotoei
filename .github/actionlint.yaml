@@ -1,0 +1,5 @@
+# actionlint configuration. `macos-15-intel` is a GitHub-hosted runner label
+# that actionlint's built-in list does not know yet.
+self-hosted-runner:
+  labels:
+    - macos-15-intel
