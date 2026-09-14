@@ -155,12 +155,13 @@ jobs:
         run: |
           set -euo pipefail
           tag="v$VERSION"
-          if gh release view "$tag" >/dev/null 2>&1; then
+          repo="$GITHUB_REPOSITORY"
+          if gh release view "$tag" -R "$repo" >/dev/null 2>&1; then
             echo "::error::release $tag already exists" >&2
             exit 1
           fi
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "$tag" --generate-notes dist/*.tar.gz dist/SHA256SUMS
+          if gh api "repos/$repo/git/ref/tags/$tag" >/dev/null 2>&1; then
+            gh release create "$tag" -R "$repo" --title "$tag" --generate-notes dist/*.tar.gz dist/SHA256SUMS
           else
-            gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --generate-notes dist/*.tar.gz dist/SHA256SUMS
+            gh release create "$tag" -R "$repo" --target "$GITHUB_SHA" --title "$tag" --generate-notes dist/*.tar.gz dist/SHA256SUMS
           fi
