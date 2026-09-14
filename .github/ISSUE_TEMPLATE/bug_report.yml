@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a problem with SPOTOEI
+title: 'bug: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include access tokens, refresh tokens, Client IDs, or personal data.
+        Redact log excerpts before pasting. Security issues: see SECURITY.md instead.
+  - type: input
+    id: version
+    attributes:
+      label: SPOTOEI version
+      description: Output of `spotoei --version`
+      placeholder: spotoei v0.0.0 (protocol v...)
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS, distribution, architecture, terminal emulator
+      placeholder: Linux (Arch), x86_64, kitty
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: doctor output
+      description: Output of `spotoei doctor` (redact anything sensitive)
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Launch `spotoei`
+        2. Search for ...
+        3. Press ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log excerpts
+      description: From `<config dir>/spotoei.log`. Redact tokens and account identifiers.
+      render: text
+    validations:
+      required: false

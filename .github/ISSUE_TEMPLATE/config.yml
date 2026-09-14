@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/OWNER/REPO/security/advisories/new
+    about: Report security vulnerabilities privately (replace OWNER/REPO after publishing).
+  - name: Documentation
+    url: https://github.com/OWNER/REPO/tree/main/docs
+    about: Install, configuration, keybindings, and troubleshooting guides.
