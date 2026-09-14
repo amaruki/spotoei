@@ -104,11 +104,9 @@ Names describe intent, not implementation accidents.
 
 ### TypeScript
 
-- types/interfaces/components: `PascalCase`;
+- types/interfaces: `PascalCase`;
 - functions/variables: `camelCase`;
 - constants: `UPPER_SNAKE_CASE` only for true constants, otherwise normal camelCase;
-- atoms: suffix `Atom`;
-- XState machines: suffix `Machine`;
 - ports: suffix `Port`;
 - concrete infrastructure adapters: suffix `Adapter` or domain-specific name.
 
@@ -161,43 +159,43 @@ Never `catch {}` silently.
 - use AbortController for cancellable HTTP/search;
 - do not block event loop with heavy DSP/computation.
 
-## 10. React Rules
+## 10. UI Rules
 
-- components render; use cases perform business operations;
-- no raw Spotify HTTP calls in components;
-- no raw IPC serialization in components;
-- keep effects narrow and idempotent;
-- avoid effects for derived state that can be computed during render/selectors;
-- use stable command registry for keyboard actions;
-- avoid global atoms for purely local UI state.
+- views render from state; managers/use cases perform business operations;
+- no raw Spotify HTTP calls in UI modules;
+- no raw IPC serialization in UI modules;
+- use the central command registry for keyboard actions rather than invoking use cases directly;
+- keep the shared UI state surface narrow; prefer view-local state for view-local concerns;
+- state mutation flows through the setter modules under `ui/core/`;
+- imperative renderable updates MUST stay scoped to the affected region.
 
-## 11. Jotai Rules
+## 11. UI State Rules
 
-Atoms are small and semantic.
+State is stored in plain SPOTOEI-owned objects (no React/Jotai/XState).
 
-Avoid one giant `appStateAtom` object that recreates Redux-style global mutation.
+- do not duplicate the same fact in both application state and UI state;
+- playback state is a projection of player events, never an independent source;
+- high-frequency visualizer frames stay in the dedicated visualizer controller;
+- lifecycle status is explicit (`booting`/`ready`/`degraded`/`recovering` fields) rather than implicit booleans scattered across modules;
+- state-changing helpers are centralized; avoid ad-hoc mutation from unrelated modules.
 
-Derived values should use derived atoms/selectors when it improves recomputation clarity.
+## 12. Lifecycle Rules
 
-High-frequency visualizer frames are forbidden in Jotai.
-
-## 12. XState Rules
-
-Use state machines only when states/transitions matter.
+Model lifecycles with explicit, constrained transitions in their owning module.
 
 Good candidates:
 
-- auth lifecycle;
-- player supervision;
+- auth lifecycle (manager in `auth/`);
+- player supervision (start/handshake/recover/unavailable);
 - application bootstrap/degraded/shutdown.
 
-Bad candidate:
+Bad candidates:
 
 - simple boolean modal visibility;
 - selected row index;
 - static form data.
 
-Machine events use domain language (`PLAYER_EXITED`, `AUTH_GRANTED`) rather than UI details (`BUTTON_CLICKED`) unless the machine truly owns UI interaction.
+Transition vocabulary uses domain language (`PLAYER_EXITED`, `AUTH_GRANTED`) at the boundary even when implemented with plain status fields.
 
 ## 13. Rust Rules
 

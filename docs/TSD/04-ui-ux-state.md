@@ -2,12 +2,12 @@
 
 ## 1. Stack
 
-- React >= 19.2
-- `@opentui/react`
-- `@opentui/core`
-- Jotai
-- XState + `@xstate/react`
-- Zod at infrastructure/config/protocol boundaries
+- TypeScript on Bun
+- `@opentui/core` (imperative component tree)
+- `zod` at infrastructure/config/protocol boundaries
+- `spotoei-protocol` for IPC schemas and fixtures
+
+There is no React, Jotai, or XState dependency. UI state is plain SPOTOEI-owned state objects.
 
 ## 2. UI Design Rule
 
@@ -18,36 +18,25 @@ The interface must remain understandable through visible labels, focus, context 
 ## 3. Component Topology
 
 ```text
-<AppShell>
- ├─ <Sidebar />
- ├─ <MainRouter>
- │   ├─ <HomeView />
- │   ├─ <SearchView />
- │   ├─ <LibraryView />
- │   ├─ <PlaylistView />
- │   ├─ <AlbumView />
- │   ├─ <ArtistView />
- │   ├─ <NowPlayingView />
- │   └─ <LyricsView />
- ├─ <ContextPanel>
- │   ├─ <QueuePanel />
- │   ├─ <LyricsPanel />
- │   └─ <TrackInfoPanel />
- ├─ <NowPlayingBar />
- ├─ <CommandPalette />
- ├─ <ContextMenu />
- └─ <StatusLayer />
+createUiCore
+ ├─ componentTree/          # OpenTUI renderables built at startup
+ │   ├─ sidebar / homeView / searchView / entityViews
+ │   ├─ lyricsView / panels / playbackBar / statusLayer
+ │   └─ contextMenu / palette / onboardingView
+ ├─ views/                  # row builders and text formatting
+ ├─ core/                   # keyboard, navigation, focus, palette, visualizer
+ └─ index.ts                # Ui facade consumed by main/
 ```
 
-Do not create a monolithic `App.tsx` that owns all state and rendering.
+Do not create one monolithic UI module that owns all state and rendering.
 
 ## 4. State Categories
 
-### 4.1 React Local State
+### 4.1 View-local state
 
 Use for state that is:
 
-- owned by one component/subtree;
+- owned by one view/panel;
 - short-lived;
 - not needed across screens.
 
@@ -57,59 +46,44 @@ Examples:
 - temporary hover state;
 - internal scroll calculation.
 
-### 4.2 Jotai
+### 4.2 Shared UI state
 
-Use for shared UI/domain projections that are not lifecycle machines.
+`UiCoreContext` (see `apps/tui/src/ui/core/types.ts`) holds the mutable state shared between the UI core and its sub-modules: active route and route stack, focus, view positions, current items/hits, panel visibility, and the latest visualizer frame.
 
-Examples:
+`UiViewState` holds render-facing projections updated by the application layer. State mutation happens through the setter modules under `ui/core/` rather than ad-hoc writes.
 
-- active route/history;
-- selected/focused entity;
-- panel visibility/focus;
-- queue projection from player snapshot;
-- settings projection;
-- library/search view data;
-- current playback snapshot projection;
-- lyrics document and manual-scroll/follow preference.
+Shared UI state MUST NOT become a second playback engine. Playback fields are projections of player events.
 
-Jotai stores MUST NOT become a second playback engine. Playback atoms are projections of player events.
+### 4.3 Application state
 
-### 4.3 XState
+`AppState` (see `apps/tui/src/main/types.ts`) holds application-level state: active clients, home tabs, entity pages, search sequence, lyrics track URI, and playback/queue snapshots.
 
-Use only for event-driven lifecycle with constrained valid transitions.
-
-Recommended machines:
-
-- `appMachine`: booting → ready → degraded → shuttingDown;
-- `authMachine`: unconfigured → authorizing → authenticated → refreshing → authError;
-- `playerMachine`: absent → starting → handshaking → ready → recovering → unavailable.
-
-A separate giant state machine for every screen is prohibited unless complexity proves it necessary.
+Lifecycles (auth, player supervision, bootstrap) are explicit status fields and flags owned by their manager modules. State machines MAY be introduced if transition complexity ever justifies them; none are required today.
 
 ### 4.4 High-Frequency Visualizer State
 
-Visualizer frames DO NOT enter Jotai or XState.
+Visualizer frames DO NOT enter shared UI or application state.
 
-Use a dedicated controller/store with latest-value semantics and an explicit subscription by the visualizer component.
+Use the dedicated visualizer controller with latest-value semantics and an explicit subscription by the visualizer renderer.
 
 ## 5. Playback Projection
 
 Player event:
 
 ```text
-IPC → PlayerAdapter → PlaybackProjectionService → Jotai atoms → UI
+IPC → PlayerClient → AppState playback snapshot → UI views
 ```
 
-Examples of projected atoms:
+Projected fields include:
 
 ```ts
-playbackAtom;
-queueAtom;
-currentTrackAtom;
-playerAvailabilityAtom;
+playbackSnapshot;
+queueSnapshot;
+currentTrack;
+playerAvailability;
 ```
 
-The projection service may interpolate position for display, but it must retain the last authoritative player timestamp/revision.
+The projection may interpolate position for display, but it must retain the last authoritative player timestamp/revision.
 
 ## 6. Navigation
 

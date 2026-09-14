@@ -421,7 +421,7 @@ describe('OpenTUI renderables integration', () => {
     sendKey('return', '\r');
     expect(submittedSearches).toEqual(['cold']);
 
-    // 6. Pressing Escape pops navigation (FSD 8.4) or returns focus
+    // 6. Pressing Escape pops navigation or returns focus
     sendKey('escape', '\u001b');
     await renderOnce();
     expect(ui.getFocus()).toBe('main');

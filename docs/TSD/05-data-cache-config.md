@@ -12,11 +12,7 @@
 
 Use `bun:sqlite` in the TypeScript process.
 
-Recommended database file name:
-
-```text
-spotoei-cache.sqlite3
-```
+Database file: `cache.db` inside the platform cache directory (see §9). `SPOTOEI_CACHE_FILE` overrides the path, and `:memory:` is used in test runs.
 
 Enable WAL mode when supported for reliable concurrent read/write behavior within the process and good responsiveness.
 
@@ -73,10 +69,9 @@ library:v1:saved-tracks:<offset>
 playlist:v1:<id>:tracks:<page>
 recent:v1:<limit>
 top:v1:<type>:<range>:<page>
-insights:top:<type>:<range>   # Insights alias; range is part of the key — three co-existing keys (short_term/medium_term/long_term), switching does not invalidate siblings (see TSD 11 §14)
 ```
 
-Cache-key construction MUST be centralized. Insights keys are `account_id`-scoped and participate in the `§13` periodic cleanup; migration from legacy `user_id` to `account_id` follows `TSD 11 §13.3` (dual-lookup, copy-on-read, delete-old on next startup/cleanup).
+Cache-key construction MUST be centralized and keys MUST be `account_id`-scoped.
 
 ## 5. Cache Read Strategy
 
@@ -104,32 +99,28 @@ Default recommendation: retain non-secret metadata cache per account for faster 
 
 Use a small JSON configuration file to avoid a parser dependency and keep programmatic migration simple.
 
-Example:
+Example (actual schema):
 
 ```json
 {
   "version": 1,
   "spotify": {
-    "clientId": "..."
+    "clientId": "...",
+    "redirectPort": 8989
   },
   "playback": {
-    "bitrateKbps": 320,
-    "normalization": true,
-    "gapless": true,
-    "autoplay": true,
-    "volume": 0.8
+    "volume": 0.8,
+    "autoplay": true
   },
-  "visualizer": {
-    "enabled": true,
-    "mode": "winamp",
-    "maxFps": 60,
-    "adaptive": true
-  },
-  "ui": {
-    "mouse": true
+  "browse": {
+    "charts": [],
+    "editorialPlaylists": [],
+    "drivingPlaylistUris": []
   }
 }
 ```
+
+Unspecified fields fall back to defaults. `browse` entries are validated before use.
 
 Refresh/access tokens are prohibited in this file.
 
@@ -203,11 +194,10 @@ On integrity/open failure:
 
 ## 13. Size Management
 
-Implement periodic low-priority cleanup (Insights rows SHALL join this pipeline — see `TSD 11 §13.1`/`§14` for `expires_at` and per-range keys):
+Implement periodic low-priority cleanup:
 
-- remove expired query cache entries (including Insights `top`/`recent` / `insights:*` keys beyond Max Retention);
+- remove expired query cache entries;
 - prune old entity payloads not referenced by recent/library indexes;
-- delete legacy `user_id`-scoped Insights keys after `account_id` migration;
 - keep database size bounded by configurable or reasonable defaults.
 
 Cleanup MUST not run on the audio path and SHOULD yield to user interaction.

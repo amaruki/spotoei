@@ -10,7 +10,7 @@ This document defines the process model, Clean Architecture boundaries, componen
 ┌──────────────────────────────────────────────────────────────┐
 │ spotoei (Bun standalone executable)                         │
 │                                                              │
-│  Presentation: React + OpenTUI                              │
+│  Presentation: OpenTUI (@opentui/core)                        │
 │            │                                                 │
 │  Application Use Cases                                      │
 │            │                                                 │
@@ -125,8 +125,8 @@ Infrastructure ─────────────→ Ports/Domain
 
 Forbidden examples:
 
-- React component importing `fetch("https://api.spotify.com/...`)`;
-- Jotai atom containing a librespot type;
+- UI module importing `fetch("https://api.spotify.com/...`)`;
+- shared UI state object containing a librespot type;
 - Rust librespot event serialized directly to the UI without mapping;
 - SQLite row type reused as UI/domain model;
 - UI component constructing raw IPC JSON strings.
@@ -152,7 +152,7 @@ The TypeScript application/Web API adapter is authoritative for newly fetched We
 
 ### UI State
 
-Jotai/local React state is authoritative only for UI concerns such as selection, panel focus, modal state, and user preferences loaded from config.
+UI-owned state (the shared UI core state and view-local state) is authoritative only for UI concerns such as selection, panel focus, modal state, and user preferences loaded from config.
 
 ## 7. Startup Sequence
 
@@ -213,41 +213,46 @@ The exact timer MAY be tuned, but infinite crash loops are prohibited.
 
 ## 10. Repository Layout
 
-Recommended monorepo:
+Actual monorepo:
 
 ```text
 spotoei/
 ├─ apps/
 │  └─ tui/
 │     └─ src/
-│        ├─ presentation/
-│        ├─ application/
-│        ├─ domain/
-│        └─ infrastructure/
+│        ├─ main/            # entrypoint, CLI, wiring, lifecycle
+│        ├─ ui/              # OpenTUI component tree, views, core controller
+│        ├─ browse/          # browse/home-tab state and data
+│        ├─ webApi/          # Spotify Web API adapter
+│        ├─ cache/           # bun:sqlite cache + SWR
+│        ├─ player/          # sidecar supervision, handshake, readline
+│        ├─ playback/        # playback client/commands/validation
+│        ├─ auth.ts, config.ts, entities.ts, library.ts, lyrics.ts,
+│        ├─ queue.ts, search.ts, visualizer.ts, diagnostics.ts
+│        └─ ...
 ├─ crates/
 │  └─ player/
 │     └─ src/
-│        ├─ ipc/
-│        ├─ application/
-│        ├─ domain/
-│        ├─ playback/
-│        ├─ audio/
-│        └─ auth/
+│        ├─ dispatcher/      # IPC command dispatch
+│        ├─ playback/        # engine, librespot adapters, state
+│        ├─ auth/            # PKCE, token storage, keyring
+│        ├─ media/           # MPRIS / OS media controls
+│        ├─ visualizer/      # FFT analysis
+│        └─ ...
 ├─ packages/
-│  └─ protocol-schema/
+│  └─ protocol/              # versioned protocol schemas + fixtures
 ├─ docs/
-│  ├─ FSD.md
-│  ├─ TSD/
-│  └─ ADR/
+│  ├─ INSTALL.md
+│  ├─ DEVELOPMENT.md
+│  └─ TSD/
 ├─ scripts/
-├─ fixtures/
 ├─ package.json
 ├─ bun.lock
 ├─ Cargo.toml
 └─ README.md
 ```
 
-The exact folder names MAY vary, but architectural boundaries MUST remain visible in the filesystem.
+Folder names may evolve, but architectural boundaries MUST remain visible in the filesystem.
 
 ## 11. Protocol Schema Ownership
 

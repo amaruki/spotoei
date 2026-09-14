@@ -121,7 +121,7 @@ Do NOT request `user-read-email` unless a future feature specifically requires i
 
 Do NOT request Web API playback-control scopes merely to mirror state that already comes from the local playback core.
 
-The exact scope list MUST be verified against Spotify's current API before release because endpoint/scope behavior changes over time. For post-MVP Insights, the scopes `user-top-read` and `user-read-recently-played` follow the same least-privilege rule; missing scopes degrade the affected Insights section only, which surfaces a per-section reauth affordance while playback remains independent (see `TSD 11 §15`).
+The exact scope list MUST be verified against Spotify's current API before release because endpoint/scope behavior changes over time.
 
 ## 9. Web API Client
 
@@ -137,7 +137,7 @@ Responsibilities:
 - validate important response shapes at adapter boundaries;
 - map Spotify types to SPOTOEI domain types;
 - implement pagination;
-- detect 401/403/429 and 5xx (`500`/`502`/`503`) for contract coverage (`TSD 11 §18.2`);
+- detect 401/403/429 and 5xx (`500`/`502`/`503`) for contract coverage;
 - honor `Retry-After` when supplied;
 - classify quota-exceeded response reason separately when available;
 - deduplicate safe concurrent identical GETs.

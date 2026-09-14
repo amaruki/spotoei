@@ -152,7 +152,7 @@ Recommended MVP algorithm:
 2. Downmix stereo to mono for the primary spectrum (`0.5 * (L + R)`), while preserving the option for stereo modes later.
 3. Use window size 2048 samples by default; 1024 MAY be selected for lower-latency/low-power targets.
 4. Apply Hann window.
-5. Run real/complex FFT using `rustfft` or an appropriate helper around it.
+5. Run real FFT using `realfft`.
 6. Convert magnitude to a log/dB-like perceptual scale.
 7. Group bins into logarithmically distributed bands.
 8. Normalize to a bounded `0.0..1.0` visual domain.
@@ -181,7 +181,12 @@ Recommended MVP algorithm:
 - Samples MUST be resampled/downsampled to the current terminal width before IPC or render when practical.
 - Must not send full raw PCM to the TypeScript process.
 
-### 10.4 Off
+### 10.4 Circular
+
+- Spectrum bands wrapped around a circle.
+- Optional cover-art rendering at the center where the terminal image protocol supports it.
+
+### 10.5 Off
 
 Analyzer MAY suspend high-frequency work when visualizer is disabled, while retaining only inexpensive state needed for immediate re-enable.
 

@@ -86,7 +86,7 @@ Capability examples:
 - `queue.mutation`
 - `auth.single-token-session`
 
-UI MUST capability-gate optional behavior. For Insights, `Play next` / `Add to queue` from a Top Track context menu SHALL be gated on `queue.mutation` (see `TSD 11 §8`).
+UI MUST capability-gate optional behavior.
 
 Only implement queue mutations proven reliable by the selected librespot integration.
 
