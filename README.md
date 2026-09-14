@@ -1,5 +1,9 @@
 # SPOTOEI
 
+[![CI](https://github.com/amaruki/spotoei/actions/workflows/ci.yml/badge.svg)](https://github.com/amaruki/spotoei/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/amaruki/spotoei)](https://github.com/amaruki/spotoei/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 A keyboard-first, terminal-native Spotify client with a Winamp-inspired visualizer, synced
 lyrics, and local playback through [librespot](https://github.com/librespot-org/librespot).
 
