@@ -1,21 +1,9 @@
 import type { ChildProcess } from 'node:child_process';
 
-import { createAuthClient } from '../auth';
-import { Cache } from '../cache';
 import { resolveClientId } from '../config';
-import { EntityManager } from '../entities';
-import { HomeManager } from '../home';
-import { initialHomeTabs } from '../home/tabs';
-import { createLyricsClient } from '../lyrics';
-import { createPlaybackClient } from '../playback';
-import { LibraryManager } from '../library';
 import { locatePlayer, startPlayer } from '../player';
 import { diagnostic, reportFailure } from '../diagnostics';
-import { QueueManager } from '../queue';
-import { createSearchClient } from '../search';
-import type { Ui, UiViewState } from '../ui';
-import { createVisualizerController } from '../visualizer';
-import { WebApiClient } from '../webApi';
+import type { Ui } from '../ui';
 
 import { createAuthActions } from './auth';
 import { handleCliSearch, runNonTtyMode } from './batch';
@@ -39,6 +27,7 @@ import { initUi } from './ui';
 import { recoverSessions, RESTART_SESSION } from './recovery';
 import { cancelHomeLoad } from './homeLoad';
 import { runAuthenticate } from './authenticate';
+import { createSessionClients } from './sessionClients';
 
 export async function main(args: string[] = process.argv.slice(2)): Promise<number> {
   return recoverSessions(() => runSession(args));
@@ -115,148 +104,14 @@ async function runSession(args: string[]): Promise<number> {
     };
     child.on('exit', onPlayerExit);
 
-    const auth = createAuthClient({ child });
-    const playback = createPlaybackClient({ child });
-    cleanup.push(
-      () => auth.close(),
-      () => playback.close(),
-    );
-    stage = 'auth.status';
-    const initialAuth = await auth.status();
-    diagnostic('ipc', 'auth.status', { state: initialAuth.state, scopes: initialAuth.scopes });
-    stage = 'playback.status';
-    const initialPlayback = await playback.status();
-
-    const cache = new Cache();
-    cleanup.push(() => cache.close());
-    let activeAccountId = initialAuth.accountId ?? 'anonymous';
-    const tokenProvider = {
-      async getAccessToken(): Promise<string> {
-        return auth.getWebToken();
-      },
-      invalidateToken(): Promise<void> {
-        return auth.invalidateToken();
-      },
-    };
-    const webApi = new WebApiClient({
-      tokenProvider,
-      restrictionStore: {
-        // Restriction memory persists in SQLite so a cold start skips
-        // endpoints Spotify already refused, instead of re-probing them.
-        // getQuery prunes expired rows on read; failures fall back to
-        // the Transport's in-memory map.
-        getRestriction: (endpoint: string): number | undefined => {
-          try {
-            const cached = cache.getQuery<number>(
-              activeAccountId,
-              `restriction:v1:${endpoint}`,
-            );
-            if (!cached || cached.expiresAt === null || Date.now() >= cached.expiresAt) {
-              return undefined;
-            }
-            return cached.expiresAt;
-          } catch {
-            return undefined;
-          }
-        },
-        setRestriction: (endpoint: string, until: number): void => {
-          try {
-            cache.putQuery(
-              activeAccountId,
-              `restriction:v1:${endpoint}`,
-              1,
-              until - Date.now(),
-            );
-          } catch {
-            // Non-fatal; the in-memory map still suppresses repeats.
-          }
-        },
-      },
+    const session = await createSessionClients(child, handshake, cleanup, (next) => {
+      stage = next;
     });
-    const searchClient = createSearchClient({
-      webApi,
-      cache,
-      accountId: initialAuth.accountId ?? 'anonymous',
-      debounceMs: 0,
-    });
-    const libraryManager = new LibraryManager({
-      webApi,
-      cache,
-      accountId: initialAuth.accountId ?? 'anonymous',
-    });
-    const entityManager = new EntityManager(webApi, cache, initialAuth.accountId ?? 'anonymous');
-    const homeManager = new HomeManager(webApi, cache, initialAuth.accountId ?? 'anonymous');
-    const queueManager = new QueueManager({ webApi });
-    const visualizer = createVisualizerController({ child });
-    const lyrics = createLyricsClient({ child });
-    cleanup.push(
-      () => searchClient.close(),
-      () => visualizer.stop(),
-      () => lyrics.close(),
-    );
-
-    const clients: AppClients = {
-      auth,
-      playback,
-      webApi,
-      searchClient,
-      entityManager,
-      homeManager,
-      libraryManager,
-      queueManager,
-      visualizer,
-      lyrics,
-      cache,
-    };
-
-    const currentInfo: UiViewState = {
-      protocol: handshake.protocol,
-      playerVersion: handshake.playerVersion,
-      capabilities: handshake.capabilities,
-      auth: initialAuth,
-      playback: initialPlayback,
-      queue: {
-        current: null,
-        upcoming: [],
-        revision: 0,
-      },
-      visualizer: {
-        mode: visualizer.getMode(),
-        fps: visualizer.getCurrentFps(),
-      },
-      audioConfig: {
-        deviceMode: 'integrated',
-        audioBackend: 'rodio',
-        bitrate: '320',
-        crossfadeDurationMs: 0,
-        normalisation: true,
-        pregain: 0,
-      },
-    };
-
-    const state: AppState = {
-      currentInfo,
-      activeFocus: 'main',
-      libraryItems: [],
-      librarySection: 'saved_tracks',
-      entityPages: {},
-      homeTabs: initialHomeTabs(),
-      activePlaylistTracks: [],
-      currentSearchHits: [],
-      artistGenreCache: new Map(),
-      currentLyricsTrackUri: undefined,
-      lastRouteBeforeLyrics: { kind: 'home', tab: 'for_you' },
-      searchSequence: 0,
-      isFetchingAutoplay: false,
-      isAdvancingAutoplay: false,
-      lastPlaybackState: initialPlayback?.state ?? 'idle',
-    };
-
-    ctx.clients = clients;
-    ctx.state = state;
-    ctx.setActiveAccountId = (accountId: string) => {
-      activeAccountId = accountId;
-    };
+    ctx.clients = session.clients;
+    ctx.state = session.state;
+    ctx.setActiveAccountId = session.setActiveAccountId;
+    const { clients, state, currentInfo, initialAuth, initialPlayback } = session;
+    const playback = clients.playback;
 
     const authActions = createAuthActions(ctx);
     const libraryActions = createLibraryActions(ctx);
@@ -310,7 +165,10 @@ async function runSession(args: string[]): Promise<number> {
       if (initialAuth.state !== 'authenticated') {
         const initClientRes = resolveClientId(false);
         if (!initClientRes.clientId) {
-          ui.setStatus('Welcome! Please enter your Spotify Client ID below to begin (or [d] for default)', true);
+          ui.setStatus(
+            'Welcome! Please enter your Spotify Client ID below to begin (or [d] for default)',
+            true,
+          );
           ui.focusClientIdInput();
         } else {
           ui.setStatus('Welcome! Press [a] or [Enter] to authenticate with Spotify', true);
