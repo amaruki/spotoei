@@ -40,12 +40,6 @@ hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 bytes = "1"
-librespot = { version = "0.8.0", default-features = false, features = [
-  "rodio-backend",
-  "alsa-backend",
-  "pulseaudio-backend",
-  "rustls-tls-native-roots",
-] }
 uuid = { version = "1", features = ["v4"] }
 realfft = "3.4"
 crossbeam-channel = "0.5"
@@ -54,9 +48,17 @@ crossbeam-channel = "0.5"
 tokio = { version = "1", features = ["test-util"] }
 
 # MPRIS D-Bus service so desktop environments can route media keys and
-# Bluetooth headset controls (AVRCP) to the player.
+# Bluetooth headset controls (AVRCP) to the player. Linux also builds
+# librespot with ALSA/PulseAudio backends; other platforms use CoreAudio/WASAPI
+# through the rodio backend and must not pull alsa-sys/pulse-sys.
 [target.'cfg(target_os = "linux")'.dependencies]
 mpris-server = "0.10"
+librespot = { version = "0.8.0", default-features = false, features = [
+  "rodio-backend",
+  "alsa-backend",
+  "pulseaudio-backend",
+  "rustls-tls-native-roots",
+] }
 
 # macOS/Windows have no MPRIS: souvlaki bridges MPRemoteCommandCenter and the
 # Windows System Media Transport Controls. Windows also needs an HWND, which
@@ -64,6 +66,10 @@ mpris-server = "0.10"
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 souvlaki = "0.8.3"
 winit = "0.30"
+librespot = { version = "0.8.0", default-features = false, features = [
+  "rodio-backend",
+  "rustls-tls-native-roots",
+] }
 
 [lints]
 workspace = true
