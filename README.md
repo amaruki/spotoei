@@ -31,18 +31,77 @@ Packaged releases need no Bun, Node.js, Rust, or librespot installation.
 
 ## Install
 
-Download the archive and `SHA256SUMS` from the latest release, verify, and install:
+Download the archive for your platform and `SHA256SUMS` from the
+[latest release](https://github.com/amaruki/spotoei/releases/latest). Each archive contains
+`spotoei`, `spotoei-player`, `LICENSE`, and `README.md`.
+
+| Platform | Architecture  | Archive                                |
+| -------- | ------------- | -------------------------------------- |
+| Linux    | x86_64        | `spotoei-v0.0.0-linux-x86_64.tar.gz`   |
+| Linux    | arm64         | `spotoei-v0.0.0-linux-arm64.tar.gz`    |
+| macOS    | Apple silicon | `spotoei-v0.0.0-macos-arm64.tar.gz`    |
+| macOS    | Intel         | `spotoei-v0.0.0-macos-x86_64.tar.gz`   |
+| Windows  | x86_64        | `spotoei-v0.0.0-windows-x86_64.tar.gz` |
+| Windows  | arm64         | `spotoei-v0.0.0-windows-arm64.tar.gz`  |
+
+### Linux
+
+Runtime packages: `alsa-lib` and `libpulse` (Debian/Ubuntu: `libasound2 libpulse0`, Fedora:
+`alsa-lib pulseaudio-libs`, Arch: `alsa-lib libpulse`).
 
 ```sh
+# Verify the download
 sha256sum -c SHA256SUMS
+
+# Per-user install (no root)
 PREFIX=$HOME/.local
 mkdir -p "$PREFIX/bin" "$PREFIX/libexec/spotoei"
-tar -xzf spotoei-v0.0.0-linux-x64.tar.gz -C "$PREFIX/libexec/spotoei"
+tar -xzf spotoei-v0.0.0-linux-x86_64.tar.gz -C "$PREFIX/libexec/spotoei"
 ln -sf "$PREFIX/libexec/spotoei/spotoei" "$PREFIX/bin/spotoei"
+
+# Make sure $PREFIX/bin is on PATH (add to ~/.bashrc or ~/.zshrc)
+export PATH="$PREFIX/bin:$PATH"
 ```
 
-See [docs/INSTALL.md](docs/INSTALL.md) for the full guide, including system install and
-uninstall.
+For a system-wide install, use `PREFIX=/usr/local` with `sudo` for the `mkdir`, `tar`, and `ln`
+commands.
+
+### macOS
+
+```sh
+# Verify the download
+shasum -a 256 -c SHA256SUMS
+
+# Per-user install (no sudo)
+PREFIX=$HOME/.local
+mkdir -p "$PREFIX/bin" "$PREFIX/libexec/spotoei"
+tar -xzf spotoei-v0.0.0-macos-arm64.tar.gz -C "$PREFIX/libexec/spotoei"
+ln -sf "$PREFIX/libexec/spotoei/spotoei" "$PREFIX/bin/spotoei"
+
+# If Gatekeeper blocks the binaries
+xattr -dr com.apple.quarantine "$PREFIX/libexec/spotoei"
+```
+
+Add `$PREFIX/bin` to your `PATH` (for example in `~/.zshrc`).
+
+### Windows
+
+Run in PowerShell; the built-in `tar` (Windows 10 1803+) extracts the archive.
+
+```powershell
+# Verify: compare with the value in SHA256SUMS
+Get-FileHash .\spotoei-v0.0.0-windows-x86_64.tar.gz -Algorithm SHA256
+
+$dest = "$env:LOCALAPPDATA\Programs\spotoei"
+New-Item -ItemType Directory -Force $dest | Out-Null
+tar -xzf .\spotoei-v0.0.0-windows-x86_64.tar.gz -C $dest
+[Environment]::SetEnvironmentVariable("Path", "$env:Path;$dest", "User")
+```
+
+Open a new terminal so the updated `PATH` takes effect.
+
+See [docs/INSTALL.md](docs/INSTALL.md) for the full guide, including uninstall and build from
+source.
 
 ## Run
 
