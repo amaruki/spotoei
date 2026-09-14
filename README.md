@@ -55,8 +55,9 @@ less install.sh && sh install.sh
 ```
 
 Pin a version with `SPOTOEI_VERSION=0.0.0` (Linux/macOS) or `$env:SPOTOEI_VERSION="0.0.0"`
-(Windows). Manual archive installs, runtime packages, and uninstall are in
-[docs/INSTALL.md](docs/INSTALL.md).
+(Windows). The installer adds its bin directory to your `PATH`, so once it finishes you can
+start the client with `spotoei`. Manual archive installs, runtime packages, and uninstall are
+in [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Run
 

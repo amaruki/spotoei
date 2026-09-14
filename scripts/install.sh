@@ -59,11 +59,30 @@ mkdir -p "$libexec" "$PREFIX/bin"
 tar -xzf "$tmp/$archive" -C "$libexec"
 ln -sf "$libexec/spotoei" "$PREFIX/bin/spotoei"
 
-printf '\nInstalled spotoei v%s to %s\n' "$VERSION" "$libexec"
+on_path=false
 case ":$PATH:" in
-  *":$PREFIX/bin:"*) ;;
-  *)
-    printf 'Add it to your PATH:\n\n  export PATH="%s:$PATH"\n' "$PREFIX/bin"
-    printf '\nAdd that line to ~/.bashrc or ~/.zshrc to keep it.\n'
-    ;;
+  *":$PREFIX/bin:"*) on_path=true ;;
 esac
+
+# On the default prefix, persist PATH so a fresh shell finds `spotoei`.
+if [ "$on_path" = false ] && [ "$PREFIX" = "$HOME/.local" ]; then
+  path_line='export PATH="$HOME/.local/bin:$PATH"'
+  case "${SHELL:-}" in
+    */zsh) rc="$HOME/.zshrc" ;;
+    */bash) rc="$HOME/.bashrc" ;;
+    *) rc="" ;;
+  esac
+  if [ -n "$rc" ]; then
+    touch "$rc"
+    if ! grep -qF "$path_line" "$rc"; then
+      printf '\n# Added by the SPOTOEI installer\n%s\n' "$path_line" >> "$rc"
+      printf 'Added %s to PATH in %s\n' "$PREFIX/bin" "$rc"
+    fi
+  fi
+fi
+
+printf '\nInstalled spotoei v%s to %s\n' "$VERSION" "$libexec"
+if [ "$on_path" = false ]; then
+  printf '\nFor this terminal, run:\n\n  export PATH="%s:$PATH"\n' "$PREFIX/bin"
+fi
+printf '\nThen start it with:\n\n  spotoei\n'

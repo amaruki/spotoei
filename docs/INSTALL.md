@@ -24,8 +24,16 @@ verifies the SHA-256 checksum, and installs:
 | Linux / macOS | `$HOME/.local/libexec/spotoei`    |
 | Windows       | `%LOCALAPPDATA%\Programs\spotoei` |
 
-It links/registers `spotoei` on your user `PATH`. Open a new terminal (or run the printed
-`export PATH=...`) before using it.
+With the default prefix (`$HOME/.local`), the installer adds `~/.local/bin` to `~/.bashrc` or
+`~/.zshrc` when it is missing, so new shells can start SPOTOEI directly. A custom
+`SPOTOEI_PREFIX` only prints the `export PATH=...` line. On Windows the install directory is
+appended to your user `PATH`.
+
+Start it with:
+
+```sh
+spotoei
+```
 
 Prefer to review before running:
 

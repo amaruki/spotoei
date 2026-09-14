@@ -48,8 +48,13 @@ try {
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$installDir*") {
     [Environment]::SetEnvironmentVariable("Path", "$userPath;$installDir", "User")
-    Write-Host "Added $installDir to your user PATH (open a new terminal)."
+    Write-Host "Added $installDir to your user PATH (new terminals pick it up)."
 }
+if ($env:Path -notlike "*$installDir*") { $env:Path = "$env:Path;$installDir" }
 
 Write-Host ""
 Write-Host "Installed SPOTOEI v$version to $installDir"
+Write-Host ""
+Write-Host "Start it with:"
+Write-Host ""
+Write-Host "  spotoei"
