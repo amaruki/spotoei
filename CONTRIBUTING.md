@@ -78,6 +78,21 @@ A pull request is ready when applicable:
 - [ ] docs updated for behavioral or architectural changes;
 - [ ] formatter, linter, type checks, and tests pass.
 
+## Releasing
+
+The `Release` workflow builds archives for Linux (x86_64, arm64), macOS (arm64, x86_64), and
+Windows (x86_64), then publishes a GitHub release with a combined `SHA256SUMS`.
+
+Trigger it by:
+
+1. **Version bump on main** — update `version` in `package.json`, commit, push to `main`.
+2. **Tag** — `git tag v<version> && git push origin v<version>`.
+3. **Manual** — Actions → Release → Run workflow (set `dry_run` to build without publishing).
+
+The tag, the workflow input, and `package.json` must all carry the same version; the workflow
+fails on mismatch. Version bump commits are skipped automatically when the version did not
+change.
+
 ## Reporting bugs
 
 Open a GitHub issue with the platform, terminal, SPOTOEI version (`spotoei --version`), steps to

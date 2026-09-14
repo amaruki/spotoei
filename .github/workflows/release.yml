@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release (must match package.json). Defaults to package.json.
+        required: false
+        type: string
+      dry_run:
+        description: Build and upload artifacts without publishing a GitHub release
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths: ['package.json']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      release: ${{ steps.resolve.outputs.release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Resolve version
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          current=$(jq -r .version package.json)
+          release=true
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            version="${INPUT_VERSION:-$current}"
+            if [ "$version" != "$current" ]; then
+              echo "::error::package.json is $current; bump it before releasing $version" >&2
+              exit 1
+            fi
+          elif [ "$REF_TYPE" = "tag" ]; then
+            version="${REF_NAME#v}"
+            if [ "$version" != "$current" ]; then
+              echo "::error::tag $REF_NAME does not match package.json version $current" >&2
+              exit 1
+            fi
+          else
+            version="$current"
+            before="${BEFORE:-}"
+            if [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ]; then
+              previous=$(git show "$before:package.json" 2>/dev/null | jq -r .version || echo unknown)
+            else
+              previous=unknown
+            fi
+            if [ "$previous" = "$current" ]; then
+              echo "version unchanged ($current); skipping release"
+              release=false
+            fi
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "resolved version=$version release=$release"
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: prepare
+    if: needs.prepare.outputs.release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x86_64
+            os: ubuntu-latest
+          - target: linux-arm64
+            os: ubuntu-24.04-arm
+          - target: macos-arm64
+            os: macos-latest
+          - target: macos-x86_64
+            os: macos-15-intel
+          - target: windows-x86_64
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.98.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+      - name: Install audio build dependencies
+        if: startsWith(matrix.os, 'ubuntu')
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libasound2-dev libpulse-dev libdbus-1-dev pkg-config
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build release archive
+        run: bun run package
+      - name: Keep per-target checksum
+        shell: bash
+        run: cp dist/SHA256SUMS "dist/SHA256SUMS.${{ matrix.target }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: spotoei-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS.${{ matrix.target }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [prepare, build]
+    if: needs.prepare.outputs.release == 'true' && inputs.dry_run != true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: spotoei-*
+          path: dist
+          merge-multiple: true
+      - name: Assemble checksums
+        run: |
+          set -euo pipefail
+          cat dist/SHA256SUMS.* | sort > dist/SHA256SUMS
+          rm dist/SHA256SUMS.*
+          ls -l dist
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::release $tag already exists" >&2
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --generate-notes dist/*.tar.gz dist/SHA256SUMS
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --generate-notes dist/*.tar.gz dist/SHA256SUMS
+          fi
