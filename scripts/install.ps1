@@ -35,7 +35,11 @@ try {
     Invoke-WebRequest "$base/$archive" -OutFile (Join-Path $tmp $archive)
     Invoke-WebRequest "$base/SHA256SUMS" -OutFile (Join-Path $tmp "SHA256SUMS")
 
-    $expected = ((Get-Content (Join-Path $tmp "SHA256SUMS") -Raw).Trim() -split "\s+")[0].ToLower()
+    $sumLine = Get-Content (Join-Path $tmp "SHA256SUMS") |
+        Where-Object { $_ -match "\s$([regex]::Escape($archive))$" } |
+        Select-Object -First 1
+    if (-not $sumLine) { throw "No checksum for $archive in SHA256SUMS" }
+    $expected = ($sumLine -split "\s+")[0].ToLower()
     $actual = (Get-FileHash (Join-Path $tmp $archive) -Algorithm SHA256).Hash.ToLower()
     if ($expected -ne $actual) { throw "Checksum mismatch for $archive" }
 

@@ -48,11 +48,17 @@ printf 'Downloading %s...\n' "$archive"
 curl -fsSL "$base/$archive" -o "$tmp/$archive"
 curl -fsSL "$base/SHA256SUMS" -o "$tmp/SHA256SUMS"
 
+expected=$(awk -v file="$archive" '$2 == file { print $1 }' "$tmp/SHA256SUMS")
+[ -n "$expected" ] || die "no checksum for $archive in SHA256SUMS"
 if command -v sha256sum >/dev/null 2>&1; then
-  (cd "$tmp" && sha256sum -c SHA256SUMS)
+  actual=$(sha256sum "$tmp/$archive" | awk '{ print $1 }')
 else
-  (cd "$tmp" && shasum -a 256 -c SHA256SUMS)
+  actual=$(shasum -a 256 "$tmp/$archive" | awk '{ print $1 }')
 fi
+if [ "$actual" != "$expected" ]; then
+  die "checksum mismatch for $archive"
+fi
+printf '%s: OK\n' "$archive"
 
 libexec="$PREFIX/libexec/spotoei"
 mkdir -p "$libexec" "$PREFIX/bin"
