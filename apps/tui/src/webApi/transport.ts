@@ -2,136 +2,27 @@
 // Handles auth token resolution, in-flight request deduplication,
 // 401 token refresh retries, and 429 rate limit backoff.
 
-import type { HttpMethod, TokenPayload, TokenProvider } from './types';
 import { diagnostic, reportFailure } from '../diagnostics';
+import { ApiError } from './transportErrors';
+import { doFetchRequest, type FetchContext } from './transportFetch';
+import {
+  isDeprecatedEndpoint,
+  RATE_LIMIT_TTL_MS,
+  RESTRICTION_TTL_MS,
+  type RestrictionStore,
+} from './transportRestrictions';
+import { mergeTokenRefresh } from './transportTokens';
+import type { HttpMethod, TokenPayload, TokenProvider } from './types';
 
-export const QUOTA_BANNER = 'Library temporarily unavailable \u00b7 Spotify API quota exceeded';
-export const BROWSE_QUOTA_BANNER = QUOTA_BANNER;
-export const SEARCH_QUOTA_BANNER = QUOTA_BANNER;
-
-// Endpoints Spotify deprecated for dev apps without Extended Quota
-// (Nov 2024 + Feb 2026 changes). A 403/404 here is an expected platform
-// restriction, not an app bug.
-const DEPRECATED_PATTERNS: RegExp[] = [
-  /\/v1\/browse\/new-releases$/,
-  /\/v1\/browse\/featured-playlists$/,
-  /\/v1\/browse\/categories$/,
-  /\/v1\/browse\/categories\/.+\/playlists$/,
-  /\/v1\/recommendations$/,
-  /\/v1\/artists\/.+\/top-tracks$/,
-  /\/v1\/artists\/.+\/related-artists$/,
-];
-
-// Persistent memory for endpoint restrictions. The default Transport keeps
-// this in memory; the app wires a SQLite-backed store so a restriction
-// learned in a previous run still suppresses the doomed request (silently)
-// instead of re-probing Spotify on every cold start.
-export interface RestrictionStore {
-  getRestriction(endpoint: string): number | undefined;
-  setRestriction(endpoint: string, until: number): void;
-}
-
-export function isDeprecatedEndpoint(pathname: string): boolean {
-  return DEPRECATED_PATTERNS.some((re) => re.test(pathname));
-}
-
-// How long a 403/404 on a deprecated endpoint suppresses repeat network
-// calls (callers' fallbacks throw the cached refusal instead). Bounds
-// staleness in case the restriction lifts on re-auth or quota approval.
-const RESTRICTION_TTL_MS = 10 * 60 * 1000;
-
-// Upper bound for honoring Spotify's Retry-After on 429s. Longer bans are
-// still respected, but the local memory of them is capped so a stale ban
-// cannot suppress an endpoint forever.
-const RATE_LIMIT_TTL_MS = 120 * 1000;
-
-/**
- * Parse a Retry-After header value (delta seconds) into milliseconds.
- * Returns 0 when the header is missing or unparsable.
- */
-export function parseRetryAfterMs(value: string | null | undefined): number {
-  if (!value) return 0;
-  const seconds = Number.parseFloat(value.trim());
-  if (!Number.isFinite(seconds) || seconds < 0) return 0;
-  return Math.round(seconds * 1000);
-}
-
-export class ApiError extends Error {
-  code:
-    | 'API_RATE_LIMITED'
-    | 'API_QUOTA_EXCEEDED'
-    | 'API_UNAVAILABLE'
-    | 'AUTH_EXPIRED'
-    | 'FORBIDDEN';
-  diagnosticId = crypto.randomUUID().slice(0, 8);
-  retryable: boolean;
-  status: number;
-  constructor(code: ApiError['code'], message: string, status: number, retryable: boolean) {
-    super(message);
-    this.name = 'ApiError';
-    this.code = code;
-    this.status = status;
-    this.retryable = retryable;
-  }
-}
-
-/**
- * Preserves previous refresh_token when a token refresh response returns
- * a new access_token without a new refresh_token (#1040 parity).
- */
-export function preserveRefreshToken(
-  previousRefreshToken: string | null | undefined,
-  refreshedToken:
-    | Record<string, unknown>
-    | { refresh_token?: string | null; refreshToken?: string | null }
-    | null
-    | undefined,
-): string | undefined {
-  if (!refreshedToken || typeof refreshedToken !== 'object') {
-    return previousRefreshToken ?? undefined;
-  }
-  const next =
-    'refresh_token' in refreshedToken && typeof refreshedToken.refresh_token === 'string'
-      ? refreshedToken.refresh_token
-      : 'refreshToken' in refreshedToken && typeof refreshedToken.refreshToken === 'string'
-        ? refreshedToken.refreshToken
-        : undefined;
-  if (next && next.trim().length > 0) {
-    return next;
-  }
-  return previousRefreshToken ?? undefined;
-}
-
-/**
- * Merges a refresh token response into existing credentials, preserving the existing
- * refresh_token if the response omitted or nullified it (#1040 parity).
- */
-export function mergeTokenRefresh<T extends Record<string, unknown>>(
-  current: TokenPayload | string | null | undefined,
-  refreshed: T,
-): T & { refresh_token?: string; refreshToken?: string } {
-  const prevRefresh =
-    typeof current === 'string' ? current : (current?.refreshToken ?? current?.refresh_token);
-
-  const ref = refreshed as Record<string, unknown>;
-  const nextRefresh = ref.refresh_token ?? ref.refreshToken;
-  if (!nextRefresh || (typeof nextRefresh === 'string' && !nextRefresh.trim())) {
-    if (prevRefresh) {
-      if ('refresh_token' in ref || !('refreshToken' in ref)) {
-        return {
-          ...refreshed,
-          refresh_token: prevRefresh,
-        };
-      } else {
-        return {
-          ...refreshed,
-          refreshToken: prevRefresh,
-        };
-      }
-    }
-  }
-  return refreshed;
-}
+export {
+  QUOTA_BANNER,
+  BROWSE_QUOTA_BANNER,
+  SEARCH_QUOTA_BANNER,
+  ApiError,
+  parseRetryAfterMs,
+} from './transportErrors';
+export { preserveRefreshToken, mergeTokenRefresh } from './transportTokens';
+export { isDeprecatedEndpoint, type RestrictionStore } from './transportRestrictions';
 
 export class Transport {
   private tokenProvider: TokenProvider;
@@ -248,136 +139,15 @@ export class Transport {
       return this.inFlight.get(cacheKey);
     }
 
-    const doFetch = async (retryCount = 0): Promise<unknown> => {
-      if (signal?.aborted) {
-        throw new DOMException('Aborted', 'AbortError');
-      }
-      const token = await this.tokenProvider.getAccessToken().catch((error: unknown) => {
-        const id = reportFailure('ipc', 'auth.getWebToken', error);
-        if (error instanceof Error) Object.assign(error, { diagnosticId: id });
-        throw error;
-      });
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${token}`,
-        'User-Agent': 'spotoei/0.0.0',
-      };
-      if (bodyStr) {
-        headers['Content-Type'] = 'application/json';
-      }
-
-      const timeoutSignal = AbortSignal.timeout(10000);
-      const combinedSignal = signal
-        ? typeof AbortSignal.any === 'function'
-          ? AbortSignal.any([timeoutSignal, signal])
-          : signal
-        : timeoutSignal;
-
-      const res = await fetch(urlStr, {
-        method,
-        headers,
-        ...(bodyStr ? { body: bodyStr } : {}),
-        signal: combinedSignal,
-      });
-
-      if (!res.ok) {
-        const errBody = await res.text().catch(() => '');
-        let detail = res.statusText;
-        try {
-          const parsed = JSON.parse(errBody) as {
-            error?: { message?: string; reason?: string } | string;
-          };
-          if (typeof parsed?.error === 'object' && parsed.error?.message) {
-            detail = parsed.error.message;
-          } else if (typeof parsed?.error === 'object' && parsed.error?.reason) {
-            detail = parsed.error.reason;
-          } else if (typeof parsed?.error === 'string') {
-            detail = parsed.error;
-          } else if (errBody.trim()) {
-            detail = errBody.trim();
-          }
-        } catch {
-          if (errBody.trim()) {
-            detail = errBody.trim();
-          }
-        }
-
-        const isQuota = /quota/i.test(errBody) || /quota/i.test(detail);
-        if (isQuota) {
-          throw new ApiError(
-            'API_QUOTA_EXCEEDED',
-            `QUOTA_EXCEEDED: ${res.status} Quota exceeded (${detail})`,
-            res.status,
-            false,
-          );
-        }
-
-        if (res.status === 401 && retryCount === 0) {
-          await this.tokenProvider.invalidateToken?.();
-          return doFetch(retryCount + 1);
-        }
-        if (res.status === 401) {
-          throw new ApiError(
-            'AUTH_EXPIRED',
-            `AUTH_EXPIRED: 401 Unauthorized (${detail})`,
-            401,
-            false,
-          );
-        }
-
-        if (res.status === 429) {
-          const retryAfter = res.headers.get('Retry-After');
-          const retryAfterMs = parseRetryAfterMs(retryAfter);
-          const waitMs = Math.max(1000, retryAfterMs);
-          const endpoint = new URL(urlStr).pathname;
-          this.markRateLimited(endpoint, waitMs);
-
-          // Retry rate-limited GET requests up to two times if wait <= 2s.
-          // Mutation requests (POST, PUT, DELETE) are never delayed or retried.
-          if (isGet && retryCount < 2 && waitMs <= 2000) {
-            diagnostic('api', 'retry', { endpoint, status: 429, waitMs, retryCount: retryCount + 1 });
-            const { promise, resolve } = Promise.withResolvers<void>();
-            setTimeout(resolve, waitMs);
-            await promise;
-            return doFetch(retryCount + 1);
-          }
-
-          // If retry not allowed or exhausted, fall back to cached data if available for GET
-          if (isGet && this.responseCache.has(urlStr)) {
-            diagnostic('api', 'cached_fallback', { endpoint, status: 429 });
-            return this.responseCache.get(urlStr);
-          }
-
-          throw new ApiError(
-            'API_RATE_LIMITED',
-            `RATE_LIMITED: 429 Too Many Requests (retry after ${retryAfter ?? 'unknown'}s)`,
-            429,
-            true,
-          );
-        }
-
-        if (res.status === 403) {
-          throw new ApiError('FORBIDDEN', `FORBIDDEN: 403 Forbidden (${detail})`, 403, false);
-        }
-        throw new ApiError(
-          'API_UNAVAILABLE',
-          `HTTP_${res.status}: ${detail}`,
-          res.status,
-          res.status >= 500,
-        );
-      }
-
-      if (res.status === 204) {
-        return null;
-      }
-      const text = await res.text();
-      if (!text.trim()) {
-        return null;
-      }
-      const parsed = JSON.parse(text);
-      if (isGet) {
-        this.responseCache.set(urlStr, parsed);
-      }
-      return parsed;
+    const ctx: FetchContext = {
+      tokenProvider: this.tokenProvider,
+      urlStr,
+      method,
+      bodyStr,
+      isGet,
+      signal,
+      responseCache: this.responseCache,
+      markRateLimited: (endpoint, retryAfterMs) => this.markRateLimited(endpoint, retryAfterMs),
     };
 
     const p = (async () => {
@@ -411,7 +181,7 @@ export class Transport {
       }
       diagnostic('api', 'request', { method, endpoint });
       try {
-        const result = await doFetch();
+        const result = await doFetchRequest(ctx);
         diagnostic('api', 'response', { method, endpoint, durationMs: Date.now() - started });
         return result;
       } catch (error) {

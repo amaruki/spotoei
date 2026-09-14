@@ -1,16 +1,14 @@
 // Library endpoints: paged views of saved tracks/albums, followed artists,
 // user playlists, plus save/remove mutations.
 
-import type {
-  CatalogAlbumT,
-  CatalogArtistT,
-  CatalogPlaylistT,
-  CatalogShowT,
-  CatalogTrackT,
-  LibraryPageResponseT,
-} from 'spotoei-protocol';
-import { mapAlbum, mapArtist, mapPlaylist, mapShow, mapTrack } from './mappers';
-import { pickObjectKey, readNumber, toArray } from './shape';
+import type { CatalogPlaylistT, LibraryPageResponseT } from 'spotoei-protocol';
+import {
+  fetchFollowedArtists,
+  fetchSavedAlbums,
+  fetchSavedShows,
+  fetchSavedTracks,
+  fetchUserPlaylists,
+} from './libraryPages';
 import type { Transport } from './transport';
 import {
   type PlaylistFolderNode,
@@ -51,19 +49,25 @@ export class LibraryEndpoints {
 
     try {
       if (collection === 'saved_tracks') {
-        return await this.fetchSavedTracks(safeOffset, safeLimit);
+        return await fetchSavedTracks(this.transport, safeOffset, safeLimit);
       }
       if (collection === 'saved_albums') {
-        return await this.fetchSavedAlbums(safeOffset, safeLimit);
+        return await fetchSavedAlbums(this.transport, safeOffset, safeLimit);
       }
       if (collection === 'followed_artists') {
-        return await this.fetchFollowedArtists(safeOffset, safeLimit, cursor);
+        return await fetchFollowedArtists(
+          this.transport,
+          safeOffset,
+          safeLimit,
+          cursor,
+          this.artistCursors,
+        );
       }
       if (collection === 'saved_shows') {
-        return await this.fetchSavedShows(safeOffset, safeLimit);
+        return await fetchSavedShows(this.transport, safeOffset, safeLimit);
       }
       if (collection === 'playlists') {
-        return await this.fetchUserPlaylists(safeOffset, safeLimit);
+        return await fetchUserPlaylists(this.transport, safeOffset, safeLimit);
       }
       return {
         collection,
@@ -146,222 +150,12 @@ export class LibraryEndpoints {
     return this.removeUris([uri]);
   }
 
-  private async fetchSavedTracks(
-    safeOffset: number,
-    safeLimit: number,
-  ): Promise<LibraryPageResponseT> {
-    const collection = 'saved_tracks' as const;
-    const json = await this.transport.request(
-      `/me/tracks?offset=${safeOffset}&limit=${safeLimit}&market=from_token`,
-    );
-    const rawItems = toArray(pickObjectKey(json, 'items'));
-    const tracks: CatalogTrackT[] = [];
-    for (const item of rawItems) {
-      if (item !== null && typeof item === 'object' && 'track' in item) {
-        const track = (item as { track: unknown }).track;
-        const mapped = mapTrack(track);
-        if (mapped) tracks.push(mapped);
-      }
-    }
-    const total = readNumber(json, 'total', tracks.length);
-    const nextOffset = safeOffset + rawItems.length;
-    return {
-      collection,
-      items: tracks,
-      total,
-      offset: safeOffset,
-      limit: safeLimit,
-      hasMore: nextOffset < total && rawItems.length > 0,
-      nextOffset,
-    };
-  }
-
-  private async fetchSavedAlbums(
-    safeOffset: number,
-    safeLimit: number,
-  ): Promise<LibraryPageResponseT> {
-    const collection = 'saved_albums' as const;
-    const json = await this.transport.request(
-      `/me/albums?offset=${safeOffset}&limit=${safeLimit}&market=from_token`,
-    );
-    const rawItems = toArray(pickObjectKey(json, 'items'));
-    const albums: CatalogAlbumT[] = [];
-    for (const item of rawItems) {
-      if (item !== null && typeof item === 'object' && 'album' in item) {
-        const album = (item as { album: unknown }).album;
-        const mapped = mapAlbum(album);
-        if (mapped) albums.push(mapped);
-      }
-    }
-    const total = readNumber(json, 'total', 0);
-    const nextOffset = safeOffset + rawItems.length;
-    return {
-      collection,
-      items: albums,
-      total,
-      offset: safeOffset,
-      limit: safeLimit,
-      hasMore: nextOffset < total && rawItems.length > 0,
-      nextOffset,
-    };
-  }
-
-  private async fetchFollowedArtists(
-    safeOffset: number,
-    safeLimit: number,
-    cursor?: string,
-  ): Promise<LibraryPageResponseT> {
-    const collection = 'followed_artists' as const;
-    let effectiveCursor = cursor;
-
-    if (!effectiveCursor && safeOffset > 0) {
-      effectiveCursor = this.artistCursors.get(safeOffset);
-      if (!effectiveCursor) {
-        // Walk cursors from 0 up to safeOffset
-        let currentOffset = 0;
-        let walkCursor: string | undefined;
-        while (currentOffset < safeOffset) {
-          const walkUrl = walkCursor
-            ? `/me/following?type=artist&limit=${safeLimit}&after=${encodeURIComponent(walkCursor)}`
-            : `/me/following?type=artist&limit=${safeLimit}`;
-          const walkJson = await this.transport.request(walkUrl);
-          const walkArtistsObj =
-            walkJson !== null && typeof walkJson === 'object' && 'artists' in walkJson
-              ? (walkJson as { artists: unknown }).artists
-              : null;
-          const walkItems = toArray(
-            walkArtistsObj !== null && typeof walkArtistsObj === 'object' && 'items' in walkArtistsObj
-              ? (walkArtistsObj as { items: unknown }).items
-              : undefined,
-          );
-          if (walkItems.length === 0) break;
-          const walkCursorObj =
-            walkArtistsObj !== null && typeof walkArtistsObj === 'object' && 'cursors' in walkArtistsObj
-              ? ((walkArtistsObj as { cursors: unknown }).cursors as { after?: unknown } | null)
-              : null;
-          walkCursor =
-            walkCursorObj && typeof walkCursorObj.after === 'string'
-              ? walkCursorObj.after
-              : undefined;
-          currentOffset += walkItems.length;
-          if (walkCursor) {
-            this.artistCursors.set(currentOffset, walkCursor);
-          }
-          if (!walkCursor) break;
-        }
-        effectiveCursor = this.artistCursors.get(safeOffset);
-      }
-    }
-
-    const url = effectiveCursor
-      ? `/me/following?type=artist&limit=${safeLimit}&after=${encodeURIComponent(effectiveCursor)}`
-      : `/me/following?type=artist&limit=${safeLimit}`;
-    const json = await this.transport.request(url);
-    const artistsObj =
-      json !== null && typeof json === 'object' && 'artists' in json
-        ? (json as { artists: unknown }).artists
-        : null;
-    const rawItems = toArray(
-      artistsObj !== null && typeof artistsObj === 'object' && 'items' in artistsObj
-        ? (artistsObj as { items: unknown }).items
-        : undefined,
-    );
-    const total =
-      artistsObj !== null && typeof artistsObj === 'object' && 'total' in artistsObj
-        ? typeof (artistsObj as { total: unknown }).total === 'number'
-          ? (artistsObj as { total: number }).total
-          : rawItems.length
-        : rawItems.length;
-    const cursorObj =
-      artistsObj !== null && typeof artistsObj === 'object' && 'cursors' in artistsObj
-        ? ((artistsObj as { cursors: unknown }).cursors as { after?: unknown } | null)
-        : null;
-    const nextCursor =
-      cursorObj && typeof cursorObj.after === 'string' ? cursorObj.after : undefined;
-
-    const nextOffset = safeOffset + rawItems.length;
-    if (nextCursor) {
-      this.artistCursors.set(nextOffset, nextCursor);
-    }
-
-    const artists: CatalogArtistT[] = [];
-    for (const item of rawItems) {
-      const mapped = mapArtist(item);
-      if (mapped) artists.push(mapped);
-    }
-
-    return {
-      collection,
-      items: artists,
-      total,
-      offset: safeOffset,
-      limit: safeLimit,
-      hasMore: Boolean(nextCursor) && rawItems.length > 0 && nextOffset < total,
-      nextOffset,
-      nextCursor,
-    };
-  }
-
-  private async fetchSavedShows(
-    safeOffset: number,
-    safeLimit: number,
-  ): Promise<LibraryPageResponseT> {
-    const collection = 'saved_shows' as const;
-    const json = await this.transport.request(
-      `/me/shows?offset=${safeOffset}&limit=${safeLimit}&market=from_token`,
-    );
-    const rawItems = toArray(pickObjectKey(json, 'items'));
-    const shows: CatalogShowT[] = [];
-    for (const item of rawItems) {
-      const m = mapShow((item as { show?: unknown })?.show ?? item);
-      if (m) shows.push(m);
-    }
-    const total = readNumber(json, 'total', shows.length);
-    const nextOffset = safeOffset + rawItems.length;
-    return {
-      collection,
-      items: shows,
-      total,
-      offset: safeOffset,
-      limit: safeLimit,
-      hasMore: nextOffset < total && rawItems.length > 0,
-      nextOffset,
-    };
-  }
-
-  private async fetchUserPlaylists(
-    safeOffset: number,
-    safeLimit: number,
-  ): Promise<LibraryPageResponseT> {
-    const collection = 'playlists' as const;
-    const json = await this.transport.request(
-      `/me/playlists?offset=${safeOffset}&limit=${safeLimit}`,
-    );
-    const rawItems = toArray(pickObjectKey(json, 'items'));
-    const playlists: CatalogPlaylistT[] = [];
-    for (const item of rawItems) {
-      const m = mapPlaylist(item);
-      if (m) playlists.push(m);
-    }
-    const total = readNumber(json, 'total', playlists.length);
-    const nextOffset = safeOffset + rawItems.length;
-    return {
-      collection,
-      items: playlists,
-      total,
-      offset: safeOffset,
-      limit: safeLimit,
-      hasMore: nextOffset < total && rawItems.length > 0,
-      nextOffset,
-    };
-  }
-
   async getUserPlaylistTree(
     safeOffset = 0,
     safeLimit = 50,
     options?: StructurizeOptions,
   ): Promise<Array<PlaylistFolderNode | CatalogPlaylistT>> {
-    const page = await this.fetchUserPlaylists(safeOffset, safeLimit);
+    const page = await fetchUserPlaylists(this.transport, safeOffset, safeLimit);
     return structurizePlaylists(page.items as CatalogPlaylistT[], options);
   }
 }

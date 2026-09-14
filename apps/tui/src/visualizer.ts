@@ -13,6 +13,15 @@ import {
   type VisualizerModeT,
   type CommandT,
 } from 'spotoei-protocol';
+import { AdaptiveFpsTracker } from './visualizerFps';
+import { formatSpectrumBar } from './visualizerFormat';
+
+export {
+  SPECTRUM_BLOCK_CHARS,
+  formatBlockMeter,
+  formatSpectrumBar,
+  resampleBands,
+} from './visualizerFormat';
 
 export interface VisualizerClientOptions {
   child: ChildProcess;
@@ -33,67 +42,10 @@ interface PendingRequest {
 
 const MAX_PENDING = 32;
 
-
-/**
- * Unicode 1/8th block characters for smooth meter rendering (U+2581 to U+2588).
- */
-export const SPECTRUM_BLOCK_CHARS = [' ', '▂', '▃', '▄', '▅', '▆', '▇', '█'] as const;
-
-/**
- * Format a single band magnitude in [0.0, 1.0] into a Unicode block character.
- * Values <= 0 render as empty space (' ').
- * Values > 0 map cleanly into one of [' ', '▂', '▃', '▄', '▅', '▆', '▇', '█'].
- */
-export function formatBlockMeter(val: number): string {
-  if (val <= 0 || !Number.isFinite(val)) {
-    return ' ';
-  }
-  const clamped = Math.min(1, Math.max(0, val));
-  const idx = Math.min(7, Math.floor(clamped * 8));
-  return SPECTRUM_BLOCK_CHARS[idx] ?? ' ';
-}
-
-/**
- * Resample an array of frequency band magnitudes to a target width.
- */
-export function resampleBands(bands: number[], targetWidth: number): number[] {
-  if (bands.length === 0 || targetWidth <= 0) return [];
-  if (bands.length === targetWidth) return [...bands];
-  const result: number[] = [];
-  for (let i = 0; i < targetWidth; i++) {
-    const start = Math.floor((i / targetWidth) * bands.length);
-    const end = Math.max(start + 1, Math.floor(((i + 1) / targetWidth) * bands.length));
-    let sum = 0;
-    let count = 0;
-    for (let k = start; k < Math.min(bands.length, end); k++) {
-      sum += bands[k] ?? 0;
-      count++;
-    }
-    result.push(count > 0 ? sum / count : (bands[start] ?? 0));
-  }
-  return result;
-}
-
-/**
- * Format 64-band (or arbitrary) spectrum magnitudes into a string of Unicode block characters.
- * Suitable for rendering bar meters in TUI playback bars and status lines.
- */
-export function formatSpectrumBar(bands: number[], targetWidth?: number): string {
-  if (!bands || bands.length === 0) {
-    return targetWidth ? ' '.repeat(targetWidth) : '';
-  }
-  const effectiveBands =
-    targetWidth && targetWidth > 0 && targetWidth !== bands.length
-      ? resampleBands(bands, targetWidth)
-      : bands;
-  return effectiveBands.map(formatBlockMeter).join('');
-}
 export class VisualizerController {
   private child: ChildProcess;
   private timeoutMs: number;
   private mode: VisualizerModeT;
-  private targetFps: number;
-  private currentFps: number;
   private bands: number;
   private waveformSamples: number;
   private enabled: boolean = true;
@@ -105,18 +57,16 @@ export class VisualizerController {
   private running = false;
 
   // Adaptive FPS state — windowed hysteresis (ring of last 120 frameTimes)
-  private frameTimes: number[] = [];
+  private fpsTracker: AdaptiveFpsTracker;
   private lastFrameTimestamp: number = 0;
-  private lastEvalAt: number = 0;
-  private downgradedAt: number = 0;
-  private stableSince: number = 0;
 
   constructor(opts: VisualizerClientOptions) {
     this.child = opts.child;
     this.timeoutMs = opts.timeoutMs ?? 5_000;
     this.mode = opts.initialMode ?? 'spectrum';
-    this.targetFps = opts.targetFps ?? 60;
-    this.currentFps = this.targetFps;
+    this.fpsTracker = new AdaptiveFpsTracker(opts.targetFps ?? 60, () => {
+      this.syncConfig().catch(() => {});
+    });
     this.bands = opts.bands ?? 64;
     this.waveformSamples = opts.waveformSamples ?? 120;
   }
@@ -249,7 +199,7 @@ export class VisualizerController {
   }
 
   getCurrentFps(): number {
-    return this.currentFps;
+    return this.fpsTracker.getFps();
   }
 
   isEnabled(): boolean {
@@ -272,41 +222,7 @@ export class VisualizerController {
   }
 
   private recordFrameLatency(ms: number): void {
-    this.frameTimes.push(ms);
-    if (this.frameTimes.length > 120) this.frameTimes.shift();
-    if (this.frameTimes.length < 10) return;
-    const now = performance.now();
-    const sorted = this.frameTimes.toSorted((a, b) => a - b);
-    const p95 = sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] ?? 0;
-    const drop22 = this.frameTimes.filter((t) => t > 22).length / this.frameTimes.length;
-    const drop40 = this.frameTimes.filter((t) => t > 40).length / this.frameTimes.length;
-    const WINDOW_MS = 2000;
-    const STABLE_MS = 10000;
-    const COOLDOWN_MS = 15000;
-    if (this.currentFps === 60) {
-      const windowOk = now - this.lastEvalAt >= WINDOW_MS || this.frameTimes.length < 120;
-      if (windowOk && p95 > 22 && drop22 > 0.08) {
-        this.currentFps = 30;
-        this.downgradedAt = now;
-        this.lastEvalAt = now;
-        this.stableSince = 0;
-        this.syncConfig().catch(() => {});
-      } else if (p95 <= 22) this.lastEvalAt = now;
-    } else if (this.currentFps === 30) {
-      const inCooldown = now - this.downgradedAt < COOLDOWN_MS;
-      const recovery = p95 <= 40 && drop40 < 0.05;
-      if (!recovery) { this.stableSince = 0; return; }
-      const timeStable = this.stableSince !== 0 && now - this.stableSince >= STABLE_MS;
-      const countStable = this.frameTimes.filter((t) => t <= 40).length >= 60;
-      if (this.stableSince === 0) this.stableSince = now;
-      if ((timeStable || countStable) && (!inCooldown || countStable)) {
-        this.currentFps = this.targetFps;
-        this.lastEvalAt = now;
-        this.stableSince = 0;
-        this.downgradedAt = 0;
-        this.syncConfig().catch(() => {});
-      }
-    }
+    this.fpsTracker.recordFrameLatency(ms);
   }
 
   private async sendCommand<T>(cmd: CommandT): Promise<T> {
@@ -351,7 +267,7 @@ export class VisualizerController {
     const cmd = makeVisualizerConfigure(crypto.randomUUID(), {
       enabled: this.enabled,
       mode: this.mode,
-      fps: this.currentFps,
+      fps: this.fpsTracker.getFps(),
       bands: this.bands,
       waveformSamples: this.waveformSamples,
     });

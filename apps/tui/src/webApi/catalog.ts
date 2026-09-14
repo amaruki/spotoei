@@ -9,13 +9,8 @@ import type {
 } from 'spotoei-protocol';
 import { mapAlbum, mapArtist, mapEpisode, mapPlaylist, mapShow, mapTrack } from './mappers';
 import { pickObjectKey, toAlbum, toArray, toSearchResponse } from './shape';
-import { ApiError, type Transport } from './transport';
-
-function isForbiddenError(error: unknown): boolean {
-  if (error instanceof ApiError) return error.code === 'FORBIDDEN' || error.status === 403;
-  const msg = error instanceof Error ? error.message : String(error);
-  return /FORBIDDEN/.test(msg) || /\b403\b/.test(msg);
-}
+import type { Transport } from './transport';
+import { getTopTracksFallback } from './catalogFallback';
 
 export class CatalogEndpoints {
   constructor(private transport: Transport) {}
@@ -119,7 +114,10 @@ export class CatalogEndpoints {
         episodes: root.episodes
           ? {
               items: episodesItems,
-              total: typeof root.episodes.total === 'number' ? root.episodes.total : episodesItems.length,
+              total:
+                typeof root.episodes.total === 'number'
+                  ? root.episodes.total
+                  : episodesItems.length,
               limit: typeof root.episodes.limit === 'number' ? root.episodes.limit : safeLimit,
               offset: typeof root.episodes.offset === 'number' ? root.episodes.offset : 0,
             }
@@ -235,71 +233,6 @@ export class CatalogEndpoints {
       // Deprecated for dev apps without Extended Quota (404) — fall through
       // to the artist top-tracks fallback below instead of returning empty.
     }
-    return this.getTopTracksFallback(seedTracks, seedArtists, safeLimit);
-  }
-
-  // Fallback for the deprecated /recommendations endpoint (404 for dev apps
-  // without Extended Quota since Nov 2024). Resolves seed tracks to their
-  // artists, then fans out to /artists/{id}/top-tracks.
-  private async getTopTracksFallback(
-    seedTracks: string[],
-    seedArtists: string[],
-    limit: number,
-  ): Promise<CatalogTrackT[]> {
-    const artistIds: string[] = [];
-    const seenArtists = new Set<string>();
-    const pushArtist = (id: string): void => {
-      if (!id || seenArtists.has(id) || artistIds.length >= 5) return;
-      seenArtists.add(id);
-      artistIds.push(id);
-    };
-    for (const id of seedArtists) pushArtist(id);
-    // Resolve seed tracks to artists (best effort, capped to bound requests).
-    for (const trackId of seedTracks) {
-      if (artistIds.length >= 5) break;
-      try {
-        const json = await this.transport.request(`/tracks/${encodeURIComponent(trackId)}`);
-        const rawArtists =
-          json !== null && typeof json === 'object'
-            ? (json as { artists?: unknown }).artists
-            : undefined;
-        const list = toArray(rawArtists);
-        for (const entry of list) {
-          if (entry !== null && typeof entry === 'object') {
-            const id = (entry as { id?: unknown }).id;
-            if (typeof id === 'string') pushArtist(id);
-          }
-          if (artistIds.length >= 5) break;
-        }
-      } catch {
-        // Ignore per-track lookup failures; other seeds may still resolve.
-      }
-    }
-    if (artistIds.length === 0) return [];
-
-    const excluded = new Set(seedTracks);
-    const tracks: CatalogTrackT[] = [];
-    const seenTracks = new Set<string>();
-    for (const artistId of artistIds) {
-      if (tracks.length >= limit) break;
-      try {
-        const json = await this.transport.request(
-          `/artists/${encodeURIComponent(artistId)}/top-tracks?market=from_token`,
-        );
-        for (const item of toArray(pickObjectKey(json, 'tracks'))) {
-          const mapped = mapTrack(item);
-          if (!mapped || seenTracks.has(mapped.id) || excluded.has(mapped.id)) continue;
-          seenTracks.add(mapped.id);
-          tracks.push(mapped);
-          if (tracks.length >= limit) break;
-        }
-      } catch (error) {
-        // A 403 here is an app-wide restriction (dev apps without Extended
-        // Quota): every artist would fail identically, so stop fanning out.
-        // Other failures stay local; remaining artists may still deliver.
-        if (isForbiddenError(error)) break;
-      }
-    }
-    return tracks;
+    return getTopTracksFallback(this.transport, seedTracks, seedArtists, safeLimit);
   }
 }
