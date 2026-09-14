@@ -1,0 +1,497 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1116" height="752" viewBox="0 0 1116 752" role="img" aria-label="spotoei — visualizer">
+<rect width="1116" height="752" rx="12" fill="#0b0d13"/>
+<rect x="0.5" y="0.5" width="1115" height="751" rx="11.5" fill="none" stroke="#262d3d"/>
+<circle cx="18" cy="24" r="5.5" fill="#f85149"/>
+<circle cx="38" cy="24" r="5.5" fill="#d29922"/>
+<circle cx="58" cy="24" r="5.5" fill="#3fb950"/>
+<text x="558" y="28" fill="#8b949e" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="13" text-anchor="middle">spotoei — visualizer</text>
+<g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace">
+<rect x="18" y="50" width="1080" height="19" fill="rgb(11,13,19)"/><text x="18" y="64.44" fill="rgb(29,185,84)" font-size="15" textLength="1080" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┌─▶ Visualizer [Active]────────────────────────────────────────────────────────────────────────────────────────────────┐</text>
+<rect x="18" y="69" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="83.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="69" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="69" width="1044" height="19" fill="rgb(19,23,34)"/><text x="36" y="83.44" fill="rgb(38,45,61)" font-size="15" textLength="1044" lengthAdjust="spacingAndGlyphs" xml:space="preserve">┌─Visualizer (V: close, m: mode)───────────────────────────────────────────────────────────────────────────────────┐</text>
+<rect x="1080" y="69" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="69" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="83.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="88" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="102.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="88" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="88" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="102.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="88" width="1026" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="88" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="102.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="88" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="88" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="102.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="107" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="121.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="107" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="107" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="121.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="107" width="405" height="19" fill="rgb(19,23,34)"/>
+<rect x="450" y="107" width="54" height="19" fill="rgb(19,23,34)"/><text x="450" y="121.44" fill="rgb(148,163,184)" font-size="15" textLength="54" lengthAdjust="spacingAndGlyphs" xml:space="preserve">mode: </text>
+<rect x="504" y="107" width="72" height="19" fill="rgb(19,23,34)"/><text x="504" y="121.44" fill="rgb(29,185,84)" font-weight="700" font-size="15" textLength="72" lengthAdjust="spacingAndGlyphs" xml:space="preserve">spectrum</text>
+<rect x="576" y="107" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="594" y="107" width="45" height="19" fill="rgb(19,23,34)"/><text x="594" y="121.44" fill="rgb(148,163,184)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">fps: </text>
+<rect x="639" y="107" width="18" height="19" fill="rgb(19,23,34)"/><text x="639" y="121.44" fill="rgb(241,245,249)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">30</text>
+<rect x="657" y="107" width="414" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="107" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="121.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="107" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="107" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="121.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="126" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="140.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="126" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="126" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="140.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="126" width="252" height="19" fill="rgb(19,23,34)"/>
+<rect x="297" y="126" width="9" height="19" fill="rgb(19,23,34)"/><text x="297" y="140.44" fill="rgb(255,158,100)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="306" y="126" width="765" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="126" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="140.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="126" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="126" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="140.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="145" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="159.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="145" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="145" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="159.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="145" width="252" height="19" fill="rgb(19,23,34)"/>
+<rect x="297" y="145" width="9" height="19" fill="rgb(19,23,34)"/><text x="297" y="159.44" fill="rgb(255,158,100)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="306" y="145" width="765" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="145" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="159.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="145" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="145" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="159.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="164" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="178.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="164" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="164" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="178.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="164" width="243" height="19" fill="rgb(19,23,34)"/>
+<rect x="288" y="164" width="18" height="19" fill="rgb(19,23,34)"/><text x="288" y="178.44" fill="rgb(255,158,100)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▃█</text>
+<rect x="306" y="164" width="72" height="19" fill="rgb(19,23,34)"/>
+<rect x="378" y="164" width="9" height="19" fill="rgb(19,23,34)"/><text x="378" y="178.44" fill="rgb(255,158,100)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▄</text>
+<rect x="387" y="164" width="684" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="164" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="178.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="164" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="164" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="178.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="183" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="197.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="183" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="183" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="197.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="183" width="243" height="19" fill="rgb(19,23,34)"/>
+<rect x="288" y="183" width="18" height="19" fill="rgb(19,23,34)"/><text x="288" y="197.44" fill="rgb(255,158,100)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██</text>
+<rect x="306" y="183" width="72" height="19" fill="rgb(19,23,34)"/>
+<rect x="378" y="183" width="9" height="19" fill="rgb(19,23,34)"/><text x="378" y="197.44" fill="rgb(255,158,100)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="387" y="183" width="684" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="183" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="197.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="183" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="183" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="197.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="202" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="216.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="202" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="202" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="216.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="202" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="202" width="9" height="19" fill="rgb(19,23,34)"/><text x="270" y="216.44" fill="rgb(255,158,100)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▂</text>
+<rect x="279" y="202" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="288" y="202" width="18" height="19" fill="rgb(19,23,34)"/><text x="288" y="216.44" fill="rgb(255,158,100)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██</text>
+<rect x="306" y="202" width="72" height="19" fill="rgb(19,23,34)"/>
+<rect x="378" y="202" width="9" height="19" fill="rgb(19,23,34)"/><text x="378" y="216.44" fill="rgb(255,158,100)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="387" y="202" width="684" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="202" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="216.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="202" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="202" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="216.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="221" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="235.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="221" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="221" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="235.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="221" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="221" width="9" height="19" fill="rgb(19,23,34)"/><text x="270" y="235.44" fill="rgb(247,118,142)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="279" y="221" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="288" y="221" width="18" height="19" fill="rgb(19,23,34)"/><text x="288" y="235.44" fill="rgb(247,118,142)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██</text>
+<rect x="306" y="221" width="72" height="19" fill="rgb(19,23,34)"/>
+<rect x="378" y="221" width="9" height="19" fill="rgb(19,23,34)"/><text x="378" y="235.44" fill="rgb(247,118,142)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="387" y="221" width="684" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="221" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="235.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="221" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="221" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="235.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="240" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="254.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="240" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="240" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="254.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="240" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="240" width="9" height="19" fill="rgb(19,23,34)"/><text x="270" y="254.44" fill="rgb(247,118,142)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="279" y="240" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="288" y="240" width="18" height="19" fill="rgb(19,23,34)"/><text x="288" y="254.44" fill="rgb(247,118,142)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██</text>
+<rect x="306" y="240" width="72" height="19" fill="rgb(19,23,34)"/>
+<rect x="378" y="240" width="9" height="19" fill="rgb(19,23,34)"/><text x="378" y="254.44" fill="rgb(247,118,142)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="387" y="240" width="684" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="240" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="254.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="240" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="240" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="254.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="259" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="273.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="259" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="259" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="273.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="259" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="259" width="36" height="19" fill="rgb(19,23,34)"/><text x="270" y="273.44" fill="rgb(247,118,142)" font-size="15" textLength="36" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█▇██</text>
+<rect x="306" y="259" width="45" height="19" fill="rgb(19,23,34)"/>
+<rect x="351" y="259" width="9" height="19" fill="rgb(19,23,34)"/><text x="351" y="273.44" fill="rgb(247,118,142)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="360" y="259" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="378" y="259" width="9" height="19" fill="rgb(19,23,34)"/><text x="378" y="273.44" fill="rgb(247,118,142)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="387" y="259" width="72" height="19" fill="rgb(19,23,34)"/>
+<rect x="459" y="259" width="9" height="19" fill="rgb(19,23,34)"/><text x="459" y="273.44" fill="rgb(247,118,142)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▂</text>
+<rect x="468" y="259" width="603" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="259" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="273.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="259" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="259" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="273.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="278" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="292.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="278" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="278" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="292.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="278" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="278" width="36" height="19" fill="rgb(19,23,34)"/><text x="270" y="292.44" fill="rgb(247,118,142)" font-size="15" textLength="36" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████</text>
+<rect x="306" y="278" width="45" height="19" fill="rgb(19,23,34)"/>
+<rect x="351" y="278" width="9" height="19" fill="rgb(19,23,34)"/><text x="351" y="292.44" fill="rgb(247,118,142)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="360" y="278" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="378" y="278" width="9" height="19" fill="rgb(19,23,34)"/><text x="378" y="292.44" fill="rgb(247,118,142)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="387" y="278" width="72" height="19" fill="rgb(19,23,34)"/>
+<rect x="459" y="278" width="9" height="19" fill="rgb(19,23,34)"/><text x="459" y="292.44" fill="rgb(247,118,142)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="468" y="278" width="603" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="278" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="292.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="278" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="278" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="292.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="297" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="311.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="297" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="297" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="311.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="297" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="297" width="36" height="19" fill="rgb(19,23,34)"/><text x="270" y="311.44" fill="rgb(198,120,221)" font-size="15" textLength="36" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████</text>
+<rect x="306" y="297" width="45" height="19" fill="rgb(19,23,34)"/>
+<rect x="351" y="297" width="9" height="19" fill="rgb(19,23,34)"/><text x="351" y="311.44" fill="rgb(198,120,221)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="360" y="297" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="369" y="297" width="18" height="19" fill="rgb(19,23,34)"/><text x="369" y="311.44" fill="rgb(198,120,221)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▅█</text>
+<rect x="387" y="297" width="72" height="19" fill="rgb(19,23,34)"/>
+<rect x="459" y="297" width="9" height="19" fill="rgb(19,23,34)"/><text x="459" y="311.44" fill="rgb(198,120,221)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="468" y="297" width="603" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="297" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="311.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="297" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="297" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="311.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="316" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="330.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="316" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="316" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="330.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="316" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="316" width="36" height="19" fill="rgb(19,23,34)"/><text x="270" y="330.44" fill="rgb(198,120,221)" font-size="15" textLength="36" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████</text>
+<rect x="306" y="316" width="45" height="19" fill="rgb(19,23,34)"/>
+<rect x="351" y="316" width="36" height="19" fill="rgb(19,23,34)"/><text x="351" y="330.44" fill="rgb(198,120,221)" font-size="15" textLength="36" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█ ██</text>
+<rect x="387" y="316" width="45" height="19" fill="rgb(19,23,34)"/>
+<rect x="432" y="316" width="9" height="19" fill="rgb(19,23,34)"/><text x="432" y="330.44" fill="rgb(198,120,221)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▃</text>
+<rect x="441" y="316" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="459" y="316" width="9" height="19" fill="rgb(19,23,34)"/><text x="459" y="330.44" fill="rgb(198,120,221)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="468" y="316" width="603" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="316" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="330.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="316" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="316" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="330.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="335" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="349.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="335" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="335" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="349.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="335" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="335" width="45" height="19" fill="rgb(19,23,34)"/><text x="270" y="349.44" fill="rgb(198,120,221)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████▅</text>
+<rect x="315" y="335" width="36" height="19" fill="rgb(19,23,34)"/>
+<rect x="351" y="335" width="36" height="19" fill="rgb(19,23,34)"/><text x="351" y="349.44" fill="rgb(198,120,221)" font-size="15" textLength="36" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████</text>
+<rect x="387" y="335" width="45" height="19" fill="rgb(19,23,34)"/>
+<rect x="432" y="335" width="9" height="19" fill="rgb(19,23,34)"/><text x="432" y="349.44" fill="rgb(198,120,221)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="441" y="335" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="459" y="335" width="9" height="19" fill="rgb(19,23,34)"/><text x="459" y="349.44" fill="rgb(198,120,221)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="468" y="335" width="603" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="335" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="349.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="335" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="335" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="349.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="354" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="368.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="354" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="354" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="368.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="354" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="354" width="45" height="19" fill="rgb(19,23,34)"/><text x="270" y="368.44" fill="rgb(198,120,221)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="315" y="354" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="324" y="354" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="333" y="354" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="351" y="354" width="36" height="19" fill="rgb(19,23,34)"/><text x="351" y="368.44" fill="rgb(198,120,221)" font-size="15" textLength="36" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████</text>
+<rect x="387" y="354" width="45" height="19" fill="rgb(19,23,34)"/>
+<rect x="432" y="354" width="18" height="19" fill="rgb(19,23,34)"/><text x="432" y="368.44" fill="rgb(198,120,221)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█▅</text>
+<rect x="450" y="354" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="459" y="354" width="9" height="19" fill="rgb(19,23,34)"/><text x="459" y="368.44" fill="rgb(198,120,221)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="468" y="354" width="72" height="19" fill="rgb(19,23,34)"/>
+<rect x="540" y="354" width="9" height="19" fill="rgb(19,23,34)"/><text x="540" y="368.44" fill="rgb(198,120,221)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▂</text>
+<rect x="549" y="354" width="522" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="354" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="368.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="354" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="354" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="368.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="373" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="387.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="373" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="373" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="387.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="373" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="373" width="45" height="19" fill="rgb(19,23,34)"/><text x="270" y="387.44" fill="rgb(187,154,247)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="315" y="373" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="324" y="373" width="9" height="19" fill="rgb(19,23,34)"/><text x="324" y="387.44" fill="rgb(187,154,247)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="333" y="373" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="351" y="373" width="45" height="19" fill="rgb(19,23,34)"/><text x="351" y="387.44" fill="rgb(187,154,247)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████▂</text>
+<rect x="396" y="373" width="36" height="19" fill="rgb(19,23,34)"/>
+<rect x="432" y="373" width="36" height="19" fill="rgb(19,23,34)"/><text x="432" y="387.44" fill="rgb(187,154,247)" font-size="15" textLength="36" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██ █</text>
+<rect x="468" y="373" width="72" height="19" fill="rgb(19,23,34)"/>
+<rect x="540" y="373" width="9" height="19" fill="rgb(19,23,34)"/><text x="540" y="387.44" fill="rgb(187,154,247)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="549" y="373" width="522" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="373" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="387.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="373" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="373" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="387.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="392" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="406.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="392" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="392" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="406.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="392" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="392" width="45" height="19" fill="rgb(19,23,34)"/><text x="270" y="406.44" fill="rgb(187,154,247)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="315" y="392" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="324" y="392" width="9" height="19" fill="rgb(19,23,34)"/><text x="324" y="406.44" fill="rgb(187,154,247)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="333" y="392" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="351" y="392" width="45" height="19" fill="rgb(19,23,34)"/><text x="351" y="406.44" fill="rgb(187,154,247)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="396" y="392" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="405" y="392" width="9" height="19" fill="rgb(19,23,34)"/><text x="405" y="406.44" fill="rgb(187,154,247)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▂</text>
+<rect x="414" y="392" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="432" y="392" width="45" height="19" fill="rgb(19,23,34)"/><text x="432" y="406.44" fill="rgb(187,154,247)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████▂</text>
+<rect x="477" y="392" width="36" height="19" fill="rgb(19,23,34)"/>
+<rect x="513" y="392" width="18" height="19" fill="rgb(19,23,34)"/><text x="513" y="406.44" fill="rgb(187,154,247)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▂█</text>
+<rect x="531" y="392" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="540" y="392" width="9" height="19" fill="rgb(19,23,34)"/><text x="540" y="406.44" fill="rgb(187,154,247)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="549" y="392" width="522" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="392" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="406.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="392" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="392" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="406.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="411" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="425.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="411" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="411" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="425.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="411" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="411" width="63" height="19" fill="rgb(19,23,34)"/><text x="270" y="425.44" fill="rgb(187,154,247)" font-size="15" textLength="63" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████▄█</text>
+<rect x="333" y="411" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="351" y="411" width="45" height="19" fill="rgb(19,23,34)"/><text x="351" y="425.44" fill="rgb(187,154,247)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="396" y="411" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="405" y="411" width="9" height="19" fill="rgb(19,23,34)"/><text x="405" y="425.44" fill="rgb(187,154,247)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="414" y="411" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="432" y="411" width="45" height="19" fill="rgb(19,23,34)"/><text x="432" y="425.44" fill="rgb(187,154,247)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="477" y="411" width="36" height="19" fill="rgb(19,23,34)"/>
+<rect x="513" y="411" width="18" height="19" fill="rgb(19,23,34)"/><text x="513" y="425.44" fill="rgb(187,154,247)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██</text>
+<rect x="531" y="411" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="540" y="411" width="9" height="19" fill="rgb(19,23,34)"/><text x="540" y="425.44" fill="rgb(187,154,247)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="549" y="411" width="522" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="411" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="425.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="411" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="411" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="425.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="430" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="444.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="430" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="430" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="444.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="430" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="430" width="63" height="19" fill="rgb(19,23,34)"/><text x="270" y="444.44" fill="rgb(187,154,247)" font-size="15" textLength="63" lengthAdjust="spacingAndGlyphs" xml:space="preserve">███████</text>
+<rect x="333" y="430" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="351" y="430" width="45" height="19" fill="rgb(19,23,34)"/><text x="351" y="444.44" fill="rgb(187,154,247)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="396" y="430" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="405" y="430" width="9" height="19" fill="rgb(19,23,34)"/><text x="405" y="444.44" fill="rgb(187,154,247)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="414" y="430" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="432" y="430" width="45" height="19" fill="rgb(19,23,34)"/><text x="432" y="444.44" fill="rgb(187,154,247)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="477" y="430" width="36" height="19" fill="rgb(19,23,34)"/>
+<rect x="513" y="430" width="45" height="19" fill="rgb(19,23,34)"/><text x="513" y="444.44" fill="rgb(187,154,247)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██▇█▅</text>
+<rect x="558" y="430" width="45" height="19" fill="rgb(19,23,34)"/>
+<rect x="603" y="430" width="9" height="19" fill="rgb(19,23,34)"/><text x="603" y="444.44" fill="rgb(187,154,247)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▅</text>
+<rect x="612" y="430" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="621" y="430" width="9" height="19" fill="rgb(19,23,34)"/><text x="621" y="444.44" fill="rgb(187,154,247)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▆</text>
+<rect x="630" y="430" width="441" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="430" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="444.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="430" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="430" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="444.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="449" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="463.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="449" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="449" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="463.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="449" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="449" width="63" height="19" fill="rgb(19,23,34)"/><text x="270" y="463.44" fill="rgb(137,180,250)" font-size="15" textLength="63" lengthAdjust="spacingAndGlyphs" xml:space="preserve">███████</text>
+<rect x="333" y="449" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="351" y="449" width="45" height="19" fill="rgb(19,23,34)"/><text x="351" y="463.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="396" y="449" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="405" y="449" width="9" height="19" fill="rgb(19,23,34)"/><text x="405" y="463.44" fill="rgb(137,180,250)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="414" y="449" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="432" y="449" width="45" height="19" fill="rgb(19,23,34)"/><text x="432" y="463.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="477" y="449" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="486" y="449" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="495" y="449" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="513" y="449" width="45" height="19" fill="rgb(19,23,34)"/><text x="513" y="463.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="558" y="449" width="45" height="19" fill="rgb(19,23,34)"/>
+<rect x="603" y="449" width="27" height="19" fill="rgb(19,23,34)"/><text x="603" y="463.44" fill="rgb(137,180,250)" font-size="15" textLength="27" lengthAdjust="spacingAndGlyphs" xml:space="preserve">███</text>
+<rect x="630" y="449" width="441" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="449" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="463.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="449" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="449" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="463.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="468" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="482.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="468" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="468" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="482.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="468" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="468" width="63" height="19" fill="rgb(19,23,34)"/><text x="270" y="482.44" fill="rgb(137,180,250)" font-size="15" textLength="63" lengthAdjust="spacingAndGlyphs" xml:space="preserve">███████</text>
+<rect x="333" y="468" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="351" y="468" width="45" height="19" fill="rgb(19,23,34)"/><text x="351" y="482.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="396" y="468" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="405" y="468" width="9" height="19" fill="rgb(19,23,34)"/><text x="405" y="482.44" fill="rgb(137,180,250)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="414" y="468" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="432" y="468" width="45" height="19" fill="rgb(19,23,34)"/><text x="432" y="482.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="477" y="468" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="486" y="468" width="9" height="19" fill="rgb(19,23,34)"/><text x="486" y="482.44" fill="rgb(137,180,250)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="495" y="468" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="513" y="468" width="45" height="19" fill="rgb(19,23,34)"/><text x="513" y="482.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="558" y="468" width="36" height="19" fill="rgb(19,23,34)"/>
+<rect x="594" y="468" width="45" height="19" fill="rgb(19,23,34)"/><text x="594" y="482.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████▃</text>
+<rect x="639" y="468" width="54" height="19" fill="rgb(19,23,34)"/>
+<rect x="693" y="468" width="18" height="19" fill="rgb(19,23,34)"/><text x="693" y="482.44" fill="rgb(137,180,250)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█▇</text>
+<rect x="711" y="468" width="360" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="468" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="482.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="468" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="468" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="482.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="487" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="501.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="487" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="487" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="501.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="487" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="487" width="63" height="19" fill="rgb(19,23,34)"/><text x="270" y="501.44" fill="rgb(137,180,250)" font-size="15" textLength="63" lengthAdjust="spacingAndGlyphs" xml:space="preserve">███████</text>
+<rect x="333" y="487" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="342" y="487" width="72" height="19" fill="rgb(19,23,34)"/><text x="342" y="501.44" fill="rgb(137,180,250)" font-size="15" textLength="72" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▇█████▃█</text>
+<rect x="414" y="487" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="432" y="487" width="45" height="19" fill="rgb(19,23,34)"/><text x="432" y="501.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="477" y="487" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="486" y="487" width="9" height="19" fill="rgb(19,23,34)"/><text x="486" y="501.44" fill="rgb(137,180,250)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="495" y="487" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="513" y="487" width="45" height="19" fill="rgb(19,23,34)"/><text x="513" y="501.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="558" y="487" width="36" height="19" fill="rgb(19,23,34)"/>
+<rect x="594" y="487" width="45" height="19" fill="rgb(19,23,34)"/><text x="594" y="501.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="639" y="487" width="36" height="19" fill="rgb(19,23,34)"/>
+<rect x="675" y="487" width="36" height="19" fill="rgb(19,23,34)"/><text x="675" y="501.44" fill="rgb(137,180,250)" font-size="15" textLength="36" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▃███</text>
+<rect x="711" y="487" width="63" height="19" fill="rgb(19,23,34)"/>
+<rect x="774" y="487" width="18" height="19" fill="rgb(19,23,34)"/><text x="774" y="501.44" fill="rgb(137,180,250)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▄█</text>
+<rect x="792" y="487" width="279" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="487" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="501.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="487" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="487" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="501.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="506" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="520.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="506" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="506" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="520.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="506" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="506" width="63" height="19" fill="rgb(19,23,34)"/><text x="270" y="520.44" fill="rgb(137,180,250)" font-size="15" textLength="63" lengthAdjust="spacingAndGlyphs" xml:space="preserve">███████</text>
+<rect x="333" y="506" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="342" y="506" width="72" height="19" fill="rgb(19,23,34)"/><text x="342" y="520.44" fill="rgb(137,180,250)" font-size="15" textLength="72" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████████</text>
+<rect x="414" y="506" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="432" y="506" width="45" height="19" fill="rgb(19,23,34)"/><text x="432" y="520.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="477" y="506" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="486" y="506" width="9" height="19" fill="rgb(19,23,34)"/><text x="486" y="520.44" fill="rgb(137,180,250)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="495" y="506" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="513" y="506" width="45" height="19" fill="rgb(19,23,34)"/><text x="513" y="520.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="558" y="506" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="567" y="506" width="9" height="19" fill="rgb(19,23,34)"/><text x="567" y="520.44" fill="rgb(137,180,250)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▂</text>
+<rect x="576" y="506" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="594" y="506" width="45" height="19" fill="rgb(19,23,34)"/><text x="594" y="520.44" fill="rgb(137,180,250)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="639" y="506" width="36" height="19" fill="rgb(19,23,34)"/>
+<rect x="675" y="506" width="36" height="19" fill="rgb(19,23,34)"/><text x="675" y="520.44" fill="rgb(137,180,250)" font-size="15" textLength="36" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████</text>
+<rect x="711" y="506" width="45" height="19" fill="rgb(19,23,34)"/>
+<rect x="756" y="506" width="9" height="19" fill="rgb(19,23,34)"/><text x="756" y="520.44" fill="rgb(137,180,250)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▅</text>
+<rect x="765" y="506" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="774" y="506" width="18" height="19" fill="rgb(19,23,34)"/><text x="774" y="520.44" fill="rgb(137,180,250)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██</text>
+<rect x="792" y="506" width="45" height="19" fill="rgb(19,23,34)"/>
+<rect x="837" y="506" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="846" y="506" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="506" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="520.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="506" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="506" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="520.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="525" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="539.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="525" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="525" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="539.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="525" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="525" width="63" height="19" fill="rgb(19,23,34)"/><text x="270" y="539.44" fill="rgb(122,162,247)" font-size="15" textLength="63" lengthAdjust="spacingAndGlyphs" xml:space="preserve">███████</text>
+<rect x="333" y="525" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="342" y="525" width="81" height="19" fill="rgb(19,23,34)"/><text x="342" y="539.44" fill="rgb(122,162,247)" font-size="15" textLength="81" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████████▂</text>
+<rect x="423" y="525" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="432" y="525" width="72" height="19" fill="rgb(19,23,34)"/><text x="432" y="539.44" fill="rgb(122,162,247)" font-size="15" textLength="72" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████▃█▇</text>
+<rect x="504" y="525" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="513" y="525" width="72" height="19" fill="rgb(19,23,34)"/><text x="513" y="539.44" fill="rgb(122,162,247)" font-size="15" textLength="72" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████ █▂</text>
+<rect x="585" y="525" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="594" y="525" width="54" height="19" fill="rgb(19,23,34)"/><text x="594" y="539.44" fill="rgb(122,162,247)" font-size="15" textLength="54" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████▃</text>
+<rect x="648" y="525" width="27" height="19" fill="rgb(19,23,34)"/>
+<rect x="675" y="525" width="45" height="19" fill="rgb(19,23,34)"/><text x="675" y="539.44" fill="rgb(122,162,247)" font-size="15" textLength="45" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█████</text>
+<rect x="720" y="525" width="36" height="19" fill="rgb(19,23,34)"/>
+<rect x="756" y="525" width="36" height="19" fill="rgb(19,23,34)"/><text x="756" y="539.44" fill="rgb(122,162,247)" font-size="15" textLength="36" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████</text>
+<rect x="792" y="525" width="45" height="19" fill="rgb(19,23,34)"/>
+<rect x="837" y="525" width="9" height="19" fill="rgb(19,23,34)"/><text x="837" y="539.44" fill="rgb(122,162,247)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="846" y="525" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="525" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="539.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="525" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="525" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="539.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="544" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="558.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="544" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="544" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="558.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="544" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="544" width="387" height="19" fill="rgb(19,23,34)"/><text x="270" y="558.44" fill="rgb(122,162,247)" font-size="15" textLength="387" lengthAdjust="spacingAndGlyphs" xml:space="preserve">███████▆██████████████████ ████████▄██████▆</text>
+<rect x="657" y="544" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="666" y="544" width="72" height="19" fill="rgb(19,23,34)"/><text x="666" y="558.44" fill="rgb(122,162,247)" font-size="15" textLength="72" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▇██████▃</text>
+<rect x="738" y="544" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="747" y="544" width="72" height="19" fill="rgb(19,23,34)"/><text x="747" y="558.44" fill="rgb(122,162,247)" font-size="15" textLength="72" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▄████▄ ▃</text>
+<rect x="819" y="544" width="18" height="19" fill="rgb(19,23,34)"/>
+<rect x="837" y="544" width="9" height="19" fill="rgb(19,23,34)"/><text x="837" y="558.44" fill="rgb(122,162,247)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
+<rect x="846" y="544" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="544" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="558.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="544" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="544" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="558.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="563" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="577.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="563" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="563" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="577.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="563" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="563" width="468" height="19" fill="rgb(19,23,34)"/><text x="270" y="577.44" fill="rgb(122,162,247)" font-size="15" textLength="468" lengthAdjust="spacingAndGlyphs" xml:space="preserve">███████████████████████████████████████████▇████████</text>
+<rect x="738" y="563" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="747" y="563" width="72" height="19" fill="rgb(19,23,34)"/><text x="747" y="577.44" fill="rgb(122,162,247)" font-size="15" textLength="72" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████████</text>
+<rect x="819" y="563" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="828" y="563" width="18" height="19" fill="rgb(19,23,34)"/><text x="828" y="577.44" fill="rgb(122,162,247)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">▅█</text>
+<rect x="846" y="563" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="563" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="577.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="563" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="563" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="577.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="582" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="596.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="582" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="582" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="596.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="582" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="582" width="549" height="19" fill="rgb(19,23,34)"/><text x="270" y="596.44" fill="rgb(122,162,247)" font-size="15" textLength="549" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████████████████████████████████████████████████████▅████████</text>
+<rect x="819" y="582" width="9" height="19" fill="rgb(19,23,34)"/>
+<rect x="828" y="582" width="18" height="19" fill="rgb(19,23,34)"/><text x="828" y="596.44" fill="rgb(122,162,247)" font-size="15" textLength="18" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██</text>
+<rect x="846" y="582" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="582" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="596.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="582" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="582" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="596.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="601" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="615.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="601" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="601" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="615.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="601" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="601" width="576" height="19" fill="rgb(19,23,34)"/><text x="270" y="615.44" fill="rgb(115,218,202)" font-size="15" textLength="576" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████████████████████████████████████████████████████████████████</text>
+<rect x="846" y="601" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="601" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="615.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="601" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="601" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="615.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="620" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="634.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="620" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="620" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="634.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="620" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="620" width="576" height="19" fill="rgb(19,23,34)"/><text x="270" y="634.44" fill="rgb(115,218,202)" font-size="15" textLength="576" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████████████████████████████████████████████████████████████████</text>
+<rect x="846" y="620" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="620" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="634.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="620" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="620" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="634.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="639" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="653.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="639" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="639" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="653.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="639" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="639" width="576" height="19" fill="rgb(19,23,34)"/><text x="270" y="653.44" fill="rgb(115,218,202)" font-size="15" textLength="576" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████████████████████████████████████████████████████████████████</text>
+<rect x="846" y="639" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="639" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="653.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="639" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="639" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="653.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="658" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="672.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="658" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="658" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="672.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="658" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="658" width="576" height="19" fill="rgb(19,23,34)"/><text x="270" y="672.44" fill="rgb(115,218,202)" font-size="15" textLength="576" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████████████████████████████████████████████████████████████████</text>
+<rect x="846" y="658" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="658" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="672.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="658" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="658" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="672.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="677" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="691.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="677" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="677" width="9" height="19" fill="rgb(19,23,34)"/><text x="36" y="691.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="45" y="677" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="270" y="677" width="576" height="19" fill="rgb(19,23,34)"/><text x="270" y="691.44" fill="rgb(115,218,202)" font-size="15" textLength="576" lengthAdjust="spacingAndGlyphs" xml:space="preserve">████████████████████████████████████████████████████████████████</text>
+<rect x="846" y="677" width="225" height="19" fill="rgb(19,23,34)"/>
+<rect x="1071" y="677" width="9" height="19" fill="rgb(19,23,34)"/><text x="1071" y="691.44" fill="rgb(38,45,61)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="1080" y="677" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="677" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="691.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="696" width="9" height="19" fill="rgb(11,13,19)"/><text x="18" y="710.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="27" y="696" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="36" y="696" width="1044" height="19" fill="rgb(19,23,34)"/><text x="36" y="710.44" fill="rgb(38,45,61)" font-size="15" textLength="1044" lengthAdjust="spacingAndGlyphs" xml:space="preserve">└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘</text>
+<rect x="1080" y="696" width="9" height="19" fill="rgb(11,13,19)"/>
+<rect x="1089" y="696" width="9" height="19" fill="rgb(11,13,19)"/><text x="1089" y="710.44" fill="rgb(29,185,84)" font-size="15" textLength="9" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<rect x="18" y="715" width="1080" height="19" fill="rgb(11,13,19)"/><text x="18" y="729.44" fill="rgb(29,185,84)" font-size="15" textLength="1080" lengthAdjust="spacingAndGlyphs" xml:space="preserve">└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘</text>
+</g>
+</svg>

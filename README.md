@@ -3,10 +3,27 @@
 A keyboard-first, terminal-native Spotify client with a Winamp-inspired visualizer, synced
 lyrics, and local playback through [librespot](https://github.com/librespot-org/librespot).
 
-![SPOTOEI terminal UI](docs/assets/demo.svg)
+![SPOTOEI home view](docs/assets/home.svg)
 
 > Unofficial project. Not affiliated with, endorsed by, or sponsored by Spotify. Spotify is a
 > trademark of Spotify AB. A Spotify Premium account is required for playback.
+
+## Preview
+
+| Search                                 | Library                                  |
+| -------------------------------------- | ---------------------------------------- |
+| ![Search view](docs/assets/search.svg) | ![Library view](docs/assets/library.svg) |
+
+| Queue                                | Lyrics                                 |
+| ------------------------------------ | -------------------------------------- |
+| ![Queue view](docs/assets/queue.svg) | ![Lyrics view](docs/assets/lyrics.svg) |
+
+| Visualizer                                | Command palette                             |
+| ----------------------------------------- | ------------------------------------------- |
+| ![Visualizer](docs/assets/visualizer.svg) | ![Command palette](docs/assets/palette.svg) |
+
+The screenshots are generated from the real TUI component tree with fixture data; see
+[`apps/tui/scripts/preview.ts`](apps/tui/scripts/preview.ts).
 
 ## Features
 
