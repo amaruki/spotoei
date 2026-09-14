@@ -13,3 +13,7 @@ node_modules/
 # Rust
 **/*.rs.bk
 Cargo.lock.bak
+
+# local environment
+.env
+.env.local

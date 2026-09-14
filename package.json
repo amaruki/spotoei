@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "SPOTOEI — keyboard-first, terminal-native Spotify client.",
+  "license": "MIT",
   "workspaces": [
     "apps/*",
     "packages/*"
