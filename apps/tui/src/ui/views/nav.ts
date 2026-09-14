@@ -29,9 +29,9 @@ export function getNavOptions(isAuthenticated: boolean, isPrivateSession: boolea
     { name: 'Queue', description: 'Upcoming', value: 'queue' },
     {
       name: `Settings${privateSuffix}`,
-      description: isPrivateSession ? 'Private Session active' : 'App info',
+      description: isPrivateSession ? 'Private mode on' : 'App info',
       value: 'settings',
     },
-    { name: 'Account', description: 'Login & auth status', value: 'onboarding' },
+    { name: 'Account', description: 'Login & keyring', value: 'onboarding' },
   ];
 }

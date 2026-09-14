@@ -263,7 +263,7 @@ describe('Private Session Status Badge & Nav Options', () => {
     expect(normal.find((o) => o.value === 'settings')?.name).toBe('Settings');
     expect(privateNav.find((o) => o.value === 'settings')?.name).toContain('🕶');
     expect(privateNav.find((o) => o.value === 'settings')?.description).toContain(
-      'Private Session active',
+      'Private mode on',
     );
   });
 });
