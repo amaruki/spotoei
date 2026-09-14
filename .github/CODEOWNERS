@@ -1,0 +1,4 @@
+# The repository owner controls releases and repository automation.
+# Enable "Require review from Code Owners" in branch protection to enforce this.
+/.github/ @amaruki
+/package.json @amaruki
