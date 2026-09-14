@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'bun:test';
-import { PlayerEndpoints, seekRelative, toggleMute, getDevices, transferPlayback } from '../src/webApi/player';
+import {
+  PlayerEndpoints,
+  seekRelative,
+  toggleMute,
+  getDevices,
+  transferPlayback,
+} from '../src/webApi/player';
 import { Transport } from '../src/webApi/transport';
 
 describe('Player Web API endpoints (seekRelative & toggleMute)', () => {

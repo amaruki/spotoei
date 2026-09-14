@@ -52,7 +52,8 @@ function renderSearchResults(ctx: UiCoreContext): void {
     { key: 'artists', list: ctx.built.searchArtistsList, refs: panels.artists },
     { key: 'albums', list: ctx.built.searchAlbumsList, refs: panels.albums },
   ];
-  const playingUri = (ctx.state.playback as unknown as { track?: { uri?: string } })?.track?.uri ?? null;
+  const playingUri =
+    (ctx.state.playback as unknown as { track?: { uri?: string } })?.track?.uri ?? null;
   const savedIds = new Set<string>();
   for (const it of ctx.currentLibraryItems.value as Array<{ uri?: string; id?: string }>) {
     if (it.uri) savedIds.add(it.uri);
@@ -63,9 +64,13 @@ function renderSearchResults(ctx: UiCoreContext): void {
     ctx.searchPanelMaps.value[entry.key] = entry.refs.map((r) => r.index);
     entry.list.options =
       entry.refs.length > 0
-        ? entry.refs.map((ref) => renderHit(results.hits[ref.index] as never, { savedIds, playingUri, isStale }))
+        ? entry.refs.map((ref) =>
+            renderHit(results.hits[ref.index] as never, { savedIds, playingUri, isStale }),
+          )
         : [emptyRow(entry.key)];
-    const saved = ctx.positions.restoreKey(panelPositionKey(ctx.route.current, 'search', entry.key));
+    const saved = ctx.positions.restoreKey(
+      panelPositionKey(ctx.route.current, 'search', entry.key),
+    );
     const max = Math.max(0, entry.list.options.length - 1);
     entry.list.setSelectedIndex(Math.min(Math.max(0, saved.selected), max));
   }

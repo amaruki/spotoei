@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  preserveRefreshToken,
-  mergeTokenRefresh,
-  Transport,
-} from '../src/webApi';
+import { preserveRefreshToken, mergeTokenRefresh, Transport } from '../src/webApi';
 
 describe('Token Refresh Persistence (#1040 parity)', () => {
   it('preserves existing refresh_token when refreshed token omits refresh_token', () => {
@@ -43,7 +39,10 @@ describe('Token Refresh Persistence (#1040 parity)', () => {
       refreshToken: '',
       expiresAt: Date.now() + 3600000,
     };
-    const mergedEmpty = mergeTokenRefresh({ refreshToken: existingRefreshToken }, responseWithEmpty);
+    const mergedEmpty = mergeTokenRefresh(
+      { refreshToken: existingRefreshToken },
+      responseWithEmpty,
+    );
     expect(mergedEmpty.refreshToken).toBe(existingRefreshToken);
   });
 

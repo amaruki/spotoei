@@ -10,8 +10,24 @@ describe('LibraryEndpoints pagination', () => {
         capturedUrl = url;
         return {
           items: [
-            { track: { id: 't1', uri: 'spotify:track:t1', name: 'Song 1', duration_ms: 100000, artists: [] } },
-            { track: { id: 't2', uri: 'spotify:track:t2', name: 'Song 2', duration_ms: 100000, artists: [] } },
+            {
+              track: {
+                id: 't1',
+                uri: 'spotify:track:t1',
+                name: 'Song 1',
+                duration_ms: 100000,
+                artists: [],
+              },
+            },
+            {
+              track: {
+                id: 't2',
+                uri: 'spotify:track:t2',
+                name: 'Song 2',
+                duration_ms: 100000,
+                artists: [],
+              },
+            },
           ],
           total: 100,
         };
@@ -35,9 +51,7 @@ describe('LibraryEndpoints pagination', () => {
       async request(url: string) {
         capturedUrl = url;
         return {
-          items: [
-            { album: { id: 'al1', uri: 'spotify:album:al1', name: 'Album 1', artists: [] } },
-          ],
+          items: [{ album: { id: 'al1', uri: 'spotify:album:al1', name: 'Album 1', artists: [] } }],
           total: 1,
         };
       },

@@ -225,7 +225,16 @@ export type LibraryCollectionT = z.infer<typeof LibraryCollection>;
 
 export const LibraryPageResponse = z.object({
   collection: LibraryCollection,
-  items: z.array(z.union([CatalogTrack, CatalogAlbum, CatalogArtist, CatalogPlaylist, CatalogShow, CatalogEpisode])),
+  items: z.array(
+    z.union([
+      CatalogTrack,
+      CatalogAlbum,
+      CatalogArtist,
+      CatalogPlaylist,
+      CatalogShow,
+      CatalogEpisode,
+    ]),
+  ),
   total: z.number().int().nonnegative(),
   offset: z.number().int().nonnegative(),
   limit: z.number().int().positive(),

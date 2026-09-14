@@ -165,7 +165,11 @@ export async function startPlayer(
       throw new Error(`protocol mismatch: client=${PROTOCOL_VERSION} player=${data.protocol}`);
     }
 
-    diagnostic('ipc', 'hello.ok', { requestId: helloId, playerPid: child.pid, protocol: data.protocol });
+    diagnostic('ipc', 'hello.ok', {
+      requestId: helloId,
+      playerPid: child.pid,
+      protocol: data.protocol,
+    });
     return {
       protocol: data.protocol,
       playerVersion: data.playerVersion,

@@ -46,7 +46,12 @@ describe('Audio Engine Settings & Palette Commands', () => {
 
   it('includes audio engine actions in palette commands', async () => {
     const lastSetHolder: {
-      cfg: { deviceMode?: string; bitrate?: string; normalisation?: boolean; crossfadeDurationMs?: number } | null;
+      cfg: {
+        deviceMode?: string;
+        bitrate?: string;
+        normalisation?: boolean;
+        crossfadeDurationMs?: number;
+      } | null;
     } = { cfg: null };
     let lastStatus = '';
     const fakePlayback = {

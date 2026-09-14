@@ -10,9 +10,11 @@ export function tryGetCached<T>(
     .prepare(
       'SELECT payload_json, fetched_at, expires_at FROM query_cache WHERE account_id = ? AND query_key = ?;',
     )
-    .get(accountId, queryKey) as
-    | { payload_json: string; fetched_at: number; expires_at: number | null }
-    | null;
+    .get(accountId, queryKey) as {
+    payload_json: string;
+    fetched_at: number;
+    expires_at: number | null;
+  } | null;
   if (!row) return null;
   try {
     const payload = JSON.parse(row.payload_json) as T;
@@ -33,9 +35,11 @@ export function tryGetCachedEntity<T>(
     .prepare(
       'SELECT payload_json, fetched_at, expires_at FROM entities WHERE account_id = ? AND entity_type = ? AND entity_id = ?;',
     )
-    .get(accountId, entityType, entityId) as
-    | { payload_json: string; fetched_at: number; expires_at: number | null }
-    | null;
+    .get(accountId, entityType, entityId) as {
+    payload_json: string;
+    fetched_at: number;
+    expires_at: number | null;
+  } | null;
   if (!row) return null;
   try {
     const payload = JSON.parse(row.payload_json) as T;

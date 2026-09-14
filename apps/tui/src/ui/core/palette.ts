@@ -43,7 +43,9 @@ export function createPaletteHelpers(ctx: UiCoreContext) {
     const termW =
       typeof ctx.termWidth.value === 'number' && ctx.termWidth.value > 0
         ? ctx.termWidth.value
-        : (typeof process !== 'undefined' && (process.stdout as unknown as { columns?: number })?.columns) || 80;
+        : (typeof process !== 'undefined' &&
+            (process.stdout as unknown as { columns?: number })?.columns) ||
+          80;
     const rw = Math.min(60, Math.max(20, termW - 2));
     const left = Math.max(0, Math.floor((termW - rw) / 2));
     const pal = built.palette as unknown as { width?: number; left?: number };

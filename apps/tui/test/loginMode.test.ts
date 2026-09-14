@@ -4,7 +4,10 @@ import { PROTOCOL_VERSION } from 'spotoei-protocol';
 import { createUiCore, type UiViewState } from '../src/ui';
 import { routeKind } from '../src/ui/core/navigationStack';
 
-function authWith(state: UiViewState['auth']['state'], accountId: string | null = null): UiViewState['auth'] {
+function authWith(
+  state: UiViewState['auth']['state'],
+  accountId: string | null = null,
+): UiViewState['auth'] {
   return {
     v: PROTOCOL_VERSION,
     state,
@@ -44,7 +47,11 @@ describe('onboarding flow', () => {
     expect(routeKind(ui.getRoute())).toBe('onboarding');
     expect(ui.getRouteStack().length).toBe(0);
     // Sidebar and playback bar hidden when unauthenticated
-    const ctx = (ui as unknown as { ctx?: { built: { sidebar: { visible: boolean }; playbackBar: { visible: boolean } } } }).ctx;
+    const ctx = (
+      ui as unknown as {
+        ctx?: { built: { sidebar: { visible: boolean }; playbackBar: { visible: boolean } } };
+      }
+    ).ctx;
     if (ctx) {
       expect(ctx.built.sidebar.visible).toBe(false);
       expect(ctx.built.playbackBar.visible).toBe(false);

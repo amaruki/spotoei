@@ -254,9 +254,9 @@ describe('VisualizerController unit tests', () => {
     expect(formatBlockMeter(NaN)).toBe(' ');
     expect(formatBlockMeter(0.05)).toBe(' ');
     expect(formatBlockMeter(0.15)).toBe('▂');
-    expect(formatBlockMeter(0.30)).toBe('▃');
+    expect(formatBlockMeter(0.3)).toBe('▃');
     expect(formatBlockMeter(0.45)).toBe('▄');
-    expect(formatBlockMeter(0.60)).toBe('▅');
+    expect(formatBlockMeter(0.6)).toBe('▅');
     expect(formatBlockMeter(0.72)).toBe('▆');
     expect(formatBlockMeter(0.85)).toBe('▇');
     expect(formatBlockMeter(1.0)).toBe('█');

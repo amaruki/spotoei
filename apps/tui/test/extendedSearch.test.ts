@@ -18,15 +18,33 @@ describe('Extended Search with shows and episodes', () => {
       capturedPath = path;
       capturedParams = params as Record<string, string>;
       return {
-        tracks: { items: [{ id: 't1', name: 'Track 1', uri: 'spotify:track:t1', duration_ms: 1000 }] },
+        tracks: {
+          items: [{ id: 't1', name: 'Track 1', uri: 'spotify:track:t1', duration_ms: 1000 }],
+        },
         shows: {
-          items: [{ id: 's1', name: 'Show 1', uri: 'spotify:show:s1', publisher: 'Podcast Co', total_episodes: 12 }],
+          items: [
+            {
+              id: 's1',
+              name: 'Show 1',
+              uri: 'spotify:show:s1',
+              publisher: 'Podcast Co',
+              total_episodes: 12,
+            },
+          ],
           total: 1,
           limit: 10,
           offset: 0,
         },
         episodes: {
-          items: [{ id: 'e1', name: 'Episode 1', uri: 'spotify:episode:e1', duration_ms: 60000, release_date: '2026-01-01' }],
+          items: [
+            {
+              id: 'e1',
+              name: 'Episode 1',
+              uri: 'spotify:episode:e1',
+              duration_ms: 60000,
+              release_date: '2026-01-01',
+            },
+          ],
           total: 1,
           limit: 10,
           offset: 0,

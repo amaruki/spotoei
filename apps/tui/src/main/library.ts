@@ -52,13 +52,24 @@ export function createLibraryActions(ctx: AppContext) {
       if (page.error) {
         collections = markRefreshFailed(collections, collection, page.error.message);
         if (!hadItems) ui.setLibraryItems([], page.error, { isStale });
-        const banner = page.error.code === 'QUOTA_EXCEEDED' || page.error.code === 'API_QUOTA_EXCEEDED' ? QUOTA_BANNER : `Library error (${collection}): ${page.error.message}`;
+        const banner =
+          page.error.code === 'QUOTA_EXCEEDED' || page.error.code === 'API_QUOTA_EXCEEDED'
+            ? QUOTA_BANNER
+            : `Library error (${collection}): ${page.error.message}`;
         ui.setStatus(banner, true);
         return;
       }
-      const nextOffset = (page as { nextOffset?: number }).nextOffset ?? (page.offset + page.items.length);
+      const nextOffset =
+        (page as { nextOffset?: number }).nextOffset ?? page.offset + page.items.length;
       const nextCursor = (page as { nextCursor?: string }).nextCursor;
-      collections = markPageLoaded(collections, collection, nextOffset, page.hasMore, nextCursor, page.total);
+      collections = markPageLoaded(
+        collections,
+        collection,
+        nextOffset,
+        page.hasMore,
+        nextCursor,
+        page.total,
+      );
       if (collection === 'playlists') {
         const tree = structurizePlaylists(page.items as PlaylistT[]);
         (state as unknown as Record<string, unknown>).playlistTree = tree;
@@ -114,12 +125,22 @@ export function createLibraryActions(ctx: AppContext) {
       const isStale = (page as { isStale?: boolean }).isStale ?? false;
       if (page.error) {
         collections = markRefreshFailed(collections, collection, page.error.message);
-        const banner = page.error.code === 'QUOTA_EXCEEDED' || page.error.code === 'API_QUOTA_EXCEEDED' ? QUOTA_BANNER : `Library error (${collection}): ${page.error.message}`;
+        const banner =
+          page.error.code === 'QUOTA_EXCEEDED' || page.error.code === 'API_QUOTA_EXCEEDED'
+            ? QUOTA_BANNER
+            : `Library error (${collection}): ${page.error.message}`;
         ui.setStatus(banner, true);
         return;
       }
       if (page.items.length === 0) {
-        collections = markPageLoaded(collections, collection, cur.nextOffset, false, cur.nextCursor, page.total);
+        collections = markPageLoaded(
+          collections,
+          collection,
+          cur.nextOffset,
+          false,
+          cur.nextCursor,
+          page.total,
+        );
         ui.setStatus(`All ${state.libraryItems.length} items loaded from ${collection}.`);
         return;
       }
@@ -145,15 +166,30 @@ export function createLibraryActions(ctx: AppContext) {
       const nextOffset =
         (page as { nextOffset?: number }).nextOffset ?? page.offset + page.items.length;
       const nextCursor = (page as { nextCursor?: string }).nextCursor;
-      collections = markPageLoaded(collections, collection, nextOffset, page.hasMore, nextCursor, page.total);
+      collections = markPageLoaded(
+        collections,
+        collection,
+        nextOffset,
+        page.hasMore,
+        nextCursor,
+        page.total,
+      );
       try {
-        (ui.setLibraryItems as unknown as (items: LibraryItemT[], err?: unknown, opts?: { append?: boolean; hasMore?: boolean; isStale?: boolean }) => void)(appended, undefined, { append: true, hasMore: page.hasMore, isStale });
+        (
+          ui.setLibraryItems as unknown as (
+            items: LibraryItemT[],
+            err?: unknown,
+            opts?: { append?: boolean; hasMore?: boolean; isStale?: boolean },
+          ) => void
+        )(appended, undefined, { append: true, hasMore: page.hasMore, isStale });
       } catch {
         ui.setLibraryItems(state.libraryItems, undefined, { hasMore: page.hasMore, isStale });
       }
       const totalHint = page.total > state.libraryItems.length ? ` of ${page.total}` : '';
       const moreHint = page.hasMore ? ' — scroll for more' : ' — all loaded';
-      ui.setStatus(`Loaded ${state.libraryItems.length}${totalHint} items from ${collection}${moreHint}.`);
+      ui.setStatus(
+        `Loaded ${state.libraryItems.length}${totalHint} items from ${collection}${moreHint}.`,
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       collections = markRefreshFailed(collections, collection, msg);

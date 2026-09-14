@@ -11,11 +11,7 @@ describe('createLibraryActions loadMoreLibrary', () => {
 
     const mockLibraryManager = {
       async refresh() {},
-      async getPage(
-        collection: string,
-        offset = 0,
-        _limit = 50,
-      ): Promise<LibraryPageResponseT> {
+      async getPage(collection: string, offset = 0, _limit = 50): Promise<LibraryPageResponseT> {
         fetchedOffsets.push(offset);
         if (offset === 0) {
           // Page 1: items 0 to 49

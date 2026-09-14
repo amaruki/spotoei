@@ -88,7 +88,7 @@ describe('auth changed subscription', () => {
     );
 
     const listener: (next: AuthStatusDataT) => void = authListener ?? (() => {});
-    const completedListener: ((c: { streaming?: boolean }) => void) =
+    const completedListener: (c: { streaming?: boolean }) => void =
       authCompletedListener ?? (() => {});
     expect(authListener).not.toBeNull();
     listener(authedStatus());

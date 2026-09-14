@@ -13,7 +13,13 @@ import { buildStatusLayer, type StatusLayerNodes } from './statusLayer';
 // Mirrors the original `buildRoot` return shape so existing wiring does not
 // need to know about the new region-based builders.
 export interface BuiltUi
-  extends SidebarNodes, MainNodes, PlaybackBarNodes, PaletteNodes, ContextMenuNodes, StatusLayerNodes {
+  extends
+    SidebarNodes,
+    MainNodes,
+    PlaybackBarNodes,
+    PaletteNodes,
+    ContextMenuNodes,
+    StatusLayerNodes {
   root: BoxRenderable;
   mainArea: BoxRenderable;
   headerText: TextRenderable;

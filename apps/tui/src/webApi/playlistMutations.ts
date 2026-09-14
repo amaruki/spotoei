@@ -101,7 +101,8 @@ export async function reorderPlaylistTracks(
   if (!Number.isInteger(rangeLength) || rangeLength < 1) throw new Error('invalid rangeLength');
   const ins = insertBefore > rangeStart ? insertBefore + rangeLength : insertBefore;
   if (ins === rangeStart) throw new Error('noop reorder');
-  if (insertBefore > rangeStart && insertBefore < rangeStart + rangeLength) throw new Error('insert inside range');
+  if (insertBefore > rangeStart && insertBefore < rangeStart + rangeLength)
+    throw new Error('insert inside range');
   const body: Record<string, unknown> = {
     range_start: rangeStart,
     insert_before: ins,
@@ -124,15 +125,10 @@ export class PlaylistMutations {
     name: string,
     opts: CreatePlaylistOpts = {},
   ): Promise<PlaylistT | null> {
-    if (opts.collaborative && opts.public) throw new Error('collaborative playlists must be private');
+    if (opts.collaborative && opts.public)
+      throw new Error('collaborative playlists must be private');
     try {
-      return await createPlaylist(
-        this.transport,
-        userId,
-        name,
-        opts.description,
-        opts.public,
-      );
+      return await createPlaylist(this.transport, userId, name, opts.description, opts.public);
     } catch {
       return null;
     }
@@ -147,10 +143,7 @@ export class PlaylistMutations {
     return res.snapshot_id || null;
   }
 
-  async removeFromPlaylist(
-    playlistId: string,
-    uris: string[],
-  ): Promise<string | null> {
+  async removeFromPlaylist(playlistId: string, uris: string[]): Promise<string | null> {
     const res = await removeTracksFromPlaylist(this.transport, playlistId, uris);
     return res.snapshot_id || null;
   }
@@ -161,7 +154,13 @@ export class PlaylistMutations {
     insertBefore: number,
     rangeLength = 1,
   ): Promise<string | null> {
-    const res = await reorderPlaylistTracks(this.transport, playlistId, rangeStart, insertBefore, rangeLength);
+    const res = await reorderPlaylistTracks(
+      this.transport,
+      playlistId,
+      rangeStart,
+      insertBefore,
+      rangeLength,
+    );
     return res.snapshot_id || null;
   }
 }

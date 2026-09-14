@@ -64,11 +64,7 @@ export class BrowseEndpoints {
     return getBrowseCategories(this.transport, limit, offset, signal, locale);
   }
 
-  async getBrowseCategories(
-    limit = 20,
-    offset = 0,
-    signal?: AbortSignal,
-  ): Promise<CategoryT[]> {
+  async getBrowseCategories(limit = 20, offset = 0, signal?: AbortSignal): Promise<CategoryT[]> {
     return getBrowseCategories(this.transport, limit, offset, signal);
   }
 

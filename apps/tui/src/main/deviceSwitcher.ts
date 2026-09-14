@@ -14,9 +14,7 @@ export async function switchPlaybackDeviceModal(
       typeof ctx.clients.webApi?.getTransport === 'function'
         ? ctx.clients.webApi.getTransport()
         : undefined;
-    const devices = transport
-      ? await getDevices(transport)
-      : await ctx.clients.webApi.getDevices();
+    const devices = transport ? await getDevices(transport) : await ctx.clients.webApi.getDevices();
     if (!devices || devices.length === 0) {
       ui.setStatus('No active Spotify Connect devices found', true);
       return;

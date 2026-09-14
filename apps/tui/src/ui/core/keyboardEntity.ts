@@ -16,7 +16,13 @@ export function handleEntityBrowseKeys(
     if (e.ctrl) {
       return false;
     }
-    if (e.name === 'up' || e.name === 'k' || e.name === 'down' || e.name === 'j' || e.name === 'return') {
+    if (
+      e.name === 'up' ||
+      e.name === 'k' ||
+      e.name === 'down' ||
+      e.name === 'j' ||
+      e.name === 'return'
+    ) {
       return true;
     }
     if (e.name === 'x' || e.name === 'X') {

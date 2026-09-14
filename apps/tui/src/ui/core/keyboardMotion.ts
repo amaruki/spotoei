@@ -26,7 +26,6 @@ export function parseMotionCount(buffer: string): number {
   return Math.min(parsed, 999);
 }
 
-
 export const NUM_ROUTES: Record<string, Route> = {
   '1': { kind: 'home', tab: 'for_you' },
   '2': { kind: 'browse', path: {} },

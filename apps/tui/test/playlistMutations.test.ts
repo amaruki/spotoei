@@ -33,7 +33,9 @@ const createMockTransport = (
 describe('createPlaylist', () => {
   it('throws on empty name', async () => {
     const transport = createMockTransport(async () => ({}));
-    await expect(createPlaylist(transport, 'user1', '   ')).rejects.toThrow('Playlist name required');
+    await expect(createPlaylist(transport, 'user1', '   ')).rejects.toThrow(
+      'Playlist name required',
+    );
   });
 
   it('sends POST /users/{userId}/playlists with body and maps response', async () => {
@@ -48,7 +50,11 @@ describe('createPlaylist', () => {
     const transport = createMockTransport(async (req) => {
       expect(req.path).toBe('/users/user1/playlists');
       expect(req.method).toBe('POST');
-      expect(req.body).toEqual({ name: 'Chill Vibes', public: true, description: 'Relaxing tunes' });
+      expect(req.body).toEqual({
+        name: 'Chill Vibes',
+        public: true,
+        description: 'Relaxing tunes',
+      });
       return raw;
     });
 
@@ -120,11 +126,19 @@ describe('removeTracksFromPlaylist', () => {
 describe('reorderPlaylistTracks', () => {
   it('validates invalid range inputs', async () => {
     const transport = createMockTransport(async () => ({}));
-    await expect(reorderPlaylistTracks(transport, 'pl1', -1, 5)).rejects.toThrow('invalid rangeStart');
-    await expect(reorderPlaylistTracks(transport, 'pl1', 0, -1)).rejects.toThrow('invalid insertBefore');
-    await expect(reorderPlaylistTracks(transport, 'pl1', 0, 5, 0)).rejects.toThrow('invalid rangeLength');
+    await expect(reorderPlaylistTracks(transport, 'pl1', -1, 5)).rejects.toThrow(
+      'invalid rangeStart',
+    );
+    await expect(reorderPlaylistTracks(transport, 'pl1', 0, -1)).rejects.toThrow(
+      'invalid insertBefore',
+    );
+    await expect(reorderPlaylistTracks(transport, 'pl1', 0, 5, 0)).rejects.toThrow(
+      'invalid rangeLength',
+    );
     await expect(reorderPlaylistTracks(transport, 'pl1', 3, 3, 1)).rejects.toThrow('noop reorder');
-    await expect(reorderPlaylistTracks(transport, 'pl1', 2, 4, 3)).rejects.toThrow('insert inside range');
+    await expect(reorderPlaylistTracks(transport, 'pl1', 2, 4, 3)).rejects.toThrow(
+      'insert inside range',
+    );
   });
 
   it('calculates insert_before correctly and calls PUT /playlists/{id}/tracks', async () => {
@@ -227,30 +241,25 @@ describe('contextMenuItems track actions', () => {
       },
     };
 
-    await runContextAction(
-      mockCtx as never,
-      () => null,
-      'song_radio',
-      { kind: 'track', id: 't1', uri: 'spotify:track:t1', name: 'Song Title' },
-    );
+    await runContextAction(mockCtx as never, () => null, 'song_radio', {
+      kind: 'track',
+      id: 't1',
+      uri: 'spotify:track:t1',
+      name: 'Song Title',
+    });
 
     expect(radioCalls).toEqual([{ seedUri: 'spotify:track:t1', title: 'Song Title' }]);
     expect(queueUpdated).toBe(true);
     expect(autoplayEnsured).toBe(true);
 
-    await runContextAction(
-      mockCtx as never,
-      () => null,
-      'artist_radio',
-      {
-        kind: 'track',
-        id: 't1',
-        uri: 'spotify:track:t1',
-        name: 'Song Title',
-        artistUri: 'spotify:artist:a1',
-        artistName: 'Artist Name',
-      },
-    );
+    await runContextAction(mockCtx as never, () => null, 'artist_radio', {
+      kind: 'track',
+      id: 't1',
+      uri: 'spotify:track:t1',
+      name: 'Song Title',
+      artistUri: 'spotify:artist:a1',
+      artistName: 'Artist Name',
+    });
 
     expect(radioCalls[1]).toEqual({ seedUri: 'spotify:artist:a1', title: 'Artist Name Radio' });
   });

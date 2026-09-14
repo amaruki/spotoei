@@ -2,10 +2,7 @@ import { StyledText, fg, bold, stripAnsiSequences, type TextChunk } from '@opent
 import { COLOR_ACCENT, COLOR_DIM } from '../theme';
 import { processRtlText, visualLength as rtlVisualLength } from './rtl';
 import type { UiViewState } from '../types';
-export function binarySearchLastLE(
-  lines: Array<{ startMs: number }>,
-  positionMs: number,
-): number {
+export function binarySearchLastLE(lines: Array<{ startMs: number }>, positionMs: number): number {
   let lo = 0;
   let hi = lines.length - 1;
   let ans = -1;
@@ -22,20 +19,14 @@ export function binarySearchLastLE(
   return ans;
 }
 
-export function getActiveLyricIndex(
-  lines: Array<{ startMs: number }>,
-  progressMs: number,
-): number {
+export function getActiveLyricIndex(lines: Array<{ startMs: number }>, progressMs: number): number {
   if (!lines || lines.length === 0 || progressMs < (lines[0]?.startMs ?? 0)) {
     return -1;
   }
   return binarySearchLastLE(lines, progressMs);
 }
 
-export function calculateLyricsScrollOffset(
-  activeIdx: number,
-  viewportHeight = 10,
-): number {
+export function calculateLyricsScrollOffset(activeIdx: number, viewportHeight = 10): number {
   if (activeIdx < 0) return 0;
   return Math.max(0, activeIdx - Math.floor(viewportHeight / 2));
 }
@@ -55,7 +46,6 @@ export const ANSI_DIM = '\x1b[2;90m';
 export const ANSI_RESET = '\x1b[0m';
 export const stripAnsi = stripAnsiSequences;
 
-
 export function visualLength(text: string): number {
   return rtlVisualLength(stripAnsi(text));
 }
@@ -67,10 +57,7 @@ export function centerLine(text: string, width: number): string {
   const pad = Math.max(0, Math.floor((width - visibleLen) / 2));
   return ' '.repeat(pad) + text;
 }
-export function renderLyricsContent(
-  state: UiViewState,
-  opts?: LyricsRenderOptions,
-): string {
+export function renderLyricsContent(state: UiViewState, opts?: LyricsRenderOptions): string {
   const doc = state.lyrics;
   if (!doc) {
     return '(no lyrics loaded — press l to view, L to reload)';
@@ -149,10 +136,7 @@ export function renderLyricsContent(
   );
 }
 
-export function renderLyricsStyled(
-  state: UiViewState,
-  opts?: LyricsRenderOptions,
-): StyledText {
+export function renderLyricsStyled(state: UiViewState, opts?: LyricsRenderOptions): StyledText {
   const doc = state.lyrics;
   if (!doc) {
     return new StyledText([fg(COLOR_DIM)('(no lyrics loaded — press l to view, L to reload)')]);

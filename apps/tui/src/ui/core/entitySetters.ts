@@ -56,7 +56,9 @@ export function createEntitySetters(ctx: UiCoreContext) {
     },
     setAlbumHeader(album: { name: string; artists: Array<{ name: string }> } | null): void {
       const label = album ? `${album.name} — ${album.artists.map((a) => a.name).join(', ')}` : null;
-      built.album.title = label ? `Album: ${label} (Enter: play, x: actions)` : 'Album (Enter: play, x: actions)';
+      built.album.title = label
+        ? `Album: ${label} (Enter: play, x: actions)`
+        : 'Album (Enter: play, x: actions)';
     },
     setPlaylistHeader(playlist: { name: string; owner?: { displayName?: string } } | null): void {
       if (playlist) {

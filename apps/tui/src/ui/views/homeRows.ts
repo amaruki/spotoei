@@ -15,7 +15,12 @@ export function homeRowOptions(
   opts?: { isStale?: boolean },
 ): Array<{ name: string; description: string }> {
   if (rows.length === 0) {
-    return [{ name: `${opts?.isStale ? STALE_PREFIX : ''}${emptyLabel}${opts?.isStale ? STALE_SUFFIX : ''}`, description: 'Try another Home tab' }];
+    return [
+      {
+        name: `${opts?.isStale ? STALE_PREFIX : ''}${emptyLabel}${opts?.isStale ? STALE_SUFFIX : ''}`,
+        description: 'Try another Home tab',
+      },
+    ];
   }
   const dim = opts?.isStale ? STALE_PREFIX : '';
   const stale = opts?.isStale ? STALE_SUFFIX : '';
@@ -28,13 +33,19 @@ export function homeRowOptions(
       case 'artist': {
         if ((row as { track?: CatalogTrackT }).track) {
           const t = (row as { track: CatalogTrackT }).track;
-          return { name: `${dim}♪ ${t.name}${stale}`, description: `${formatArtists(t.artists)} · ${formatTime(t.durationMs)} · ${row.artist.name}` };
+          return {
+            name: `${dim}♪ ${t.name}${stale}`,
+            description: `${formatArtists(t.artists)} · ${formatTime(t.durationMs)} · ${row.artist.name}`,
+          };
         }
         return { name: `${dim}👤 ${row.artist.name}${stale}`, description: 'Artist' };
       }
       case 'discover': {
         if (row.track) {
-          return { name: `${dim}♪ ${row.track.name}${stale}`, description: `${formatArtists(row.track.artists)} · ${formatTime(row.track.durationMs)}` };
+          return {
+            name: `${dim}♪ ${row.track.name}${stale}`,
+            description: `${formatArtists(row.track.artists)} · ${formatTime(row.track.durationMs)}`,
+          };
         }
         return { name: `${dim}▸ ${row.label}${stale}`, description: row.description };
       }

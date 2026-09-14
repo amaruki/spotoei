@@ -8,7 +8,9 @@ import {
   type Validator,
 } from '../src/playback/validator';
 
-const createSampleState = (overrides: Partial<PlaybackChangedDataT> = {}): PlaybackChangedDataT => ({
+const createSampleState = (
+  overrides: Partial<PlaybackChangedDataT> = {},
+): PlaybackChangedDataT => ({
   revision: 1,
   state: 'playing',
   track: {

@@ -36,7 +36,13 @@ export function handleLibraryQueueKeys(
     opts.onKey(key);
     return true;
   }
-  if (e.name === 'up' || e.name === 'k' || e.name === 'down' || e.name === 'j' || e.name === 'return') {
+  if (
+    e.name === 'up' ||
+    e.name === 'k' ||
+    e.name === 'down' ||
+    e.name === 'j' ||
+    e.name === 'return'
+  ) {
     // SelectRenderable handles list scrolling and enter selection
     return true;
   }

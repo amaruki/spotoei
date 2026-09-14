@@ -6,7 +6,14 @@ import { CatalogEndpoints } from './catalog';
 import { BrowseEndpoints, getBrowseCategories, getCategoryPlaylists } from './browseEndpoints';
 import { EntityEndpoints } from './entityEndpoints';
 import { LibraryEndpoints } from './library';
-import { PlayerEndpoints, toggleMute, seekRelative, getDevices, transferPlayback, type DeviceInfo } from './player';
+import {
+  PlayerEndpoints,
+  toggleMute,
+  seekRelative,
+  getDevices,
+  transferPlayback,
+  type DeviceInfo,
+} from './player';
 import { QueueEndpoints } from './queue';
 import {
   createPlaylist,
@@ -130,8 +137,7 @@ export class WebApiClient {
     name: string,
     description?: string,
     isPublic?: boolean,
-  ): Promise<PlaylistT> =>
-    createPlaylist(this.transport, userId, name, description, isPublic);
+  ): Promise<PlaylistT> => createPlaylist(this.transport, userId, name, description, isPublic);
   addTracksToPlaylist = (
     playlistId: string,
     uris: string[],
@@ -141,8 +147,7 @@ export class WebApiClient {
   removeTracksFromPlaylist = (
     playlistId: string,
     uris: string[],
-  ): Promise<{ snapshot_id: string }> =>
-    removeTracksFromPlaylist(this.transport, playlistId, uris);
+  ): Promise<{ snapshot_id: string }> => removeTracksFromPlaylist(this.transport, playlistId, uris);
   reorderPlaylistTracks = (
     playlistId: string,
     rangeStart: number,

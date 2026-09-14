@@ -42,7 +42,12 @@ describe('browseLive locale normalization', () => {
       return { categories: { items: [{ id: 'c1', name: 'Cat1' }] } };
     });
     const api = new BrowseEndpoints(transport) as unknown as WebApiClient;
-    const res = await getLiveCategories(api as unknown as WebApiClient, undefined, 'default', undefined);
+    const res = await getLiveCategories(
+      api as unknown as WebApiClient,
+      undefined,
+      'default',
+      undefined,
+    );
     expect(capturedLocale).toBe('en_US');
     expect(res.fallback).toBe(false);
     expect(res.categories[0]!.id).toBe('c1');
@@ -94,7 +99,12 @@ describe('browseLive category playlists', () => {
 
   it('throws AbortError instead of fallback', async () => {
     const api = {
-      getCategories: async (_locale: string, _limit: number, _offset: number, signal?: AbortSignal) => {
+      getCategories: async (
+        _locale: string,
+        _limit: number,
+        _offset: number,
+        signal?: AbortSignal,
+      ) => {
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
         throw new DOMException('Aborted', 'AbortError');
       },
@@ -111,7 +121,6 @@ describe('browseLive category playlists', () => {
     }
     expect(threw).toBe(true);
   });
-
 
   it('distinguishes quota vs forbidden via code', async () => {
     const quotaApi = {

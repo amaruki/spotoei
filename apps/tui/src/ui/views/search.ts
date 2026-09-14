@@ -50,7 +50,10 @@ export function partitionSearchHits(
   });
   return panels;
 }
-export function renderHit(h: SearchHitT, opts?: { savedIds?: Set<string>; playingUri?: string | null; isStale?: boolean }): SearchListRow {
+export function renderHit(
+  h: SearchHitT,
+  opts?: { savedIds?: Set<string>; playingUri?: string | null; isStale?: boolean },
+): SearchListRow {
   const stale = opts?.isStale ? STALE_SUFFIX : '';
   const dimPrefix = opts?.isStale ? STALE_PREFIX : '';
   if (h.type === 'track') {
@@ -59,7 +62,10 @@ export function renderHit(h: SearchHitT, opts?: { savedIds?: Set<string>; playin
     const saved = opts?.savedIds?.has(h.track.uri) || opts?.savedIds?.has(h.track.id) ? '♥ ' : '';
     const artists = formatArtists(h.track.artists);
     const album = h.track.albumName ? ` — ${h.track.albumName}` : '';
-    const dur = typeof h.track.durationMs === 'number' && h.track.durationMs > 0 ? `  ${formatTime(h.track.durationMs)}` : '';
+    const dur =
+      typeof h.track.durationMs === 'number' && h.track.durationMs > 0
+        ? `  ${formatTime(h.track.durationMs)}`
+        : '';
     return {
       name: `${dimPrefix}${playing}${explicit}${saved}♪ ${h.track.name}${stale}`,
       description: `${artists}${album}${dur}${h.track.isPlayable === false ? ' · unavailable' : ''}`,

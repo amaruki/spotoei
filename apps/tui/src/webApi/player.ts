@@ -9,10 +9,7 @@ let lastNonZeroVolume = 50;
  * If currentState is provided (true = muted, false = unmuted), it toggles to the opposite state.
  * If currentState is omitted, it queries the player state to check if volume is currently 0.
  */
-export async function toggleMute(
-  transport: Transport,
-  currentState?: boolean,
-): Promise<void> {
+export async function toggleMute(transport: Transport, currentState?: boolean): Promise<void> {
   let isMuted = currentState;
   if (isMuted === undefined) {
     try {

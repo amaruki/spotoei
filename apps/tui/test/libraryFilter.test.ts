@@ -1,6 +1,11 @@
 import { describe, expect, test, beforeEach } from 'bun:test';
 import { Cache } from '../src/cache';
-import { filterLibraryLocal as filterSearchLocal, createSearchClient, isFuzzyMatch, filterItemsInMemory } from '../src/search';
+import {
+  filterLibraryLocal as filterSearchLocal,
+  createSearchClient,
+  isFuzzyMatch,
+  filterItemsInMemory,
+} from '../src/search';
 import { filterLibraryLocal as filterMainLocal, createLibraryActions } from '../src/main/library';
 import type { AppContext } from '../src/main/types';
 import type { LibraryItemT } from '../src/ui';
@@ -97,7 +102,9 @@ describe('Offline SQLite Fuzzy/Substring Filter', () => {
     expect(res.query).toBe('radiohead');
     expect(res.hits.length).toBe(2);
     expect(res.hits[0]?.type).toBe('track');
-    expect(new Set(res.map((t) => (t as LibraryItemT).name))).toEqual(new Set(['Creep', 'Karma Police']));
+    expect(new Set(res.map((t) => (t as LibraryItemT).name))).toEqual(
+      new Set(['Creep', 'Karma Police']),
+    );
   });
 
   test('filterLibraryLocal in search.ts filters via SQLite cache under 5ms without network calls', () => {
@@ -109,7 +116,9 @@ describe('Offline SQLite Fuzzy/Substring Filter', () => {
 
     expect(elapsed).toBeLessThan(5);
     expect(res.length).toBe(2);
-    expect(new Set(res.map((t) => (t as LibraryItemT).name))).toEqual(new Set(['Bohemian Rhapsody', 'Radio Ga Ga']));
+    expect(new Set(res.map((t) => (t as LibraryItemT).name))).toEqual(
+      new Set(['Bohemian Rhapsody', 'Radio Ga Ga']),
+    );
     expect(res.hits.length).toBe(2);
   });
 
@@ -195,21 +204,27 @@ describe('Offline SQLite Fuzzy/Substring Filter', () => {
     cache.indexLibraryItems('user1', 'saved_albums', [
       { id: 'al1', name: 'Wish You Were Here', artists: [{ name: 'Pink Floyd' }] },
     ]);
-    cache.indexLibraryItems('user1', 'playlists', [
-      { id: 'p1', name: 'Pink Floyd Greatest' },
-    ]);
+    cache.indexLibraryItems('user1', 'playlists', [{ id: 'p1', name: 'Pink Floyd Greatest' }]);
 
     // Search across all collections
     const all = cache.searchLibrary<{ id: string; name: string }>('user1', 'floyd');
     expect(all.length).toBe(3);
 
     // Filter only saved_albums
-    const albums = cache.searchLibrary<{ id: string; name: string }>('user1', 'floyd', 'saved_albums');
+    const albums = cache.searchLibrary<{ id: string; name: string }>(
+      'user1',
+      'floyd',
+      'saved_albums',
+    );
     expect(albums.length).toBe(1);
     expect(albums[0]?.id).toBe('al1');
 
     // Filter only playlists
-    const playlists = cache.searchLibrary<{ id: string; name: string }>('user1', 'floyd', 'playlists');
+    const playlists = cache.searchLibrary<{ id: string; name: string }>(
+      'user1',
+      'floyd',
+      'playlists',
+    );
     expect(playlists.length).toBe(1);
     expect(playlists[0]?.id).toBe('p1');
   });

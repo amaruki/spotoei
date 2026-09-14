@@ -1,4 +1,3 @@
-
 use super::state::Playback;
 use super::types::{
     AudioBackend, Bitrate, DeviceMode, PlaybackChangedPayload, PlaybackError, PlaybackInner,
@@ -54,7 +53,6 @@ impl Playback {
         self.emit_changed(&snap).await;
         Ok(snap)
     }
-
 
     pub async fn set_shuffle(
         &self,

@@ -1,5 +1,10 @@
 import { bold, fg, t } from '@opentui/core';
-import { getRedirectUri, resolveClientId, DEFAULT_CLIENT_ID, KEYMASTER_CLIENT_ID } from '../../config';
+import {
+  getRedirectUri,
+  resolveClientId,
+  DEFAULT_CLIENT_ID,
+  KEYMASTER_CLIENT_ID,
+} from '../../config';
 import { COLOR_ACCENT, COLOR_DIM, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARN } from '../theme';
 import type { UiViewState } from '../types';
 
@@ -80,7 +85,9 @@ ${fg(COLOR_DIM)('Or press [D] to use the default shared Client ID (higher risk o
   const isKeymaster = clientRes.clientId === KEYMASTER_CLIENT_ID;
 
   if (step === 'authenticating') {
-    const header = isKeymaster ? '== Authenticating with Spotify ==' : '== Step 2 of 2: Authenticating ==';
+    const header = isKeymaster
+      ? '== Authenticating with Spotify =='
+      : '== Step 2 of 2: Authenticating ==';
     const pendingUrl = state.auth.authUrl;
     return t`${bold(header)}${keyringWarning}
 ${fg(COLOR_ACCENT)(bold('Browser opened for authentication!'))}
@@ -94,7 +101,8 @@ ${fg(COLOR_DIM)('Waiting for Spotify login callback…')}
 ${fg(COLOR_DIM)('Press [A] to re-open browser  •  Press [C] to edit Client ID')}`;
   }
 
-  const isDefault = clientRes.clientId === DEFAULT_CLIENT_ID || clientRes.clientId === KEYMASTER_CLIENT_ID;
+  const isDefault =
+    clientRes.clientId === DEFAULT_CLIENT_ID || clientRes.clientId === KEYMASTER_CLIENT_ID;
 
   if (isDefault) {
     return t`${bold('== Welcome to Spotoei — Spotify Login ==')}${keyringWarning}

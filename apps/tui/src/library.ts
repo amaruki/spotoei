@@ -167,7 +167,13 @@ export class LibraryManager {
       this.invalidate(collection);
       return this.getPage(collection, 0, 20, true);
     }
-    for (const c of ['saved_tracks', 'saved_albums', 'playlists', 'followed_artists', 'saved_shows'] as const) {
+    for (const c of [
+      'saved_tracks',
+      'saved_albums',
+      'playlists',
+      'followed_artists',
+      'saved_shows',
+    ] as const) {
       this.invalidate(c);
     }
     (this.webApi as unknown as { resetCursors?: () => void }).resetCursors?.();

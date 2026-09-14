@@ -102,9 +102,7 @@ function makeOptimisticCommandWithArg<Arg>(
   };
 }
 
-function makeStatusCommand(
-  deps: CommandBuilderDeps,
-): () => Promise<CommandResult> {
+function makeStatusCommand(deps: CommandBuilderDeps): () => Promise<CommandResult> {
   const sm = deps.stateMachine ?? optimisticPlayback;
   return async () => {
     const id = newRequestId();
@@ -150,17 +148,37 @@ export function buildCommandMethods(
     toggle: makeOptimisticCommand(deps, () => ({ type: 'toggle' }), makePlaybackToggle),
     next: makeOptimisticCommand(deps, () => ({ type: 'next' }), makePlaybackNext),
     previous: makeOptimisticCommand(deps, () => ({ type: 'previous' }), makePlaybackPrevious),
-    seek: makeOptimisticCommandWithArg(deps, (positionMs) => ({ type: 'seek', positionMs }), makePlaybackSeek),
-    seekRelative: makeOptimisticCommandWithArg(deps, (offsetMs) => ({ type: 'seekRelative', offsetMs }), makePlaybackSeekRelative),
-    setVolume: makeOptimisticCommandWithArg(deps, (volume) => ({ type: 'setVolume', volume }), makePlaybackSetVolume),
+    seek: makeOptimisticCommandWithArg(
+      deps,
+      (positionMs) => ({ type: 'seek', positionMs }),
+      makePlaybackSeek,
+    ),
+    seekRelative: makeOptimisticCommandWithArg(
+      deps,
+      (offsetMs) => ({ type: 'seekRelative', offsetMs }),
+      makePlaybackSeekRelative,
+    ),
+    setVolume: makeOptimisticCommandWithArg(
+      deps,
+      (volume) => ({ type: 'setVolume', volume }),
+      makePlaybackSetVolume,
+    ),
     toggleMute: makeOptimisticCommand(deps, () => ({ type: 'toggleMute' }), makePlaybackToggleMute),
-    setShuffle: makeOptimisticCommandWithArg(deps, (shuffle) => ({ type: 'setShuffle', shuffle }), makePlaybackSetShuffle),
+    setShuffle: makeOptimisticCommandWithArg(
+      deps,
+      (shuffle) => ({ type: 'setShuffle', shuffle }),
+      makePlaybackSetShuffle,
+    ),
     setRepeat: makeOptimisticCommandWithArg<'off' | 'context' | 'track'>(
       deps,
       (repeat) => ({ type: 'setRepeat', repeat }),
       makePlaybackSetRepeat,
     ),
-    setAutoplay: makeOptimisticCommandWithArg(deps, (autoplay) => ({ type: 'setAutoplay', autoplay }), makePlaybackSetAutoplay),
+    setAutoplay: makeOptimisticCommandWithArg(
+      deps,
+      (autoplay) => ({ type: 'setAutoplay', autoplay }),
+      makePlaybackSetAutoplay,
+    ),
     getAudioConfig: async () => {
       const id = newRequestId();
       const cmd = makePlaybackGetAudioConfig(id);

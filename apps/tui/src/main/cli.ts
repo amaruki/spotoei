@@ -71,7 +71,9 @@ export function runDoctor(args: string[]): number {
         if (res.status === 0) process.stdout.write(`  [ok] audio backend: ${out || 'available'}\n`);
         else process.stdout.write('  [warn] audio backend check reported issues\n');
       } catch (e) {
-        process.stdout.write(`  [warn] audio backend: ${e instanceof Error ? e.message : String(e)}\n`);
+        process.stdout.write(
+          `  [warn] audio backend: ${e instanceof Error ? e.message : String(e)}\n`,
+        );
       }
     } else process.stdout.write('  [warn] audio backend: player binary not found, skipping\n');
   }
@@ -81,7 +83,9 @@ export function runDoctor(args: string[]): number {
       mem.close();
       process.stdout.write('  [ok] sqlite storage accessible\n');
     } catch (e) {
-      process.stdout.write(`  [fail] sqlite storage: ${e instanceof Error ? e.message : String(e)}\n`);
+      process.stdout.write(
+        `  [fail] sqlite storage: ${e instanceof Error ? e.message : String(e)}\n`,
+      );
       ok = false;
     }
     try {
@@ -90,8 +94,12 @@ export function runDoctor(args: string[]): number {
       const integrity = c.checkIntegrity();
       const ver = c.getSchemaVersion();
       c.close();
-      if (integrity) process.stdout.write(`  [ok] cache file integrity ok (schema v${ver}, ${cachePath})\n`);
-      else { process.stdout.write(`  [warn] cache file integrity check failed (${cachePath})\n`); ok = false; }
+      if (integrity)
+        process.stdout.write(`  [ok] cache file integrity ok (schema v${ver}, ${cachePath})\n`);
+      else {
+        process.stdout.write(`  [warn] cache file integrity check failed (${cachePath})\n`);
+        ok = false;
+      }
     } catch (e) {
       process.stdout.write(`  [warn] cache file: ${e instanceof Error ? e.message : String(e)}\n`);
     }
@@ -101,54 +109,88 @@ export function runDoctor(args: string[]): number {
       process.stdout.write(`  [ok] cache dir: ${dir}\n`);
       process.stdout.write(`  [ok] config dir: ${cfgDir}\n`);
     } catch (e) {
-      process.stdout.write(`  [warn] cache/config dir: ${e instanceof Error ? e.message : String(e)}\n`);
+      process.stdout.write(
+        `  [warn] cache/config dir: ${e instanceof Error ? e.message : String(e)}\n`,
+      );
     }
   }
   if (sub === 'all' || sub === 'auth' || sub === 'system') {
     const clientRes = resolveClientId();
-    if (clientRes.clientId) process.stdout.write(`  [ok] spotify client id configured (${clientRes.source})\n`);
-    else process.stdout.write(`  [warn] SPOTOEI_CLIENT_ID is not configured (set SPOTOEI_CLIENT_ID or create ${clientRes.configPath})\n`);
+    if (clientRes.clientId)
+      process.stdout.write(`  [ok] spotify client id configured (${clientRes.source})\n`);
+    else
+      process.stdout.write(
+        `  [warn] SPOTOEI_CLIENT_ID is not configured (set SPOTOEI_CLIENT_ID or create ${clientRes.configPath})\n`,
+      );
     const redirectUri = getRedirectUri();
     process.stdout.write(`  [ok] spotify redirect uri: ${redirectUri}\n`);
     try {
-      const candidates: string[] = process.platform === 'darwin' ? ['security'] : process.platform === 'win32' ? ['cmd'] : ['secret-tool', 'gnome-keyring'];
+      const candidates: string[] =
+        process.platform === 'darwin'
+          ? ['security']
+          : process.platform === 'win32'
+            ? ['cmd']
+            : ['secret-tool', 'gnome-keyring'];
       let found = false;
       for (const cand of candidates) {
         const r = spawnSync('which', [cand], { encoding: 'utf8' });
-        if (r.status === 0) { found = true; break; }
+        if (r.status === 0) {
+          found = true;
+          break;
+        }
       }
-      if (found || process.platform === 'darwin' || process.platform === 'win32') process.stdout.write('  [ok] keyring backend available\n');
-      else process.stdout.write('  [warn] keyring backend: no secret-tool/gnome-keyring found (will fallback to file)\n');
+      if (found || process.platform === 'darwin' || process.platform === 'win32')
+        process.stdout.write('  [ok] keyring backend available\n');
+      else
+        process.stdout.write(
+          '  [warn] keyring backend: no secret-tool/gnome-keyring found (will fallback to file)\n',
+        );
     } catch {
       process.stdout.write('  [warn] keyring backend check failed\n');
     }
   } else {
     const clientRes = resolveClientId();
-    if (clientRes.clientId) process.stdout.write(`  [ok] spotify client id configured (${clientRes.source})\n`);
-    else process.stdout.write(`  [warn] SPOTOEI_CLIENT_ID is not configured (set SPOTOEI_CLIENT_ID or create ${clientRes.configPath})\n`);
+    if (clientRes.clientId)
+      process.stdout.write(`  [ok] spotify client id configured (${clientRes.source})\n`);
+    else
+      process.stdout.write(
+        `  [warn] SPOTOEI_CLIENT_ID is not configured (set SPOTOEI_CLIENT_ID or create ${clientRes.configPath})\n`,
+      );
     const redirectUri = getRedirectUri();
     process.stdout.write(`  [ok] spotify redirect uri: ${redirectUri}\n`);
   }
   if (sub === 'all' || sub === 'system' || sub === 'network') {
-    const candidates: string[] = process.platform === 'darwin' ? ['open'] : process.platform === 'win32' ? ['rundll32'] : ['xdg-open', 'sensible-browser', 'wslview'];
+    const candidates: string[] =
+      process.platform === 'darwin'
+        ? ['open']
+        : process.platform === 'win32'
+          ? ['rundll32']
+          : ['xdg-open', 'sensible-browser', 'wslview'];
     let found: string | null = null;
     for (const c of candidates) {
       const r = spawnSync('which', [c], { encoding: 'utf8' });
-      if (r.status === 0) { found = c; break; }
+      if (r.status === 0) {
+        found = c;
+        break;
+      }
     }
     if (found) process.stdout.write(`  [ok] browser launcher available: ${found}\n`);
     else process.stdout.write('  [warn] browser launcher: no known opener on PATH\n');
-    if (sub === 'network' || sub === 'all') process.stdout.write('  [ok] network: dns check skipped (auth will verify Spotify API)\n');
+    if (sub === 'network' || sub === 'all')
+      process.stdout.write('  [ok] network: dns check skipped (auth will verify Spotify API)\n');
   }
   if (playerBin) {
     try {
       const res = spawnSync(playerBin, ['doctor', 'all'], { timeout: 8000, encoding: 'utf8' });
       if (res.stdout) process.stdout.write(`  --- spotoei-player doctor output ---\n${res.stdout}`);
       if (res.stderr) process.stderr.write(res.stderr);
-      if (res.status !== 0) process.stdout.write('  [warn] spotoei-player doctor reported issues (see above)\n');
+      if (res.status !== 0)
+        process.stdout.write('  [warn] spotoei-player doctor reported issues (see above)\n');
       else process.stdout.write('  [ok] spotoei-player doctor passed\n');
     } catch (e) {
-      process.stdout.write(`  [warn] spotoei-player doctor: ${e instanceof Error ? e.message : String(e)}\n`);
+      process.stdout.write(
+        `  [warn] spotoei-player doctor: ${e instanceof Error ? e.message : String(e)}\n`,
+      );
     }
   } else process.stdout.write('  [info] spotoei-player doctor: skipped (binary not found)\n');
   if (ok) {

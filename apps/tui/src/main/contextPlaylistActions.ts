@@ -55,13 +55,19 @@ export async function handleAddToPlaylist(
               ui?.setStatus(`Failed to add to "${pl.name}"`, true);
             }
           } catch (err) {
-            ui?.setStatus(`Failed to add: ${err instanceof Error ? err.message : String(err)}`, true);
+            ui?.setStatus(
+              `Failed to add: ${err instanceof Error ? err.message : String(err)}`,
+              true,
+            );
           }
         },
       })),
     );
   } catch (err) {
-    ui?.setStatus(`Failed to load playlists: ${err instanceof Error ? err.message : String(err)}`, true);
+    ui?.setStatus(
+      `Failed to load playlists: ${err instanceof Error ? err.message : String(err)}`,
+      true,
+    );
   }
 }
 
@@ -112,6 +118,9 @@ export async function handleRemoveFromPlaylist(
       })),
     );
   } catch (err) {
-    ui?.setStatus(`Failed to load playlists: ${err instanceof Error ? err.message : String(err)}`, true);
+    ui?.setStatus(
+      `Failed to load playlists: ${err instanceof Error ? err.message : String(err)}`,
+      true,
+    );
   }
 }

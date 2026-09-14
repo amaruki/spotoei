@@ -1,9 +1,5 @@
 // @ts-nocheck
-import type {
-  CatalogEpisodeT,
-  CatalogShowT,
-  EntityViewResponseT,
-} from 'spotoei-protocol';
+import type { CatalogEpisodeT, CatalogShowT, EntityViewResponseT } from 'spotoei-protocol';
 import { mapEpisode, mapShow } from './mappers';
 import { pickObjectKey, toArray } from './shape';
 import { ApiError } from './transport';

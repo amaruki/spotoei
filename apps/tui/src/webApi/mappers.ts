@@ -31,7 +31,11 @@ export function mapCategory(raw: unknown): CategoryT | null {
   const c = raw as { id?: unknown; name?: unknown; icons?: unknown };
   if (typeof c.id !== 'string' || typeof c.name !== 'string') return null;
   const icons = Array.isArray(c.icons)
-    ? (c.icons.filter((x) => x && typeof (x as { url?: unknown }).url === 'string') as Array<{ url: string; width?: number; height?: number }>)
+    ? (c.icons.filter((x) => x && typeof (x as { url?: unknown }).url === 'string') as Array<{
+        url: string;
+        width?: number;
+        height?: number;
+      }>)
     : undefined;
   const imageUrl = icons?.[0]?.url;
   return { id: c.id, name: c.name, imageUrl, icons };
@@ -39,7 +43,15 @@ export function mapCategory(raw: unknown): CategoryT | null {
 
 export function mapShow(raw: unknown): CatalogShowT | null {
   if (raw === null || typeof raw !== 'object') return null;
-  const s = raw as { id?: unknown; name?: unknown; description?: unknown; publisher?: unknown; images?: unknown; total_episodes?: unknown; uri?: unknown };
+  const s = raw as {
+    id?: unknown;
+    name?: unknown;
+    description?: unknown;
+    publisher?: unknown;
+    images?: unknown;
+    total_episodes?: unknown;
+    uri?: unknown;
+  };
   if (typeof s.id !== 'string' || typeof s.name !== 'string') return null;
   const firstImg = toFirstImage(s.images as unknown[]);
   const candidate = {
@@ -57,7 +69,16 @@ export function mapShow(raw: unknown): CatalogShowT | null {
 
 export function mapEpisode(raw: unknown): CatalogEpisodeT | null {
   if (raw === null || typeof raw !== 'object') return null;
-  const e = raw as { id?: unknown; name?: unknown; description?: unknown; images?: unknown; duration_ms?: unknown; release_date?: unknown; explicit?: unknown; uri?: unknown };
+  const e = raw as {
+    id?: unknown;
+    name?: unknown;
+    description?: unknown;
+    images?: unknown;
+    duration_ms?: unknown;
+    release_date?: unknown;
+    explicit?: unknown;
+    uri?: unknown;
+  };
   if (typeof e.id !== 'string' || typeof e.name !== 'string') return null;
   const firstImg = toFirstImage(e.images as unknown[]);
   const candidate = {

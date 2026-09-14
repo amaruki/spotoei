@@ -29,10 +29,7 @@ describe('Real-time lyrics tracking & rendering', () => {
 
   const plainDoc: LyricsDocumentT = {
     kind: 'plain',
-    lines: [
-      { text: 'Just plain lyrics' },
-      { text: 'Without any timestamps' },
-    ],
+    lines: [{ text: 'Just plain lyrics' }, { text: 'Without any timestamps' }],
   };
 
   it('calculates active lyric index based on progress_ms accurately', () => {

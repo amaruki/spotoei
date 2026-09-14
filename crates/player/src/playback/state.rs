@@ -200,7 +200,11 @@ impl Playback {
                     .to_uri()
                     .unwrap_or_else(|_| audio_item.uri.clone());
                 let (artists, album) = match &audio_item.unique_fields {
-                    librespot::metadata::audio::item::UniqueFields::Track { artists, album, .. } => (
+                    librespot::metadata::audio::item::UniqueFields::Track {
+                        artists,
+                        album,
+                        ..
+                    } => (
                         artists.iter().map(|a| a.name.clone()).collect(),
                         Some(album.clone()),
                     ),

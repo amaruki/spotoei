@@ -57,7 +57,9 @@ describe('Live Browse Categories & Playlists endpoints', () => {
     });
 
     const playlists = await getCategoryPlaylists(transport, 'top lists', 15, 0);
-    expect(capturedPath).toContain(`/browse/categories/${encodeURIComponent('top lists')}/playlists?`);
+    expect(capturedPath).toContain(
+      `/browse/categories/${encodeURIComponent('top lists')}/playlists?`,
+    );
     expect(capturedPath).toContain('limit=15');
     expect(playlists.length).toBe(1);
     expect(playlists[0]?.id).toBe('pl1');

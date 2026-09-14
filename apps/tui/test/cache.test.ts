@@ -82,16 +82,19 @@ describe('Cache', () => {
 
   test('searchLibrary performs substring and fuzzy search on indexed items', () => {
     cache.indexLibraryItems('acct1', 'saved_tracks', [
-      { id: 't1', name: 'Bohemian Rhapsody', artists: [{ name: 'Queen' }], albumName: 'A Night at the Opera' },
+      {
+        id: 't1',
+        name: 'Bohemian Rhapsody',
+        artists: [{ name: 'Queen' }],
+        albumName: 'A Night at the Opera',
+      },
       { id: 't2', name: 'Radio Ga Ga', artists: [{ name: 'Queen' }], albumName: 'The Works' },
       { id: 't3', name: 'Creep', artists: [{ name: 'Radiohead' }], albumName: 'Pablo Honey' },
     ]);
     cache.indexLibraryItems('acct1', 'saved_albums', [
       { id: 'al1', name: 'OK Computer', artists: [{ name: 'Radiohead' }] },
     ]);
-    cache.indexLibraryItems('acct1', 'playlists', [
-      { id: 'p1', name: 'Queen Essentials' },
-    ]);
+    cache.indexLibraryItems('acct1', 'playlists', [{ id: 'p1', name: 'Queen Essentials' }]);
 
     // Substring match on track title
     const r1 = cache.searchLibrary<{ id: string; name: string }>('acct1', 'bohemian');
@@ -121,7 +124,10 @@ describe('Cache', () => {
     expect(all.length).toBe(5);
 
     // searchCachedLibrary alias works identically
-    const aliasResult = cache.searchCachedLibrary<{ id: string; name: string }>('acct1', 'bohemian');
+    const aliasResult = cache.searchCachedLibrary<{ id: string; name: string }>(
+      'acct1',
+      'bohemian',
+    );
     expect(aliasResult.length).toBe(1);
     expect(aliasResult[0]?.name).toBe('Bohemian Rhapsody');
   });
@@ -130,7 +136,11 @@ describe('Cache', () => {
     cache.putQuery('acct1', 'library:v1:saved_tracks:0:20', {
       collection: 'saved_tracks',
       items: [
-        { id: 't10', name: 'Under Pressure', artists: [{ name: 'Queen' }, { name: 'David Bowie' }] },
+        {
+          id: 't10',
+          name: 'Under Pressure',
+          artists: [{ name: 'Queen' }, { name: 'David Bowie' }],
+        },
       ],
     });
 
@@ -194,9 +204,19 @@ describe('Cache', () => {
 
   test("searchLibrary safely escapes %, _, \\, and ' in SQL LIKE queries", () => {
     cache.indexLibraryItems('acct1', 'saved_tracks', [
-      { id: 't1', name: '100% Hits', artists: [{ name: "Rock 'n' Rollers" }], albumName: 'Album A' },
+      {
+        id: 't1',
+        name: '100% Hits',
+        artists: [{ name: "Rock 'n' Rollers" }],
+        albumName: 'Album A',
+      },
       { id: 't2', name: '1000 Hits', artists: [{ name: 'Pop Stars' }], albumName: 'Album B' },
-      { id: 't3', name: "Don't Stop Believin'", artists: [{ name: 'Journey' }], albumName: 'Escape' },
+      {
+        id: 't3',
+        name: "Don't Stop Believin'",
+        artists: [{ name: 'Journey' }],
+        albumName: 'Escape',
+      },
       { id: 't4', name: 'Track_Special', artists: [{ name: 'Artist C' }], albumName: 'Album C' },
       { id: 't5', name: 'Track Special', artists: [{ name: 'Artist D' }], albumName: 'Album D' },
     ]);
@@ -217,7 +237,9 @@ describe('Cache', () => {
     expect(rQuote[0]?.name).toBe("Don't Stop Believin'");
 
     const rBareQuote = cache.searchLibrary<{ id: string; name: string }>('acct1', "'");
-    expect(new Set(rBareQuote.map((x) => x.name))).toEqual(new Set(['100% Hits', "Don't Stop Believin'"]));
+    expect(new Set(rBareQuote.map((x) => x.name))).toEqual(
+      new Set(['100% Hits', "Don't Stop Believin'"]),
+    );
 
     // Query combining % and ':
     const rCombined = cache.searchLibrary<{ id: string; name: string }>('acct1', "100% 'n'");

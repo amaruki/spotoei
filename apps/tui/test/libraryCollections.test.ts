@@ -79,11 +79,15 @@ describe('library collections', () => {
     const tree = structurizePlaylists(playlists);
     expect(tree.length).toBe(2); // Work, Chill
 
-    const workFolder = tree.find((n) => isPlaylistFolderNode(n) && n.name === 'Work') as PlaylistFolderNode;
+    const workFolder = tree.find(
+      (n) => isPlaylistFolderNode(n) && n.name === 'Work',
+    ) as PlaylistFolderNode;
     expect(workFolder).toBeDefined();
     expect(workFolder.children.length).toBe(2); // Coding folder, Work Focus playlist
 
-    const chillFolder = tree.find((n) => isPlaylistFolderNode(n) && n.name === 'Chill') as PlaylistFolderNode;
+    const chillFolder = tree.find(
+      (n) => isPlaylistFolderNode(n) && n.name === 'Chill',
+    ) as PlaylistFolderNode;
     expect(chillFolder).toBeDefined();
   });
 

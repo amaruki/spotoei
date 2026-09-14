@@ -48,12 +48,46 @@ const ARABIC_FORMS: Record<number, [number, number, number, number]> = {
 // 0 = none, 1 = right-only (forward in reading direction), 2 = dual
 const ARABIC_CONNECTIVITY: Record<number, number> = {
   0x0621: 0,
-  0x0622: 1, 0x0623: 1, 0x0624: 1, 0x0625: 1, 0x0627: 1, 0x0629: 1, 0x062f: 1, 0x0630: 1,
-  0x0631: 1, 0x0632: 1, 0x0648: 1, 0x0649: 1, 0x0671: 1, 0x0698: 1,
-  0x0626: 2, 0x0628: 2, 0x062a: 2, 0x062b: 2, 0x062c: 2, 0x062d: 2, 0x062e: 2, 0x0633: 2,
-  0x0634: 2, 0x0635: 2, 0x0636: 2, 0x0637: 2, 0x0638: 2, 0x0639: 2, 0x063a: 2, 0x0641: 2,
-  0x0642: 2, 0x0643: 2, 0x0644: 2, 0x0645: 2, 0x0646: 2, 0x0647: 2, 0x064a: 2, 0x067e: 2,
-  0x0686: 2, 0x06af: 2,
+  0x0622: 1,
+  0x0623: 1,
+  0x0624: 1,
+  0x0625: 1,
+  0x0627: 1,
+  0x0629: 1,
+  0x062f: 1,
+  0x0630: 1,
+  0x0631: 1,
+  0x0632: 1,
+  0x0648: 1,
+  0x0649: 1,
+  0x0671: 1,
+  0x0698: 1,
+  0x0626: 2,
+  0x0628: 2,
+  0x062a: 2,
+  0x062b: 2,
+  0x062c: 2,
+  0x062d: 2,
+  0x062e: 2,
+  0x0633: 2,
+  0x0634: 2,
+  0x0635: 2,
+  0x0636: 2,
+  0x0637: 2,
+  0x0638: 2,
+  0x0639: 2,
+  0x063a: 2,
+  0x0641: 2,
+  0x0642: 2,
+  0x0643: 2,
+  0x0644: 2,
+  0x0645: 2,
+  0x0646: 2,
+  0x0647: 2,
+  0x064a: 2,
+  0x067e: 2,
+  0x0686: 2,
+  0x06af: 2,
 };
 
 const LAM_ALEF_LIGATURES: Record<number, [number, number]> = {
@@ -174,7 +208,13 @@ export function processRtlText(text: string): string {
       currentRun += ch;
     } else if (
       isCurrentRtl &&
-      (ch === ' ' || ch === '!' || ch === '?' || ch === '.' || ch === ',' || ch === '(' || ch === ')')
+      (ch === ' ' ||
+        ch === '!' ||
+        ch === '?' ||
+        ch === '.' ||
+        ch === ',' ||
+        ch === '(' ||
+        ch === ')')
     ) {
       let hasRtlAhead = false;
       for (let j = i + 1; j < chars.length; j++) {
@@ -210,7 +250,11 @@ export function processRtlText(text: string): string {
   const segmenter = new Intl.Segmenter('ar', { granularity: 'grapheme' });
   return tokens
     .map((tok) =>
-      tok.isRtl ? Array.from(segmenter.segment(tok.text), (s) => s.segment).toReversed().join('') : tok.text,
+      tok.isRtl
+        ? Array.from(segmenter.segment(tok.text), (s) => s.segment)
+            .toReversed()
+            .join('')
+        : tok.text,
     )
     .join('');
 }

@@ -38,7 +38,12 @@ export interface PlaybackBarContent {
 export const WIDE_BREAKPOINT = 120;
 export const NARROW_BREAKPOINT = 80;
 
-function renderFullProgressBar(pos: string, dur: string, pct: number, availableWidth: number): string {
+function renderFullProgressBar(
+  pos: string,
+  dur: string,
+  pct: number,
+  availableWidth: number,
+): string {
   const timePrefix = `${pos} `;
   const pctStr = `${Math.round(pct * 100)}%`;
   const timeSuffix = ` ${dur} (${pctStr})`;
@@ -78,15 +83,17 @@ export function buildPlaybackBarContent(input: PlaybackBarInput): PlaybackBarCon
     };
   }
 
-  const pct = input.durationMs > 0 ? Math.min(1, Math.max(0, input.positionMs / input.durationMs)) : 0;
+  const pct =
+    input.durationMs > 0 ? Math.min(1, Math.max(0, input.positionMs / input.durationMs)) : 0;
   const progressBar = renderFullProgressBar(pos, dur, pct, innerWidth);
 
   // Badges: shuffle, repeat, volume
   const shuf = input.shuffle ? 'on' : 'off';
   const vol = `${input.volume}%`;
-  const badges = input.width < WIDE_BREAKPOINT
-    ? `Shuf: ${shuf}  Rep: ${input.repeat}  Vol: ${vol}`
-    : `🔀 Shuf: ${shuf}   🔁 Rep: ${input.repeat}   🔉 ${vol}`;
+  const badges =
+    input.width < WIDE_BREAKPOINT
+      ? `Shuf: ${shuf}  Rep: ${input.repeat}  Vol: ${vol}`
+      : `🔀 Shuf: ${shuf}   🔁 Rep: ${input.repeat}   🔉 ${vol}`;
 
   // Row 1: Title (left) & Badges (right)
   const titleCap = Math.max(10, innerWidth - badges.length - 4);

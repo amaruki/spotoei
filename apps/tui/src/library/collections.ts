@@ -36,7 +36,10 @@ const DEFAULT_DELIMITERS = [/\s+\/\s+/, /\s*::\s*/, /\s*\\\s*/, /\//];
 
 function splitPath(name: string, delimiters: Array<string | RegExp>): string[] {
   for (const delim of delimiters) {
-    const parts = name.split(delim).map((p) => p.trim()).filter(Boolean);
+    const parts = name
+      .split(delim)
+      .map((p) => p.trim())
+      .filter(Boolean);
     if (parts.length > 1) {
       return parts;
     }
@@ -50,7 +53,10 @@ function extractFolderPath(
 ): { folders: string[]; leafName: string } {
   const raw = item as Record<string, unknown>;
   if (Array.isArray(raw.folder)) {
-    const folders = raw.folder.map(String).map((s) => s.trim()).filter(Boolean);
+    const folders = raw.folder
+      .map(String)
+      .map((s) => s.trim())
+      .filter(Boolean);
     return { folders, leafName: item.name };
   }
   if (typeof raw.folder === 'string' && raw.folder.trim().length > 0) {

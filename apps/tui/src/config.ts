@@ -1,4 +1,12 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { BrowseConfigT } from 'spotoei-protocol';
@@ -26,8 +34,6 @@ export const USER_DEV_CLIENT_ID = '8b16519257c2463eb13dbd0bba657fed';
 export const DEFAULT_CLIENT_ID = NCSPOT_CLIENT_ID;
 export const KEYMASTER_REDIRECT_PORT = 8989;
 export const DEFAULT_REDIRECT_PORT = 8989;
-
-
 
 export function resolveRedirectPort(): number {
   if (process.env.SPOTOEI_REDIRECT_PORT) {

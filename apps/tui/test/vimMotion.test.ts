@@ -24,12 +24,16 @@ const baseState: UiViewState = {
 };
 
 function createTracks(count: number): LibraryItemT[] {
-  return Array.from({ length: count }, (_, i) => ({
-    id: `t${i}`,
-    uri: `spotify:track:t${i}`,
-    name: `Track ${i}`,
-    kind: 'track',
-  } as unknown as LibraryItemT));
+  return Array.from(
+    { length: count },
+    (_, i) =>
+      ({
+        id: `t${i}`,
+        uri: `spotify:track:t${i}`,
+        name: `Track ${i}`,
+        kind: 'track',
+      }) as unknown as LibraryItemT,
+  );
 }
 async function makeUi() {
   const { renderer, renderOnce } = await createTestRenderer({ width: 120, height: 40 });

@@ -96,10 +96,7 @@ export async function handleOpenFromClipboard(
     ui?.setStatus(`Playing ${target.type} from clipboard: ${target.uri}`);
     return true;
   } catch (err) {
-    ui?.setStatus(
-      `Playback error: ${err instanceof Error ? err.message : String(err)}`,
-      true,
-    );
+    ui?.setStatus(`Playback error: ${err instanceof Error ? err.message : String(err)}`, true);
     return false;
   }
 }

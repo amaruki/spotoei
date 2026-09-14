@@ -29,7 +29,13 @@ const showHit = (id: string) => ({
 
 const episodeHit = (id: string) => ({
   type: 'episode' as const,
-  episode: { id, uri: `spotify:episode:${id}`, name: id, durationMs: 120_000, releaseDate: '2026-01-01' },
+  episode: {
+    id,
+    uri: `spotify:episode:${id}`,
+    name: id,
+    durationMs: 120_000,
+    releaseDate: '2026-01-01',
+  },
 });
 const baseState: UiViewState = {
   protocol: 1,
@@ -68,7 +74,11 @@ describe('search grouping', () => {
   });
 
   it('partitions show and episode hits with original indices and filters by show/episode', () => {
-    const hits = [showHit('s1'), trackHit('t1'), episodeHit('e1')] as unknown as SearchResponseT['hits'];
+    const hits = [
+      showHit('s1'),
+      trackHit('t1'),
+      episodeHit('e1'),
+    ] as unknown as SearchResponseT['hits'];
     const panels = partitionSearchHits(hits);
     expect(panels.shows.map((r) => r.index)).toEqual([0]);
     expect(panels.tracks.map((r) => r.index)).toEqual([1]);

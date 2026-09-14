@@ -27,10 +27,7 @@ pub fn rotate_log_if_needed(path: &std::path::Path) {
     if let Ok(meta) = std::fs::metadata(path) {
         if meta.len() >= MAX_LOG_BYTES {
             let mut backup = path.to_path_buf();
-            let ext = backup
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("log");
+            let ext = backup.extension().and_then(|e| e.to_str()).unwrap_or("log");
             backup.set_extension(format!("{ext}.1"));
             let _ = std::fs::rename(path, backup);
         }

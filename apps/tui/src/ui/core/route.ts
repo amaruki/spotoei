@@ -1,7 +1,13 @@
 import { routeTitle } from '../formatters';
 import { COLOR_BORDER, COLOR_BORDER_FOCUS } from '../theme';
 import { getNavOptions } from '../views/nav';
-import { focusedSearchList, homePanelBoxes, homePanelLists, searchPanelBoxes, searchPanelLists } from './categoryPanels';
+import {
+  focusedSearchList,
+  homePanelBoxes,
+  homePanelLists,
+  searchPanelBoxes,
+  searchPanelLists,
+} from './categoryPanels';
 import { routeKind } from './navigationStack';
 import type { Route, UiCoreContext } from './types';
 
@@ -76,7 +82,10 @@ export function createRouteHelpers(ctx: UiCoreContext) {
         const active = ctx.homePanel.value;
         boxes.forEach((box, i) => {
           const isActive = i === active;
-          const base = (box as unknown as { title?: string }).title?.replace(/^▶\s*/, '').replace(/\s*\[Active\]$/, '') || 'Panel';
+          const base =
+            (box as unknown as { title?: string }).title
+              ?.replace(/^▶\s*/, '')
+              .replace(/\s*\[Active\]$/, '') || 'Panel';
           // fallback to known titles
           const known = ['Top Tracks', 'Top Artists', 'Recently Played', 'Discover'][i] ?? base;
           box.title = isActive ? `▶ ${known} [Active]` : known;
@@ -110,7 +119,10 @@ export function createRouteHelpers(ctx: UiCoreContext) {
   };
 
   const refreshNav = (): void => {
-    built.nav.options = getNavOptions(state.auth.state === 'authenticated', Boolean(state.isPrivateSession));
+    built.nav.options = getNavOptions(
+      state.auth.state === 'authenticated',
+      Boolean(state.isPrivateSession),
+    );
     setNavSelected(route.current);
   };
 

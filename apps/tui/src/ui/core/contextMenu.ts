@@ -52,13 +52,16 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
           : hit.type === 'artist'
             ? 'artist'
             : 'playlist';
-    const firstArtist = (hit.track as { artists?: Array<{ id?: string; uri?: string; name?: string }> })?.artists?.[0];
+    const firstArtist = (
+      hit.track as { artists?: Array<{ id?: string; uri?: string; name?: string }> }
+    )?.artists?.[0];
     return {
       kind: targetKind,
       id: entity.id,
       uri: entity.uri,
       name: entity.name ?? entity.id,
-      artistUri: firstArtist?.uri ?? (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : undefined),
+      artistUri:
+        firstArtist?.uri ?? (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : undefined),
       artistName: firstArtist?.name,
     };
   }
@@ -75,14 +78,18 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
           : item.uri.startsWith('spotify:artist:')
             ? 'artist'
             : 'playlist';
-    const trackItem = item as { artists?: Array<{ id?: string; uri?: string; name?: string }>; artist?: string };
+    const trackItem = item as {
+      artists?: Array<{ id?: string; uri?: string; name?: string }>;
+      artist?: string;
+    };
     const firstArtist = trackItem.artists?.[0];
     return {
       kind: targetKind,
       id: item.id,
       uri: item.uri,
       name: item.name,
-      artistUri: firstArtist?.uri ?? (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : undefined),
+      artistUri:
+        firstArtist?.uri ?? (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : undefined),
       artistName: firstArtist?.name ?? trackItem.artist,
     };
   }
@@ -96,14 +103,17 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
     const entity = asEntity(ctx.currentRouteItems.value[list.getSelectedIndex()]);
     if (!entity?.id) return null;
     const targetKind = kind === 'artist' ? 'album' : 'track';
-    const trackEntity = entity as EntityLike & { artists?: Array<{ id?: string; uri?: string; name?: string }> };
+    const trackEntity = entity as EntityLike & {
+      artists?: Array<{ id?: string; uri?: string; name?: string }>;
+    };
     const firstArtist = trackEntity.artists?.[0];
     return {
       kind: targetKind,
       id: entity.id,
       uri: entity.uri,
       name: entity.name ?? entity.id,
-      artistUri: firstArtist?.uri ?? (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : undefined),
+      artistUri:
+        firstArtist?.uri ?? (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : undefined),
       artistName: firstArtist?.name,
     };
   }
@@ -126,13 +136,16 @@ export function resolveContextTarget(ctx: UiCoreContext): ContextTarget | null {
       return { kind: 'browse-entry', id: row.id, name: row.label ?? row.id };
     }
     if (row?.kind === 'track' && row.track?.id) {
-      const firstArtist = (row.track as { artists?: Array<{ id?: string; uri?: string; name?: string }> })?.artists?.[0];
+      const firstArtist = (
+        row.track as { artists?: Array<{ id?: string; uri?: string; name?: string }> }
+      )?.artists?.[0];
       return {
         kind: 'track',
         id: row.track.id,
         uri: row.track.uri,
         name: row.track.name ?? row.track.id,
-        artistUri: firstArtist?.uri ?? (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : undefined),
+        artistUri:
+          firstArtist?.uri ?? (firstArtist?.id ? `spotify:artist:${firstArtist.id}` : undefined),
         artistName: firstArtist?.name,
       };
     }

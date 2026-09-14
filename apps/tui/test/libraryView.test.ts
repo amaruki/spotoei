@@ -75,9 +75,7 @@ describe('libraryItemOptions', () => {
     const folder: PlaylistFolderNode = {
       id: 'folder:Rock',
       name: 'Rock',
-      children: [
-        { id: 'p1', uri: 'spotify:playlist:p1', name: 'Classic', trackCount: 10 },
-      ],
+      children: [{ id: 'p1', uri: 'spotify:playlist:p1', name: 'Classic', trackCount: 10 }],
       isExpanded: false,
     };
 

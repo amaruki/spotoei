@@ -1,4 +1,9 @@
-import { SEARCH_PANELS, cycleSearchPanel, focusedSearchList, focusSearchPanel } from './categoryPanels';
+import {
+  SEARCH_PANELS,
+  cycleSearchPanel,
+  focusedSearchList,
+  focusSearchPanel,
+} from './categoryPanels';
 import { routeKind } from './navigationStack';
 import type { KeyDispatch, UiCoreContext } from './types';
 

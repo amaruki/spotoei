@@ -57,7 +57,10 @@ function highlight(lists: SelectRenderable[], boxes: BoxRenderable[], active: nu
     const isActive = i === active;
     box.borderColor = isActive ? COLOR_BORDER_FOCUS : COLOR_BORDER;
     const raw = (box as unknown as { title?: string }).title ?? baseTitle(box);
-    const cleaned = raw.replace(/^▶\s*/, '').replace(/\s*\[Active\]$/, '').trim();
+    const cleaned = raw
+      .replace(/^▶\s*/, '')
+      .replace(/\s*\[Active\]$/, '')
+      .trim();
     box.title = isActive ? `▶ ${cleaned} [Active]` : cleaned;
   });
 }
@@ -99,7 +102,10 @@ export function blurAllPanels(built: BuiltUi): void {
   for (const box of [...homePanelBoxes(built), ...searchPanelBoxes(built)]) {
     box.borderColor = COLOR_BORDER;
     const raw = (box as unknown as { title?: string }).title ?? baseTitle(box);
-    const cleaned = raw.replace(/^▶\s*/, '').replace(/\s*\[Active\]$/, '').trim();
+    const cleaned = raw
+      .replace(/^▶\s*/, '')
+      .replace(/\s*\[Active\]$/, '')
+      .trim();
     box.title = cleaned;
   }
 }

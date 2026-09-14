@@ -69,8 +69,18 @@ export interface UiCoreContext {
     items: ContextMenuItem[];
   };
   palette: {
-    commands: Array<{ name: string; description: string; action: () => void; isAvailable?: () => boolean }>;
-    filtered: Array<{ name: string; description: string; action: () => void; isAvailable?: () => boolean }>;
+    commands: Array<{
+      name: string;
+      description: string;
+      action: () => void;
+      isAvailable?: () => boolean;
+    }>;
+    filtered: Array<{
+      name: string;
+      description: string;
+      action: () => void;
+      isAvailable?: () => boolean;
+    }>;
     open: boolean;
     prevFocus: FocusArea;
   };

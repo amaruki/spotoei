@@ -61,7 +61,11 @@ fn hello(cmd: &Command) -> String {
         .data
         .get("protocols")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|x| x.as_u64().map(|n| n as u32)).collect());
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|x| x.as_u64().map(|n| n as u32))
+                .collect()
+        });
     let has_overlap = match &client_protocols {
         Some(protos) => protos.iter().any(|p| SUPPORTED.contains(p)),
         None => false,
@@ -71,7 +75,9 @@ fn hello(cmd: &Command) -> String {
             &cmd.id,
             ErrorBody::new(
                 ErrorCode::Unsupported,
-                format!("unsupported protocol: expected one of {SUPPORTED:?}, got {client_protocols:?}"),
+                format!(
+                    "unsupported protocol: expected one of {SUPPORTED:?}, got {client_protocols:?}"
+                ),
             ),
         );
     }
