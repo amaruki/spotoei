@@ -12,41 +12,78 @@ on:
         required: false
         type: boolean
         default: false
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths: ['package.json']
 
 permissions:
   contents: read
 
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   prepare:
     name: Resolve version
+    # Push, tag, and manual releases are owner-only; everyone else is skipped.
     if: github.actor == github.repository_owner
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.resolve.outputs.version }}
+      release: ${{ steps.resolve.outputs.release }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Resolve version
         id: resolve
         env:
+          EVENT_NAME: ${{ github.event_name }}
           INPUT_VERSION: ${{ inputs.version }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
           current=$(jq -r .version package.json)
-          version="${INPUT_VERSION:-$current}"
-          if [ "$version" != "$current" ]; then
-            echo "::error::package.json is $current; bump it before releasing $version" >&2
-            exit 1
+          release=true
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            version="${INPUT_VERSION:-$current}"
+            if [ "$version" != "$current" ]; then
+              echo "::error::package.json is $current; bump it before releasing $version" >&2
+              exit 1
+            fi
+          elif [ "$REF_TYPE" = "tag" ]; then
+            version="${REF_NAME#v}"
+            if [ "$version" != "$current" ]; then
+              echo "::error::tag $REF_NAME does not match package.json version $current" >&2
+              exit 1
+            fi
+          else
+            version="$current"
+            before="${BEFORE:-}"
+            if [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ]; then
+              previous=$(git show "$before:package.json" 2>/dev/null | jq -r .version || echo unknown)
+            else
+              previous=unknown
+            fi
+            if [ "$previous" = "$current" ]; then
+              echo "version unchanged ($current); skipping release"
+              release=false
+            fi
           fi
+
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "resolved version=$version"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "resolved version=$version release=$release"
 
   build:
     name: Build ${{ matrix.target }}
     needs: prepare
+    if: needs.prepare.outputs.release == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -95,7 +132,7 @@ jobs:
   publish:
     name: Publish release
     needs: [prepare, build]
-    if: inputs.dry_run != true
+    if: needs.prepare.outputs.release == 'true' && inputs.dry_run != true
     runs-on: ubuntu-latest
     permissions:
       contents: write

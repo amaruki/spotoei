@@ -80,15 +80,20 @@ A pull request is ready when applicable:
 
 ## Releasing
 
-Releases are published manually by the repository owner through the `Release` workflow
-(Actions → Release → Run workflow). It builds archives for Linux (x86_64, arm64), macOS
-(arm64, x86_64), and Windows (x86_64), then publishes a GitHub release with a combined
-`SHA256SUMS`.
+Releases are owner-controlled. The `Release` workflow builds archives for Linux (x86_64,
+arm64), macOS (arm64, x86_64), and Windows (x86_64), then publishes a GitHub release with a
+combined `SHA256SUMS`.
 
-Before dispatching, bump `version` in `package.json` and merge it; the workflow input must
-match `package.json` or it fails. Set `dry_run` to build the archives without publishing.
-The workflow itself is guarded by an actor check and covered by `.github/CODEOWNERS`, so
-releases and workflow changes stay with the owner.
+Owner-only triggers:
+
+1. **Version bump on main** — update `version` in `package.json`, commit, push to `main`.
+2. **Tag** — push a `v<version>` tag that matches `package.json`.
+3. **Manual** — Actions → Release → Run workflow; set `dry_run` to build without publishing.
+
+Anyone else triggering the workflow is skipped by the actor check
+(`github.actor == github.repository_owner`), and `.github/CODEOWNERS` keeps workflow and
+version changes behind owner review. Tag and input versions must match `package.json` or the
+run fails; pushes without a version change are skipped automatically.
 
 ## Reporting bugs
 
