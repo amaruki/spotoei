@@ -30,10 +30,6 @@ export interface BrowseEntityClient {
     limit?: number,
   ) => Promise<{ items: Array<unknown> }>;
 }
-export interface BrowseLiveClient {
-  getCategories: any;
-  getCategoryPlaylists: any;
-}
 export type BrowseNav =
   | {
       kind: 'route';
