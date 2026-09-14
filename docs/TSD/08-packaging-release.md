@@ -209,9 +209,11 @@ Example:
 
 ```text
 spotoei-v0.1.0-linux-x86_64.tar.gz
-spotoei-v0.1.0-linux-aarch64.tar.gz
+spotoei-v0.1.0-linux-arm64.tar.gz
 spotoei-v0.1.0-macos-arm64.tar.gz
-spotoei-v0.1.0-windows-x86_64.zip
+spotoei-v0.1.0-macos-x86_64.tar.gz
+spotoei-v0.1.0-windows-x86_64.tar.gz
+spotoei-v0.1.0-windows-arm64.tar.gz
 SHA256SUMS
 ```
 

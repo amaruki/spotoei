@@ -1,12 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, existsSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
-const VERSION = '0.0.0';
-
 const ROOT = process.cwd();
 const DIST = join(ROOT, 'dist');
+const VERSION = (
+  JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { version: string }
+).version;
 
 console.log(`[package] Building SPOTOEI v${VERSION}...`);
 
@@ -57,18 +58,35 @@ try {
   process.exit(1);
 }
 
-// 4. Generate SHA-256 checksums (use fs, not shasum).
-const tuiBytes = readFileSync(join(DIST, tuiBinName));
-const sidecarBytes = readFileSync(playerDst);
-const tuiHash = createHash('sha256').update(tuiBytes).digest('hex');
-const sidecarHash = createHash('sha256').update(sidecarBytes).digest('hex');
+// 4. Stage archive contents: license, README, and both binaries.
+const platform =
+  process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'linux';
+const arch = process.arch === 'x64' ? 'x86_64' : process.arch === 'arm64' ? 'arm64' : process.arch;
+const archiveName = `spotoei-v${VERSION}-${platform}-${arch}.tar.gz`;
+const archivePath = join(DIST, archiveName);
+const stage = join(DIST, `.stage-${platform}-${arch}`);
+rmSync(stage, { recursive: true, force: true });
+mkdirSync(stage, { recursive: true });
+for (const file of ['LICENSE', 'README.md']) {
+  copyFileSync(join(ROOT, file), join(stage, file));
+}
+copyFileSync(join(DIST, tuiBinName), join(stage, tuiBinName));
+copyFileSync(playerDst, join(stage, sidecarBinName));
 
-const lines: string[] = [];
-lines.push(`${tuiHash}  ${tuiBinName}`);
-lines.push(`${sidecarHash}  ${sidecarBinName}`);
-writeFileSync(join(DIST, 'SHA256SUMS'), lines.join('\n') + '\n');
+// 5. Create the versioned archive.
+const tar = spawnSync('tar', ['-czf', archivePath, '-C', stage, '.'], { stdio: 'inherit' });
+rmSync(stage, { recursive: true, force: true });
+if (tar.status !== 0) {
+  console.error('[package] tar failed');
+  process.exit(1);
+}
+
+// 6. Checksums cover the archive.
+const archiveHash = createHash('sha256').update(readFileSync(archivePath)).digest('hex');
+writeFileSync(join(DIST, 'SHA256SUMS'), `${archiveHash}  ${archiveName}\n`);
 
 console.log(`[package] Build complete:`);
-console.log(`  TUI:      ${join(DIST, tuiBinName)} (${tuiHash})`);
-console.log(`  Sidecar:  ${playerDst} (${sidecarHash})`);
-console.log(`  SHA256SUMS: ${join(DIST, 'SHA256SUMS')}`);
+console.log(`  TUI:      ${join(DIST, tuiBinName)}`);
+console.log(`  Sidecar:  ${playerDst}`);
+console.log(`  Archive:  ${archivePath}`);
+console.log(`  SHA256SUMS: ${join(DIST, 'SHA256SUMS')} (${archiveHash})`);
