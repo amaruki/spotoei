@@ -1,49 +1,13 @@
 import { HERO_WIDE_BREAKPOINT } from '../componentTree/onboardingView';
 import { resolveClientId } from '../../config';
-import { panelPositionKey } from '../../navigation/viewPositions';
-import {
-  blurAllPanels,
-  focusedHomeList,
-  focusedSearchList,
-  focusHomePanel,
-  HOME_PANELS,
-  homePanelLists,
-  SEARCH_PANELS,
-  searchPanelLists,
-} from './categoryPanels';
+import { blurAllPanels, focusHomePanel } from './categoryPanels';
+import { listForRoute, saveRoutePosition } from './navigationLists';
 import { defaultRoute, popRoute, pushRoute, routeFromLegacy, routeKind } from './navigationStack';
 import type { AnySelect, FocusArea, Route, UiCoreContext } from './types';
 import { renderLyricsStyled } from '../views/lyrics';
 
 export function createNavigationHelpers(ctx: UiCoreContext) {
   const { built, focus, manualLyricsScroll, opts, route, state } = ctx;
-  const saveRoutePosition = (r: Route): void => {
-    const kind = routeKind(r);
-    if (kind === 'home') {
-      homePanelLists(built).forEach((l, i) => ctx.positions.saveKey(panelPositionKey(r, 'home', HOME_PANELS[i] ?? String(i)), { selected: l.getSelectedIndex(), scroll: 0 }));
-      return;
-    }
-    if (kind === 'search') {
-      searchPanelLists(built).forEach((l, i) => ctx.positions.saveKey(panelPositionKey(r, 'search', SEARCH_PANELS[i] ?? String(i)), { selected: l.getSelectedIndex(), scroll: 0 }));
-      return;
-    }
-    const list = listForRoute(r);
-    if (list) {
-      ctx.positions.save(r, { selected: list.getSelectedIndex(), scroll: 0 });
-    }
-  };
-  const listForRoute = (r: Route) => {
-    const kind = routeKind(r);
-    if (kind === 'home') return focusedHomeList(ctx);
-    if (kind === 'browse') return built.browseList;
-    if (kind === 'search') return focusedSearchList(ctx);
-    if (kind === 'library') return built.libraryList;
-    if (kind === 'queue') return built.queueList;
-    if (kind === 'artist') return built.artistList;
-    if (kind === 'album') return built.albumList;
-    if (kind === 'playlist') return built.playlistList;
-    return null;
-  };
   const showRoute = (nextInput: Route | string, force = false, replace = false): void => {
     let next = routeFromLegacy(nextInput);
     const kind = routeKind(next);
@@ -61,7 +25,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       !replace &&
       (currentKind !== kind || JSON.stringify(route.current) !== JSON.stringify(next))
     ) {
-      saveRoutePosition(route.current);
+      saveRoutePosition(ctx, route.current);
       ctx.routeStack = pushRoute(ctx.routeStack, route.current, next);
     }
 
@@ -93,12 +57,24 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     const sidebarByWidth = w >= 120 ? true : w >= 80 ? ctx.sidebarPinned.value : false;
     built.sidebar.visible = !loginMode && !isVizFull && sidebarByWidth;
     built.playbackBar.visible = !loginMode && !isVizFull;
-    if (manualLyricsScroll.value) { manualLyricsScroll.value = false; if (ctx.lyricsResumeTimer.value) clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout); ctx.lyricsResumeTimer.value = null; built.lyricsResumeHint.visible = false; }
+    if (manualLyricsScroll.value) {
+      manualLyricsScroll.value = false;
+      if (ctx.lyricsResumeTimer.value)
+        clearTimeout(ctx.lyricsResumeTimer.value as unknown as NodeJS.Timeout);
+      ctx.lyricsResumeTimer.value = null;
+      built.lyricsResumeHint.visible = false;
+    }
     ctx.helpers.setNavSelected(next);
     if (finalKind === 'lyrics') {
-      const availWidth = Math.max(20, (ctx.termWidth.value ?? 80) - (built.sidebar.visible ? 32 : 8));
+      const availWidth = Math.max(
+        20,
+        (ctx.termWidth.value ?? 80) - (built.sidebar.visible ? 32 : 8),
+      );
       const availHeight = ctx.renderer.height ?? 24;
-      built.lyricsText.content = renderLyricsStyled(state, { width: availWidth, height: availHeight });
+      built.lyricsText.content = renderLyricsStyled(state, {
+        width: availWidth,
+        height: availHeight,
+      });
       if (state.lyrics?.kind === 'synced') {
         built.lyricsScroll.scrollTo(0);
       }
@@ -170,7 +146,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
       built.playlistList.blur();
       built.browseList.blur();
     }
-    const nextList = listForRoute(next);
+    const nextList = listForRoute(ctx, next);
     if (nextList) {
       // Home/search panels restore per-panel in their setters; single
       // lists restore here against current options.
@@ -275,7 +251,7 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
     if (ctx.palette.open) return built.paletteList;
     if (ctx.menu.open) return built.menuList;
     if (focus.current === 'sidebar') return built.nav;
-    if (focus.current === 'main') return listForRoute(route.current);
+    if (focus.current === 'main') return listForRoute(ctx, route.current);
     return null;
   };
   const moveActiveList = (delta: number): boolean => {
@@ -288,10 +264,19 @@ export function createNavigationHelpers(ctx: UiCoreContext) {
   const jumpActiveList = (to: 'top' | 'bottom', targetIndex?: number): boolean => {
     const list = getActiveList();
     if (!list) return false;
-    if (typeof targetIndex === 'number') list.setSelectedIndex(Math.max(0, Math.min(list.options.length - 1, targetIndex)));
+    if (typeof targetIndex === 'number')
+      list.setSelectedIndex(Math.max(0, Math.min(list.options.length - 1, targetIndex)));
     else if (to === 'top') list.setSelectedIndex(0);
     else list.setSelectedIndex(Math.max(0, list.options.length - 1));
     return true;
   };
-  return { showRoute, navigateBack, setFocusArea, toggleSidebar, getActiveList, moveActiveList, jumpActiveList };
+  return {
+    showRoute,
+    navigateBack,
+    setFocusArea,
+    toggleSidebar,
+    getActiveList,
+    moveActiveList,
+    jumpActiveList,
+  };
 }

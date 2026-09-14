@@ -3,6 +3,7 @@ import { DEFAULT_CLIENT_ID, resolveClientId } from '../../config';
 import { HOME_PANELS, cycleHomePanel, focusedHomeList, focusHomePanel } from './categoryPanels';
 import { handleEntityBrowseKeys } from './keyboardEntity';
 import { handleLibraryQueueKeys } from './keyboardLists';
+import { handleOverlayKeys } from './keyboardOverlays';
 import { handleSearchKeys } from './keyboardSearch';
 import { createMotionAccumulator, handleVimMotion } from './keyboardMotion';
 import { routeKind } from './navigationStack';
@@ -54,68 +55,7 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
       raw: e.sequence,
     };
 
-    // 1. Palette open takes absolute keyboard precedence
-    if (palette.open) {
-      if (e.name === 'escape' || (e.ctrl && e.name === 'c')) {
-        ctx.helpers.setPaletteOpen(false);
-        return;
-      }
-      if (e.name === 'tab') return;
-      if (e.name === 'up' || e.name === 'k') {
-        const cur = built.paletteList.getSelectedIndex();
-        built.paletteList.setSelectedIndex(Math.max(0, cur - 1));
-        return;
-      }
-      if (e.name === 'down' || e.name === 'j') {
-        const cur = built.paletteList.getSelectedIndex();
-        const max = Math.max(0, built.paletteList.options.length - 1);
-        built.paletteList.setSelectedIndex(Math.min(max, cur + 1));
-        return;
-      }
-      if (e.name === 'return') {
-        if (palette.filtered.length === 0) {
-          ctx.helpers.setStatus('No matching command');
-          return;
-        }
-        const idx = built.paletteList.getSelectedIndex();
-        const cmd = palette.filtered[idx];
-        ctx.helpers.setPaletteOpen(false);
-        if (cmd) {
-          try {
-            cmd.action();
-          } catch (err) {
-            ctx.helpers.setStatus(`palette: ${err instanceof Error ? err.message : String(err)}`);
-          }
-        }
-        return;
-      }
-      return;
-    }
-
-    // 1b. Context menu captures keys while open; Esc/X closes it and
-    // restores focus to the originating list.
-    if (ctx.menu.open) {
-      if (e.name === 'escape' || e.name === 'x' || e.name === 'X' || (e.ctrl && e.name === 'c')) {
-        ctx.helpers.closeContextMenu();
-        return;
-      }
-      if (e.name === 'up' || e.name === 'k') {
-        const cur = built.menuList.getSelectedIndex();
-        built.menuList.setSelectedIndex(Math.max(0, cur - 1));
-        return;
-      }
-      if (e.name === 'down' || e.name === 'j') {
-        const cur = built.menuList.getSelectedIndex();
-        const max = Math.max(0, built.menuList.options.length - 1);
-        built.menuList.setSelectedIndex(Math.min(max, cur + 1));
-        return;
-      }
-      if (e.name === 'return') {
-        ctx.helpers.runMenuSelected();
-        return;
-      }
-      return;
-    }
+    if (handleOverlayKeys(ctx, e)) return;
 
     // 2. Search route input focus isolation (split for LoC cap)
     if (handleSearchKeys(ctx, e, key)) {
@@ -167,8 +107,7 @@ export function createKeyDispatcher(ctx: UiCoreContext) {
         }
       } else if (state.auth.state === 'authenticated') {
         if (
-          !e.ctrl &&
-          (e.name === 'l' || e.name === 'L') ||
+          (!e.ctrl && (e.name === 'l' || e.name === 'L')) ||
           (e.ctrl && (e.name === 'l' || e.name === 'L'))
         ) {
           if (opts.onLogout) {
